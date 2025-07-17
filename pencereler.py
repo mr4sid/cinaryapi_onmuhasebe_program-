@@ -1,6 +1,4 @@
 # pencereler.py dosyasının içeriği 
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog, simpledialog
 from datetime import datetime, date, timedelta
 import os
 import shutil
@@ -298,11 +296,8 @@ class CariHesapEkstresiPenceresi(tk.Toplevel):
         ttk.Button(export_buttons_frame, text="PDF'e Aktar", command=self.pdf_aktar).pack(pady=2, fill=tk.X)
         ttk.Button(export_buttons_frame, text="Excel'e Aktar", command=self.excel_aktar).pack(pady=2, fill=tk.X)
         
-        # <<< YENİ IMPORT VE CARİ DÜZENLEME PENCERESİ ÇAĞRISI İÇİN DÜZELTME BAŞLANGICI >>>
-        from pencereler import YeniMusteriEklePenceresi, YeniTedarikciEklePenceresi # Gerekli importlar
         guncelle_btn = ttk.Button(cari_detay_cerceve, text="Cari Bilgilerini Güncelle", command=self._cari_bilgileri_guncelle, style="Accent.TButton")
         guncelle_btn.grid(row=row_idx_cari, column=0, columnspan=2, sticky="ew", padx=5, pady=10)
-        # <<< YENİ IMPORT VE CARİ DÜZENLEME PENCERESİ ÇAĞRISI İÇİN DÜZELTME BİTİŞİ >>>
 
     def _create_filter_alani(self, filter_frame):
         d = datetime.now()
@@ -839,7 +834,6 @@ class CariHesapEkstresiPenceresi(tk.Toplevel):
         if dosya_yolu:
             # Bekleme penceresini göster
             # 'BeklemePenceresi' sınıfını dinamik olarak import edin
-            from pencereler import BeklemePenceresi 
             bekleme_penceresi = BeklemePenceresi(self, message="Ekstre Excel'e aktarılıyor, lütfen bekleyiniz...")
             
             # Ayrı thread'de işlemi başlat
@@ -859,23 +853,10 @@ class CariHesapEkstresiPenceresi(tk.Toplevel):
             parent=self
         )
         if dosya_yolu:
-            # Bekleme penceresini göster
-            # 'BeklemePenceresi' sınıfını dinamik olarak import edin
-            from pencereler import BeklemePenceresi 
             bekleme_penceresi = BeklemePenceresi(self, message="Ekstre PDF'e aktarılıyor, lütfen bekleyiniz...")
 
-            # <<< main.py'den _pdf_olusturma_islemi'ni dinamik olarak import edin >>>
-            # Bu çağrı yapısı, _pdf_olusturma_islemi'nin main.py'de tanımlı olduğunu varsayar.
-            # circular import'ları önlemek için burada değil, main.py'de yapılması daha iyidir.
-            # Ancak sizin yapınızda bu çağrı zaten main.py'de yapılıyor.
-            # Burada tekrar import etmeye gerek yok, çünkü `self.app` objesi zaten `_pdf_olusturma_islemi`'ni içeriyor olabilir.
-            # Eğer main.py'den `_pdf_olusturma_islemi`'ni import edemiyorsak, bu fonksiyonu direkt burada tanımlamalıyız.
-            
             # Geçici olarak, eğer main.py'deki fonksiyon direkt erişilebilir değilse, burada tanımlayalım:
             def _pdf_olusturma_islemi_local(db_name_path, cari_tip, cari_id, bas_t, bit_t, dosya_yolu_param, result_queue_param):
-                # Bu kısım normalde veritabanı sınıfı içinde olmalı veya main.py'deki gibi bağımsız bir helper fonksiyonu olmalı.
-                # Burada sadece placeholder olarak yer alıyor.
-                # self.db objesi thread safe olmayabilir, yeni bir OnMuhasebe instance'ı yaratılmalı.
                 try:
                     import sqlite3 # Local import
                     from veritabani import OnMuhasebe # Local import
@@ -2017,7 +1998,7 @@ class SiparisDetayPenceresi(tk.Toplevel):
         """Bu siparişi satış veya alış faturasına dönüştürür."""
         
         # DÜZELTME: Ödeme Türü Seçim Diyaloğunu açın
-        from arayuz import OdemeTuruSecimDialog # Lokal import
+        from pencereler import OdemeTuruSecimDialog
 
         # Cari tipine göre fatura tipi belirlenmeli
         fatura_tipi_for_dialog = 'SATIŞ' if self.siparis_ana[3] == 'MUSTERI' else 'ALIŞ'
@@ -3011,7 +2992,6 @@ class UrunNitelikYonetimiPenceresi(tk.Toplevel):
             context_menu.grab_release()
 
     def _urun_grubu_duzenle_popup(self, grup_id):
-        from pencereler import GrupDuzenlePenceresi # Yeni pop-up sınıfı
         # Grup bilgilerini veritabanından çek
         self.db.c.execute("SELECT id, grup_adi FROM urun_gruplari WHERE id=?", (grup_id,))
         grup_info = self.db.c.fetchone()
@@ -6357,7 +6337,6 @@ class TopluVeriEklePenceresi(tk.Toplevel): # <<< Bu sınıf doğru hizada (Bekle
                 messagebox.showerror("Hata", f"Şablon oluşturulurken bir hata oluştu: {e}", parent=self)
 
     def _show_detayli_aciklama_penceresi(self):
-        from pencereler import AciklamaDetayPenceresi
         selected_type = self.veri_tipi_combo.get()
         title = f"{selected_type} Şablon Açıklaması"
         message = ""

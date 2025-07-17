@@ -4,13 +4,6 @@ from datetime import datetime
 import sqlite3
 import os
 
-# hizmetler.py
-import logging
-import traceback
-from datetime import datetime
-import sqlite3
-import os
-
 class FaturaService:
     def __init__(self, db_manager):
         self.db = db_manager
@@ -59,7 +52,6 @@ class FaturaService:
             current_time = self.db.get_current_datetime_str()
             olusturan_id = self.db._get_current_user_id() 
 
-            # <<< DÜZELTME BAŞLANGICI: Sütun isimleri 'genel_iskonto_tipi' ve 'genel_iskonto_degeri' olarak güncellendi >>>
             self.db.c.execute("""
                 INSERT INTO faturalar (
                     fatura_no, tarih, tip, cari_id, toplam_kdv_haric, toplam_kdv_dahil, odeme_turu,
@@ -68,16 +60,14 @@ class FaturaService:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 fatura_no, fatura_tarihi, tip, cari_id, nihai_toplam_kdv_haric, nihai_toplam_kdv_dahil, odeme_turu,
-                misafir_adi, kasa_banka_id, fatura_notlari, vade_tarihi, genel_iskonto_tipi, # genel_iskonto_tipi
-                genel_iskonto_degeri, original_fatura_id, current_time, olusturan_id # genel_iskonto_degeri
+                misafir_adi, kasa_banka_id, fatura_notlari, vade_tarihi, genel_iskonto_tipi, 
+                genel_iskonto_degeri, original_fatura_id, current_time, olusturan_id 
             ))
             fatura_id = self.db.c.lastrowid
 
             for item in kalemler:
                 urun_id, miktar, birim_fiyat, kdv_orani, alis_fiyati, isk1, isk2, isk_tip, isk_deger = item
                 
-                # Kalem toplamlarını _hesapla_kalem_toplamlari gibi bir yardımcı metot kullanarak hesaplamak daha güvenli ve tutarlı olurdu.
-                # Ancak mevcut yapıyı koruyarak doğrudan hesaplamaları yapıyoruz.
                 iskontolu_bfh = self.db.safe_float(birim_fiyat) * (1-self.db.safe_float(isk1)/100) * (1-self.db.safe_float(isk2)/100)
                 kalem_kdv_tutar = iskontolu_bfh * self.db.safe_float(miktar) * (self.db.safe_float(kdv_orani)/100)
                 kalem_toplam_haric = iskontolu_bfh * self.db.safe_float(miktar)
@@ -93,11 +83,10 @@ class FaturaService:
                 """, (
                     fatura_id, urun_id, miktar, birim_fiyat, kdv_orani, kalem_kdv_tutar,
                     kalem_toplam_haric, kalem_toplam_dahil, alis_fiyati, 
-                    kdv_orani, isk1, isk2, isk_tip, isk_deger, # kdv_orani_fatura_aninda sütununu da ekledik
+                    kdv_orani, isk1, isk2, isk_tip, isk_deger,
                     current_time, olusturan_id
                 ))
                 
-                # Stok Miktarı Güncelleme ve Stok Hareketi Kaydı
                 stok_degisim_net = 0.0
                 stok_islem_tipi = ""
                 kaynak_tipi_stok = self.db.KAYNAK_TIP_FATURA
@@ -109,11 +98,11 @@ class FaturaService:
                     stok_degisim_net = self.db.safe_float(miktar)
                     stok_islem_tipi = self.db.STOK_ISLEM_TIP_FATURA_ALIS
                 elif tip == self.db.FATURA_TIP_SATIS_IADE:
-                    stok_degisim_net = self.db.safe_float(miktar) # Satış iadesi stoğu artırır
+                    stok_degisim_net = self.db.safe_float(miktar) 
                     stok_islem_tipi = self.db.STOK_ISLEM_TIP_FATURA_SATIS_IADE
                     kaynak_tipi_stok = self.db.KAYNAK_TIP_IADE_FATURA
                 elif tip == self.db.FATURA_TIP_ALIS_IADE:
-                    stok_degisim_net = -self.db.safe_float(miktar) # Alış iadesi stoğu azaltır
+                    stok_degisim_net = -self.db.safe_float(miktar) 
                     stok_islem_tipi = self.db.STOK_ISLEM_TIP_FATURA_ALIS_IADE
                     kaynak_tipi_stok = self.db.KAYNAK_TIP_IADE_FATURA
                 elif tip == self.db.FATURA_TIP_DEVIR_GIRIS:
@@ -123,19 +112,17 @@ class FaturaService:
                 self.db._stok_guncelle_ve_hareket_kaydet(urun_id, stok_degisim_net, stok_islem_tipi, kaynak_tipi_stok, fatura_id, fatura_no)
             
             # KASA BAKİYESİ GÜNCELLEME
-            # Peşin ödeme türleri için kasa/banka bakiyesini güncelle
             if odeme_turu in self.db.pesin_odeme_turleri and kasa_banka_id is not None:
-                if tip == self.db.FATURA_TIP_SATIS or tip == self.db.FATURA_TIP_ALIS_IADE: # Kasa için GELİR
+                if tip == self.db.FATURA_TIP_SATIS or tip == self.db.FATURA_TIP_ALIS_IADE: 
                     self.db.kasa_banka_bakiye_guncelle(kasa_banka_id, nihai_toplam_kdv_dahil, artir=True)
-                elif tip == self.db.FATURA_TIP_ALIS or tip == self.db.FATURA_TIP_SATIS_IADE: # Kasa için GİDER
+                elif tip == self.db.FATURA_TIP_ALIS or tip == self.db.FATURA_TIP_SATIS_IADE: 
                     self.db.kasa_banka_bakiye_guncelle(kasa_banka_id, nihai_toplam_kdv_dahil, artir=False)
             
             # CARİ HAREKET VE GELİR/GİDER OLUŞTURMA
-            # SADECE AÇIK HESAP FATURALAR VE PEŞİN FATURALAR İÇİN TEK KAYIT
             self.db._fatura_finansal_etki_olustur(fatura_id, fatura_no, fatura_tarihi, tip, cari_id, nihai_toplam_kdv_dahil, odeme_turu, kasa_banka_id, misafir_adi)
 
             if manage_transaction: self.db.conn.commit()
-            return True, fatura_id # Başarılı dönüş, fatura_id'yi döndür
+            return True, fatura_id 
 
         except sqlite3.IntegrityError as e:
             if manage_transaction: self.db.conn.rollback()
@@ -145,7 +132,7 @@ class FaturaService:
             return False, f"Veri dönüştürme hatası: {e}. Lütfen sayısal alanları kontrol edin."
         except Exception as e:
             if manage_transaction: self.db.conn.rollback()
-            logging.error(f"FaturaServis.fatura_olustur Hata: {e}\n{traceback.format_exc()}")
+            logging.error(f"FaturaService.fatura_olustur Hata: {e}\n{traceback.format_exc()}")
             return False, f"Fatura oluşturulamadı. Hata: {e}"
                                 
     def fatura_iade_olustur(self, original_fatura_id, iade_tarihi_str, iade_notlari=None):
@@ -174,15 +161,15 @@ class FaturaService:
             
             is_success, message = self.fatura_olustur(
                 iade_fatura_no, iade_fatura_tipi, original_fatura['cari_id'], kalemler_for_iade, 
-                odeme_turu=original_fatura['odeme_turu'], # Orijinal faturanın ödeme türünü kullan
-                kasa_banka_id=original_fatura['kasa_banka_id'], # Orijinal faturanın kasa/bankasını kullan
+                odeme_turu=original_fatura['odeme_turu'], 
+                kasa_banka_id=original_fatura['kasa_banka_id'], 
                 misafir_adi=original_fatura['misafir_adi'], 
                 fatura_notlari=f"Orijinal Fatura: {original_fatura['fatura_no']}. {iade_notlari or ''}".strip(), 
-                vade_tarihi=original_fatura['vade_tarihi'], # Orijinal faturanın vade tarihini kullan
+                vade_tarihi=original_fatura['vade_tarihi'], 
                 genel_iskonto_tipi=original_fatura['genel_iskonto_tipi'], 
                 genel_iskonto_degeri=original_fatura['genel_iskonto_degeri'], 
                 original_fatura_id=original_fatura_id, 
-                manage_transaction=False # Dış transaction tarafından yönetilecek
+                manage_transaction=False 
             )
 
             if not is_success: raise Exception(message)
@@ -219,8 +206,6 @@ class FaturaService:
 
             kalemler_for_fatura = []
             for sk in siparis_kalemleri:
-                # fatura_olustur metodunun beklediği format:
-                # (urun_id, miktar, birim_fiyat, kdv_orani, alis_fiyati, isk1, isk2, isk_tip, isk_deger)
                 kalemler_for_fatura.append((
                     sk['urun_id'], sk['miktar'], sk['birim_fiyat'], sk['kdv_orani'], 
                     sk['alis_fiyati_siparis_aninda'], sk['iskonto_yuzde_1'], sk['iskonto_yuzde_2'], 
@@ -334,19 +319,19 @@ class FaturaService:
                     current_time, guncelleyen_id 
                 ))
             
-                # <<< KRİTİK DÜZELTME BAŞLANGICI: YENİ STOK HAREKETLERİNİ OLUŞTURMA >>>
+                # KRİTİK DÜZELTME BAŞLANGICI: YENİ STOK HAREKETLERİNİ OLUŞTURMA
                 # Fatura tipi mevcut_fatura'dan alınmalı, çünkü iade faturaları da güncellenebilir.
                 # Stok değişimi yönü, fatura tipi ne olursa olsun aynı mantıkla hesaplanmalı.
                 stok_degisim_net = 0.0
                 stok_islem_tipi = ""
-                kaynak_tipi_stok = self.db.KAYNAK_TIP_FATURA # Varsayılan
+                kaynak_tipi_stok = self.db.KAYNAK_TIP_FATURA 
 
                 # Satış ve Alış İade faturaları stoğu azaltır
                 if mevcut_fatura['tip'] == self.db.FATURA_TIP_SATIS:
                     stok_degisim_net = -self.db.safe_float(miktar)
                     stok_islem_tipi = self.db.STOK_ISLEM_TIP_FATURA_SATIS
                 elif mevcut_fatura['tip'] == self.db.FATURA_TIP_ALIS_IADE:
-                    stok_degisim_net = -self.db.safe_float(miktar) # Alış iadesinde stok azalır
+                    stok_degisim_net = -self.db.safe_float(miktar) 
                     stok_islem_tipi = self.db.STOK_ISLEM_TIP_FATURA_ALIS_IADE
                     kaynak_tipi_stok = self.db.KAYNAK_TIP_IADE_FATURA
                 # Alış ve Satış İade faturaları stoğu artırır
@@ -354,7 +339,7 @@ class FaturaService:
                     stok_degisim_net = self.db.safe_float(miktar)
                     stok_islem_tipi = self.db.STOK_ISLEM_TIP_FATURA_ALIS
                 elif mevcut_fatura['tip'] == self.db.FATURA_TIP_SATIS_IADE:
-                    stok_degisim_net = self.db.safe_float(miktar) # Satış iadesinde stok artar
+                    stok_degisim_net = self.db.safe_float(miktar) 
                     stok_islem_tipi = self.db.STOK_ISLEM_TIP_FATURA_SATIS_IADE
                     kaynak_tipi_stok = self.db.KAYNAK_TIP_IADE_FATURA
                 elif mevcut_fatura['tip'] == self.db.FATURA_TIP_DEVIR_GIRIS:
@@ -362,7 +347,7 @@ class FaturaService:
                     stok_islem_tipi = self.db.STOK_ISLEM_TIP_DEVIR_GIRIS
                 
                 self.db._stok_guncelle_ve_hareket_kaydet(urun_id, stok_degisim_net, stok_islem_tipi, kaynak_tipi_stok, fatura_id, yeni_fatura_no)
-                # <<< KRİTİK DÜZELTME BİTİŞİ >>>
+                # KRİTİK DÜZELTME BİTİŞİ
 
             # Kasa/Banka bakiyesini manuel olarak yeniden güncelliyoruz (ödeme türü peşinse)
             if yeni_odeme_turu in self.db.pesin_odeme_turleri and yeni_kasa_banka_id is not None:
@@ -374,7 +359,6 @@ class FaturaService:
                     self.db.kasa_banka_bakiye_guncelle(yeni_kasa_banka_id, nihai_toplam_kdv_dahil, artir=False)
             
             # Yeni finansal etkileri (cari hareketler, gelir/gider) oluştur
-            # mevcut_fatura['tip'] -> Fatura tipi değişmediği için orijinal tipi kullanıyoruz.
             self.db._fatura_finansal_etki_olustur(fatura_id, yeni_fatura_no, yeni_fatura_tarihi, mevcut_fatura['tip'], yeni_cari_id, nihai_toplam_kdv_dahil, yeni_odeme_turu, yeni_kasa_banka_id, yeni_misafir_adi)
 
             self.db.conn.commit()
@@ -426,19 +410,19 @@ class FaturaService:
                 kaynak_tipi_geri_al = ""
 
                 if fatura_tipi == self.db.FATURA_TIP_SATIS:
-                    stok_degisim_yonu_orijinal = kalem['miktar'] # Satışta çıkan stoğu geri al (ekle)
+                    stok_degisim_yonu_orijinal = kalem['miktar'] 
                     stok_islem_tipi_geri_al = self.db.STOK_ISLEM_TIP_FATURA_SATIS
                     kaynak_tipi_geri_al = self.db.KAYNAK_TIP_FATURA
                 elif fatura_tipi == self.db.FATURA_TIP_ALIS:
-                    stok_degisim_yonu_orijinal = -kalem['miktar'] # Alışta giren stoğu geri al (çıkar)
+                    stok_degisim_yonu_orijinal = -kalem['miktar'] 
                     stok_islem_tipi_geri_al = self.db.STOK_ISLEM_TIP_FATURA_ALIS
                     kaynak_tipi_geri_al = self.db.KAYNAK_TIP_FATURA
                 elif fatura_tipi == self.db.FATURA_TIP_SATIS_IADE:
-                    stok_degisim_yonu_orijinal = -kalem['miktar'] # Satış iadesinde giren stoğu geri al (çıkar)
+                    stok_degisim_yonu_orijinal = -kalem['miktar'] 
                     stok_islem_tipi_geri_al = self.db.STOK_ISLEM_TIP_FATURA_SATIS_IADE
                     kaynak_tipi_geri_al = self.db.KAYNAK_TIP_IADE_FATURA
                 elif fatura_tipi == self.db.FATURA_TIP_ALIS_IADE:
-                    stok_degisim_yonu_orijinal = kalem['miktar'] # Alış iadesinde çıkan stoğu geri al (ekle)
+                    stok_degisim_yonu_orijinal = kalem['miktar'] 
                     stok_islem_tipi_geri_al = self.db.STOK_ISLEM_TIP_FATURA_ALIS_IADE
                     kaynak_tipi_geri_al = self.db.KAYNAK_TIP_IADE_FATURA
                 
@@ -478,7 +462,7 @@ class FaturaService:
             if manage_transaction and self.db.conn:
                 self.db.conn.rollback()
             error_details = traceback.format_exc()
-            logging.error(f"FaturaServis.fatura_sil Hata: {e}\nDetaylar: {error_details}")
+            logging.error(f"FaturaService.fatura_sil Hata: {e}\nDetaylar: {error_details}")
             return False, "Fatura silinirken beklenmeyen bir hata oluştu."
 
     def _hesapla_fatura_toplamlari(self, kalemler):
@@ -505,7 +489,7 @@ class FaturaService:
         Tek bir fatura kaleminin KDV hariç, KDV dahil, KDV tutarı ve iskontolu birim fiyatını hesaplar.
         """
         miktar_f = self.db.safe_float(miktar)
-        birim_fiyat_f = self.db.safe_float(birim_fiyat) # KDV hariç orijinal
+        birim_fiyat_f = self.db.safe_float(birim_fiyat) 
         kdv_orani_f = self.db.safe_float(kdv_orani)
         isk1_f = self.db.safe_float(iskonto_yuzde_1)
         isk2_f = self.db.safe_float(iskonto_yuzde_2)
@@ -531,13 +515,15 @@ class TopluIslemService:
         self.fatura_service = fatura_service
 
     def toplu_stok_analiz_et(self, stok_data_raw, selected_update_fields):
-        # Bu metot veritabanı.py'den taşındı ve referansları düzeltildi.
         analysis_results = { 'new_items': [], 'updated_items': [], 'errors_details': [], 'new_count': 0, 'updated_count': 0, 'error_count': 0, 'all_processed_data': [], 'selected_update_fields_from_ui': selected_update_fields }
-        COL_URUN_KODU, COL_URUN_ADI = 0, 1; COL_STOK_MIKTARI, COL_ALIS_FIYATI_KDV_DAHIL, COL_SATIS_FIYATI_KDV_DAHIL = 2, 3, 4; COL_KDV_ORANI, COL_MIN_STOK_SEVIYESI = 5, 6; COL_KATEGORI_ADI, COL_MARKA_ADI, COL_URUN_GRUBU_ADI = 7, 8, 9; COL_URUN_BIRIMI_ADI, COL_ULKE_ADI, COL_URUN_DETAYI, COL_URUN_RESMI_YOLU = 10, 11, 12, 13
+        COL_URUN_KODU, COL_URUN_ADI = 0, 1
+        COL_STOK_MIKTARI, COL_ALIS_FIYATI_KDV_DAHIL, COL_SATIS_FIYATI_KDV_DAHIL = 2, 3, 4
+        COL_KDV_ORANI, COL_MIN_STOK_SEVIYESI = 5, 6
+        COL_KATEGORI_ADI, COL_MARKA_ADI, COL_URUN_GRUBU_ADI = 7, 8, 9
+        COL_URUN_BIRIMI_ADI, COL_ULKE_ADI, COL_URUN_DETAYI, COL_URUN_RESMI_YOLU = 10, 11, 12, 13
         
         conn_thread = None
         try:
-            # self.db_name -> self.db.db_name
             conn_thread = sqlite3.connect(self.db.db_name, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
             conn_thread.row_factory = sqlite3.Row
             cursor_thread = conn_thread.cursor()
@@ -548,13 +534,13 @@ class TopluIslemService:
                     urun_kodu = str(row[COL_URUN_KODU] or '').strip()
                     urun_adi_from_excel = str(row[COL_URUN_ADI] or '').strip()
                     if not urun_kodu:
-                        analysis_results['errors_details'].append((row_raw, "Ürün Kodu boş olamaz."))
+                        analysis_results['errors_details'].append((row_raw, f"Satır {i+2}: Ürün Kodu boş olamaz."))
                         analysis_results['error_count'] += 1
                         continue
                     cursor_thread.execute("SELECT * FROM tbl_stoklar WHERE urun_kodu=?", (urun_kodu,))
                     existing_product = cursor_thread.fetchone()
                     if not existing_product and not urun_adi_from_excel:
-                        analysis_results['errors_details'].append((row_raw, "Yeni ürün için Ürün Adı boş olamaz."))
+                        analysis_results['errors_details'].append((row_raw, f"Satır {i+2}: Yeni ürün için Ürün Adı boş olamaz."))
                         analysis_results['error_count'] += 1
                         continue
                     status_message = "Yeni ürün eklenecek." if not existing_product else "Mevcut ürün güncellenecek."
@@ -569,7 +555,6 @@ class TopluIslemService:
                     final_urun_birimi = get_id_for_analysis('urun_birimleri', 'birim_adi', str(row[COL_URUN_BIRIMI_ADI] or '').strip())
                     final_ulke = get_id_for_analysis('urun_ulkeleri', 'ulke_adi', str(row[COL_ULKE_ADI] or '').strip())
                     
-                    # self.safe_float -> self.db.safe_float
                     processed_data_item = { "urun_id": existing_product['id'] if existing_product else None, "urun_kodu": urun_kodu, "urun_adi": urun_adi_from_excel, "stok_miktari": self.db.safe_float(row[COL_STOK_MIKTARI]), "alis_fiyati_kdv_dahil": self.db.safe_float(row[COL_ALIS_FIYATI_KDV_DAHIL]), "satis_fiyati_kdv_dahil": self.db.safe_float(row[COL_SATIS_FIYATI_KDV_DAHIL]), "kdv_orani": self.db.safe_float(row[COL_KDV_ORANI]), "min_stok_seviyesi": self.db.safe_float(row[COL_MIN_STOK_SEVIYESI]), "urun_detayi": str(row[COL_URUN_DETAYI] or '').strip(), "urun_resmi_yolu": str(row[COL_URUN_RESMI_YOLU] or '').strip(), "kategori_id_or_name": final_kategori, "marka_id_or_name": final_marka, "urun_grubu_id_or_name": final_urun_grubu, "urun_birimi_id_or_name": final_urun_birimi, "ulke_id_or_name": final_ulke, "initial_stok_db": existing_product['stok_miktari'] if existing_product else 0.0 }
                     analysis_results['all_processed_data'].append(processed_data_item)
 
@@ -580,7 +565,7 @@ class TopluIslemService:
                         analysis_results['new_items'].append((row_raw, status_message))
                         analysis_results['new_count'] += 1
                 except Exception as e_inner:
-                    analysis_results['errors_details'].append((row_raw, f"Satır işlenirken hata: {e_inner}."))
+                    analysis_results['errors_details'].append((row_raw, f"Satır {i+2} işlenirken hata: {e_inner}."))
                     analysis_results['error_count'] += 1
         except Exception as e:
             analysis_results['errors_details'].append( (None, f"Analiz sırasında beklenmeyen hata: {e}. {traceback.format_exc()}"))
@@ -590,8 +575,6 @@ class TopluIslemService:
         return analysis_results
         
     def toplu_stok_ekle_guncelle(self, processed_stok_data, selected_update_fields_from_analysis):
-        # Bu metot veritabani.py'den taşındı ve hatası düzeltildi.
-        # Artık transaction kontrolü yapmıyor, sadece iş mantığını işletiyor.
         if not processed_stok_data:
             return True, "İşlenecek stok verisi bulunamadı."
 
@@ -662,7 +645,6 @@ class TopluIslemService:
             fatura_no_aktarim = f"AKT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
             if self.db.genel_tedarikci_id is None: self.db._ensure_genel_tedarikci()
             
-            # self.fatura_olustur -> self.fatura_service.fatura_olustur
             success_fatura, _ = self.fatura_service.fatura_olustur(
                 fatura_no_aktarim, 'ALIŞ', self.db.genel_tedarikci_id,
                 kalemler_for_fatura, 'ETKİSİZ FATURA', manage_transaction=False
@@ -687,16 +669,16 @@ class TopluIslemService:
                 if not any(cell is not None and str(cell).strip() != '' for cell in row): continue
                 try:
                     musteri_kodu, ad = str(row[COL_MUSTERI_KODU] or '').strip(), str(row[COL_AD_SOYAD] or '').strip()
-                    if not musteri_kodu: analysis_results['errors_details'].append((row_raw, "Müşteri Kodu boş olamaz.")); analysis_results['error_count'] += 1; continue
-                    if not ad: analysis_results['errors_details'].append((row_raw, "Ad Soyad boş olamaz.")); analysis_results['error_count'] += 1; continue
-                    if musteri_kodu == self.db.PERAKENDE_MUSTERI_KODU: analysis_results['errors_details'].append((row_raw, f"'{self.db.PERAKENDE_MUSTERI_KODU}' özel bir koddur ve toplu eklemede kullanılamaz.")); analysis_results['error_count'] += 1; continue
+                    if not musteri_kodu: analysis_results['errors_details'].append((row_raw, f"Satır {i+2}: Müşteri Kodu boş olamaz.")); analysis_results['error_count'] += 1; continue
+                    if not ad: analysis_results['errors_details'].append((row_raw, f"Satır {i+2}: Ad Soyad boş olamaz.")); analysis_results['error_count'] += 1; continue
+                    if musteri_kodu == self.db.PERAKENDE_MUSTERI_KODU: analysis_results['errors_details'].append((row_raw, f"Satır {i+2}: '{self.db.PERAKENDE_MUSTERI_KODU}' özel bir koddur ve toplu eklemede kullanılamaz.")); analysis_results['error_count'] += 1; continue
                     cursor_thread.execute("SELECT id FROM musteriler WHERE kod=?", (musteri_kodu,))
                     existing_customer = cursor_thread.fetchone()
                     status_message = "Yeni müşteri eklenecek." if not existing_customer else "Mevcut müşteri güncellenecek."
                     if existing_customer: analysis_results['updated_items'].append((row_raw, status_message)); analysis_results['updated_count'] += 1
                     else: analysis_results['new_items'].append((row_raw, status_message)); analysis_results['new_count'] += 1
                     analysis_results['all_processed_data'].append({'musteri_kodu': musteri_kodu, 'ad': ad, 'telefon': str(row[COL_TELEFON] or '').strip(), 'adres': str(row[COL_ADRES] or '').strip(), 'vergi_dairesi': str(row[COL_VERGI_DAIRESI] or '').strip(), 'vergi_no': str(row[COL_VERGI_NO] or '').strip(), 'existing_id': existing_customer['id'] if existing_customer else None})
-                except Exception as e: analysis_results['errors_details'].append((row_raw, f"Satır işlenirken hata: {e}")); analysis_results['error_count'] += 1
+                except Exception as e: analysis_results['errors_details'].append((row_raw, f"Satır {i+2} işlenirken hata: {e}")); analysis_results['error_count'] += 1
         except Exception as e:
             analysis_results['errors_details'].append((None, f"Analiz sırasında beklenmeyen bir hata oluştu: {e}. {traceback.format_exc()}")); analysis_results['error_count'] += 1
         finally:
@@ -705,22 +687,25 @@ class TopluIslemService:
     
     def toplu_tedarikci_analiz_et(self, tedarikciler_data_raw):
         analysis_results = {'new_items': [], 'updated_items': [], 'errors_details': [], 'new_count': 0, 'updated_count': 0, 'error_count': 0, 'all_processed_data': []}
+        COL_TEDARIKCI_KODU, COL_AD_SOYAD, COL_TELEFON, COL_ADRES, COL_VERGI_DAIRESI, COL_VERGI_NO = 0, 1, 2, 3, 4, 5 # Defining cols for tedarikci
         conn_thread = None
         try:
             conn_thread = sqlite3.connect(self.db.db_name, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
             conn_thread.row_factory = sqlite3.Row
             cursor_thread = conn_thread.cursor()
-            for i, row in enumerate(tedarikciler_data_raw):
+            for i, row_raw in enumerate(tedarikciler_data_raw): # Changed row to row_raw for consistency
+                row = list(row_raw) + [None] * (COL_VERGI_NO + 1 - len(row_raw)) # Added to handle short rows
+                if not any(cell is not None and str(cell).strip() != '' for cell in row): continue
                 try:
-                    tedarikci_kodu, ad = str(row[0] or '').strip(), str(row[1] or '').strip()
-                    if not tedarikci_kodu or not ad: analysis_results['errors_details'].append((row, "Kod veya Ad boş olamaz.")); analysis_results['error_count'] += 1; continue
+                    tedarikci_kodu, ad = str(row[COL_TEDARIKCI_KODU] or '').strip(), str(row[COL_AD_SOYAD] or '').strip()
+                    if not tedarikci_kodu or not ad: analysis_results['errors_details'].append((row_raw, f"Satır {i+2}: Kod veya Ad boş olamaz.")); analysis_results['error_count'] += 1; continue
                     cursor_thread.execute("SELECT id FROM tedarikciler WHERE tedarikci_kodu=?", (tedarikci_kodu,))
                     existing = cursor_thread.fetchone()
                     status_message = "Yeni tedarikçi." if not existing else "Güncellenecek."
-                    if existing: analysis_results['updated_items'].append((row, status_message)); analysis_results['updated_count'] += 1
-                    else: analysis_results['new_items'].append((row, status_message)); analysis_results['new_count'] += 1
-                    analysis_results['all_processed_data'].append(row)
-                except Exception as e: analysis_results['errors_details'].append((row, f"Hata: {e}")); analysis_results['error_count'] += 1
+                    if existing: analysis_results['updated_items'].append((row_raw, status_message)); analysis_results['updated_count'] += 1
+                    else: analysis_results['new_items'].append((row_raw, status_message)); analysis_results['new_count'] += 1
+                    analysis_results['all_processed_data'].append(row_raw) # Append original row_raw to all_processed_data
+                except Exception as e: analysis_results['errors_details'].append((row_raw, f"Satır {i+2}: Hata: {e}")); analysis_results['error_count'] += 1 # Added row index
         except Exception as e:
             analysis_results['errors_details'].append((None, f"Analiz hatası: {e}. {traceback.format_exc()}")); analysis_results['error_count'] += 1
         finally:
@@ -728,7 +713,6 @@ class TopluIslemService:
         return analysis_results
     
     def toplu_musteri_ekle_guncelle(self, processed_musteri_data):
-        # <<< DEĞİŞİKLİK BURADA BAŞLIYOR: Metot artık transaction yönetmiyor. >>>
         if not processed_musteri_data:
             return True, "İşlenecek müşteri verisi bulunamadı."
         
@@ -738,8 +722,7 @@ class TopluIslemService:
         current_time = self.db.get_current_datetime_str()
         user_id = self.db._get_current_user_id()
 
-        # Dışarıda başlatılan transaction içinde çalışır, kendi try/except'i kaldırıldı.
-        for i, item_data in enumerate(processed_musteri_data):
+        for i, item_data in enumerate(processed_musteri_data): # Added index for row numbering
             try:
                 musteri_kodu = item_data.get('musteri_kodu', '').strip()
                 ad = item_data.get('ad', '').strip()
@@ -753,14 +736,12 @@ class TopluIslemService:
                     musteri_kodu = self.db.get_next_musteri_kodu()
 
                 if existing_id is not None:
-                    # Güncelleme işlemi
                     self.db.c.execute("""
                         UPDATE musteriler SET ad=?, telefon=?, adres=?, vergi_dairesi=?, vergi_no=?, 
                         son_guncelleme_tarihi_saat=?, son_guncelleyen_kullanici_id=? 
                         WHERE id=?
                     """, (ad, telefon, adres, vergi_dairesi, vergi_no, current_time, user_id, existing_id))
                 else:
-                    # Yeni Ekleme işlemi
                     self.db.c.execute("""
                         INSERT INTO musteriler (kod, ad, telefon, adres, vergi_dairesi, vergi_no, olusturma_tarihi_saat, olusturan_kullanici_id) 
                         VALUES (?,?,?,?,?,?,?,?)
@@ -768,7 +749,7 @@ class TopluIslemService:
                 
                 success_count += 1
             except Exception as e:
-                errors.append(f"İşleme sırasında hata (Satır: {i+2}, Kod: {item_data.get('musteri_kodu', '')}): {e}")
+                errors.append(f"Satır {i+2} ({item_data.get('musteri_kodu', '')}): {e}") # Added row number to error
                 error_count += 1
         
         message = f"{success_count} kayıt başarıyla işlendi."
@@ -777,7 +758,6 @@ class TopluIslemService:
         return True, message
             
     def toplu_tedarikci_ekle_guncelle(self, tedarikciler_data):
-        # <<< DEĞİŞİKLİK BURADA BAŞLIYOR: Metot artık transaction yönetmiyor. >>>
         if not tedarikciler_data:
             return True, "İşlenecek tedarikçi verisi bulunamadı."
         
@@ -787,8 +767,7 @@ class TopluIslemService:
         current_time = self.db.get_current_datetime_str()
         user_id = self.db._get_current_user_id()
 
-        # Dışarıda başlatılan transaction içinde çalışır, kendi try/except'i kaldırıldı.
-        for i, row in enumerate(tedarikciler_data):
+        for i, row in enumerate(tedarikciler_data): # Added index for row numbering
             try:
                 tedarikci_kodu = str(row[0]).strip()
                 ad = str(row[1]).strip()
@@ -801,14 +780,12 @@ class TopluIslemService:
                 existing_supplier = self.db.c.fetchone()
 
                 if existing_supplier:
-                    # Güncelleme
                     self.db.c.execute("""
                         UPDATE tedarikciler SET ad=?, telefon=?, adres=?, vergi_dairesi=?, vergi_no=?, 
                         son_guncelleme_tarihi_saat=?, son_guncelleyen_kullanici_id=? 
                         WHERE id=?
                     """, (ad, telefon, adres, vergi_dairesi, vergi_no, current_time, user_id, existing_supplier[0]))
                 else:
-                    # Yeni Ekleme
                     self.db.c.execute("""
                         INSERT INTO tedarikciler (tedarikci_kodu, ad, telefon, adres, vergi_dairesi, vergi_no, olusturma_tarihi_saat, olusturan_kullanici_id) 
                         VALUES (?,?,?,?,?,?,?,?)
@@ -816,7 +793,7 @@ class TopluIslemService:
                 
                 success_count += 1
             except Exception as e:
-                errors.append(f"Satır {i+2} ({tedarikci_kodu}): {e}")
+                errors.append(f"Satır {i+2} ({tedarikci_kodu}): {e}") # Added row number to error
                 error_count += 1
         
         message = f"{success_count} kayıt başarıyla işlendi."

@@ -1309,3 +1309,173 @@
 2025-07-15 21:37:16,263 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
 2025-07-15 21:37:16,281 - INFO - Uygulama baþlatýldý. (main.py'den)
 2025-07-15 21:37:18,764 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
+2025-07-16 11:51:55,279 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python313\Lib\site-packages\matplotlib\mpl-data
+2025-07-16 11:51:55,306 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
+2025-07-16 11:51:55,309 - DEBUG - interactive is False
+2025-07-16 11:51:55,309 - DEBUG - platform is win32
+2025-07-16 11:51:55,420 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
+2025-07-16 11:51:55,426 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
+2025-07-16 11:51:56,206 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 11:51:57,215 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-16 11:51:57,230 - INFO - Uygulama baþlatýldý. (main.py'den)
+2025-07-16 11:51:59,608 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
+2025-07-16 11:52:01,523 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
+2025-07-16 11:52:01,525 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
+2025-07-16 11:52:01,526 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
+2025-07-16 11:52:01,526 - DEBUG - Params: []
+2025-07-16 11:52:01,527 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000002593EF50340>, <sqlite3.Row object at 0x000002593EF50370>, <sqlite3.Row object at 0x000002593EF503A0>, <sqlite3.Row object at 0x000002593EF503D0>, <sqlite3.Row object at 0x000002593EF50400>]
+2025-07-16 11:52:01,527 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=3.0
+2025-07-16 11:52:01,527 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
+2025-07-16 11:52:01,527 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
+2025-07-16 11:52:01,527 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
+2025-07-16 11:52:01,527 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
+2025-07-16 11:52:01,534 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
+2025-07-16 11:52:01,536 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
+2025-07-16 11:52:01,536 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
+2025-07-16 11:52:01,541 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
+2025-07-16 11:52:01,541 - DEBUG - Params: []
+2025-07-16 11:52:01,542 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000002593EF51C90>, <sqlite3.Row object at 0x000002593EF52080>, <sqlite3.Row object at 0x000002593EF520B0>, <sqlite3.Row object at 0x000002593EF51EA0>, <sqlite3.Row object at 0x000002593EF51D50>]
+2025-07-16 11:52:01,542 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=3.0
+2025-07-16 11:52:01,542 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
+2025-07-16 11:52:01,542 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
+2025-07-16 11:52:01,542 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
+2025-07-16 11:52:01,542 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
+2025-07-16 11:52:04,069 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
+2025-07-16 11:52:09,881 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
+2025-07-16 11:52:17,469 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python313\Lib\site-packages\matplotlib\mpl-data
+2025-07-16 11:52:17,479 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
+2025-07-16 11:52:17,481 - DEBUG - interactive is False
+2025-07-16 11:52:17,481 - DEBUG - platform is win32
+2025-07-16 11:52:17,506 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
+2025-07-16 11:52:17,509 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
+2025-07-16 11:52:17,751 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 11:52:18,613 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-16 11:52:18,622 - INFO - Uygulama baþlatýldý. (main.py'den)
+2025-07-16 11:52:20,166 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
+2025-07-16 12:43:25,169 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
+2025-07-16 12:43:25,182 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
+2025-07-16 12:43:25,183 - DEBUG - interactive is False
+2025-07-16 12:43:25,183 - DEBUG - platform is win32
+2025-07-16 12:43:25,222 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
+2025-07-16 12:43:25,225 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
+2025-07-16 12:43:26,056 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 12:43:27,624 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-16 12:43:27,638 - INFO - Uygulama baþlatýldý. (main.py'den)
+2025-07-16 12:43:29,558 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
+2025-07-16 12:43:30,992 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
+2025-07-16 12:43:30,995 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
+2025-07-16 12:43:30,995 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
+2025-07-16 12:43:30,996 - DEBUG - Params: []
+2025-07-16 12:43:30,996 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000029DB0132C20>, <sqlite3.Row object at 0x0000029DB0132C50>, <sqlite3.Row object at 0x0000029DB0132C80>, <sqlite3.Row object at 0x0000029DB0132CB0>, <sqlite3.Row object at 0x0000029DB0132CE0>]
+2025-07-16 12:43:30,997 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=3.0
+2025-07-16 12:43:30,997 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
+2025-07-16 12:43:30,997 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
+2025-07-16 12:43:30,997 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
+2025-07-16 12:43:30,998 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
+2025-07-16 12:43:31,000 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
+2025-07-16 12:43:31,002 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
+2025-07-16 12:43:31,002 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
+2025-07-16 12:43:31,004 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
+2025-07-16 12:43:31,004 - DEBUG - Params: []
+2025-07-16 12:43:31,005 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000029DB0134A30>, <sqlite3.Row object at 0x0000029DB0134A60>, <sqlite3.Row object at 0x0000029DB0134850>, <sqlite3.Row object at 0x0000029DB0134880>, <sqlite3.Row object at 0x0000029DB01345B0>]
+2025-07-16 12:43:31,005 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=3.0
+2025-07-16 12:43:31,005 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
+2025-07-16 12:43:31,005 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
+2025-07-16 12:43:31,005 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
+2025-07-16 12:43:31,005 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
+2025-07-16 12:43:35,850 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
+2025-07-16 12:43:38,827 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=2452.94, Ýþlem Tutarý=352.94, Artýr=False, Yeni Bakiye (Hesaplanan)=2100.0
+2025-07-16 12:43:38,829 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=2100.0
+2025-07-16 12:43:38,830 - INFO - Fatura silme: Kasa ID 1 bakiyesi, iþlem geri alýndýðý için güncellendi.
+2025-07-16 12:43:40,649 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=2100.0, Ýþlem Tutarý=2100.0, Artýr=False, Yeni Bakiye (Hesaplanan)=0.0
+2025-07-16 12:43:40,651 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=0.0
+2025-07-16 12:43:40,652 - INFO - Fatura silme: Kasa ID 1 bakiyesi, iþlem geri alýndýðý için güncellendi.
+2025-07-16 12:59:04,907 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
+2025-07-16 12:59:04,919 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
+2025-07-16 12:59:04,920 - DEBUG - interactive is False
+2025-07-16 12:59:04,920 - DEBUG - platform is win32
+2025-07-16 12:59:04,949 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
+2025-07-16 12:59:04,953 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
+2025-07-16 12:59:05,498 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 12:59:06,592 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-16 12:59:06,603 - INFO - Uygulama baþlatýldý. (main.py'den)
+2025-07-16 12:59:08,522 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
+2025-07-16 12:59:10,688 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
+2025-07-16 12:59:10,690 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
+2025-07-16 12:59:10,690 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
+2025-07-16 12:59:10,691 - DEBUG - Params: []
+2025-07-16 12:59:10,691 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x00000216031BA8F0>, <sqlite3.Row object at 0x00000216031BA920>, <sqlite3.Row object at 0x00000216031BA950>, <sqlite3.Row object at 0x00000216031BA980>, <sqlite3.Row object at 0x00000216031BA9B0>]
+2025-07-16 12:59:10,691 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
+2025-07-16 12:59:10,692 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
+2025-07-16 12:59:10,692 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
+2025-07-16 12:59:10,692 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
+2025-07-16 12:59:10,692 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
+2025-07-16 12:59:10,695 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
+2025-07-16 12:59:10,696 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
+2025-07-16 12:59:10,697 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
+2025-07-16 12:59:10,699 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
+2025-07-16 12:59:10,699 - DEBUG - Params: []
+2025-07-16 12:59:10,700 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x00000216031BC2E0>, <sqlite3.Row object at 0x00000216031BC6A0>, <sqlite3.Row object at 0x00000216031BC6D0>, <sqlite3.Row object at 0x00000216031BC4F0>, <sqlite3.Row object at 0x00000216031BC340>]
+2025-07-16 12:59:10,700 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
+2025-07-16 12:59:10,700 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
+2025-07-16 12:59:10,701 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
+2025-07-16 12:59:10,701 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
+2025-07-16 12:59:10,702 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
+2025-07-16 12:59:12,387 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
+2025-07-16 12:59:19,526 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: ALIÞ
+2025-07-16 12:59:19,526 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 41
+2025-07-16 12:59:19,527 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, alis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
+2025-07-16 12:59:19,527 - DEBUG - Params: []
+2025-07-16 12:59:19,528 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x00000216031BF1C0>, <sqlite3.Row object at 0x00000216031BF1F0>, <sqlite3.Row object at 0x00000216031BF220>, <sqlite3.Row object at 0x00000216031BF250>, <sqlite3.Row object at 0x00000216031BF2B0>]
+2025-07-16 12:59:19,528 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=117.65, kdv=20.0, stok=5.0
+2025-07-16 12:59:19,528 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=1200.0, kdv=20.0, stok=1.0
+2025-07-16 12:59:19,528 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=800.0, kdv=20.0, stok=1.0
+2025-07-16 12:59:19,528 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=850.0, kdv=20.0, stok=5.0
+2025-07-16 12:59:19,528 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=625.0, kdv=20.0, stok=5.0
+2025-07-16 12:59:19,533 - DEBUG - FaturaOlusturmaSayfasi - Düzenleme modunda, mevcut fatura yüklendi.
+2025-07-16 13:26:09,169 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
+2025-07-16 13:26:09,186 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
+2025-07-16 13:26:09,189 - DEBUG - interactive is False
+2025-07-16 13:26:09,189 - DEBUG - platform is win32
+2025-07-16 13:26:09,243 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
+2025-07-16 13:26:09,247 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
+2025-07-16 13:26:09,548 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 13:26:11,019 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-16 13:26:11,033 - INFO - Uygulama baþlatýldý. (main.py'den)
+2025-07-16 13:26:13,203 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
+2025-07-16 13:49:51,362 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
+2025-07-16 13:49:51,375 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
+2025-07-16 13:49:51,376 - DEBUG - interactive is False
+2025-07-16 13:49:51,377 - DEBUG - platform is win32
+2025-07-16 13:49:51,407 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
+2025-07-16 13:49:51,410 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
+2025-07-16 13:50:43,971 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
+2025-07-16 13:50:43,982 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
+2025-07-16 13:50:43,984 - DEBUG - interactive is False
+2025-07-16 13:50:43,984 - DEBUG - platform is win32
+2025-07-16 13:50:44,014 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
+2025-07-16 13:50:44,018 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
+2025-07-16 13:50:45,121 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 13:51:22,857 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
+2025-07-16 13:51:22,868 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
+2025-07-16 13:51:22,870 - DEBUG - interactive is False
+2025-07-16 13:51:22,870 - DEBUG - platform is win32
+2025-07-16 13:51:22,902 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
+2025-07-16 13:51:22,905 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
+2025-07-16 13:51:23,274 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 13:53:58,779 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 13:53:59,018 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-16 14:04:51,014 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 14:04:51,355 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-16 14:35:01,273 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 14:35:01,678 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-16 15:10:51,547 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 15:10:51,865 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-16 15:44:49,818 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 15:44:50,136 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-16 16:08:17,237 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 16:08:17,563 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-16 16:08:48,404 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-16 16:08:48,620 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-17 15:04:48,127 - DEBUG - Veritabaný yolu: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
+2025-07-17 15:04:48,831 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
