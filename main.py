@@ -13,15 +13,13 @@ from PySide6.QtWidgets import (
     QPushButton, QTabWidget, QStatusBar, QMessageBox, QFileDialog, QSizePolicy
 )
 from PySide6.QtCore import Qt, QTimer # QTimer eklendi
-from PySide6.QtGui import QIcon, QPixmap # Resimler için QIcon ve QPixmap eklendi
+from PySide6.QtGui import QIcon, QPixmap, QFont, QPalette, QColor
 
 # Yerel Uygulama Modülleri
 from veritabani import OnMuhasebe
 from hizmetler import FaturaService, TopluIslemService
 from yardimcilar import setup_locale
-
-
-
+from arayuz import MusteriYonetimiSayfasi, TedarikciYonetimiSayfasi, AnaSayfa, StokYonetimiSayfasi,FaturaListesiSayfasi,RaporlamaMerkeziSayfasi,GelirGiderSayfasi,FinansalIslemlerSayfasi,SiparisListesiSayfasi,KasaBankaYonetimiSayfasi
 # VERİTABANI VE LOG DOSYALARI İÇİN TEMEL DİZİN TANIMLAMA (ANA UYGULAMA GİRİŞ NOKTASI)
 if getattr(sys, 'frozen', False):
     base_dir = os.path.dirname(sys.executable)
@@ -54,91 +52,47 @@ def _pdf_olusturma_islemi(db_name_path, cari_tip, cari_id, bas_t, bit_t, dosya_y
             temp_db_manager.conn.close()
 
 # main.py içinde PySide6 tabanlı App sınıfı
-class App(QMainWindow): # QMainWindow'dan miras alıyor
+# main.py dosyasındaki App sınıfının içindeki __init__ metodunun GÜNCELLENMİŞ HALİ
+class App(QMainWindow):
     def __init__(self, db_manager):
         super().__init__()
         self.db = db_manager
-        self.db.app = self # db_manager'a App referansını verir
         
-        self.current_user = None # Giriş yapıldığında ayarlanacak
-        self.fatura_servisi = FaturaService(self.db)
-        self.toplu_islem_servisi = TopluIslemService(self.db, self.fatura_servisi)
+        self.pages = {} # Açılan sayfaları (widget'ları) saklamak için bir sözlük
 
         self.setWindowTitle("Çınar Yapı Ön Muhasebe Programı")
-        self.showMaximized() # Pencereyi tam ekran aç
-        self.setMinimumSize(800, 600) # Minimum boyut
+        self.showMaximized()
+        self.setMinimumSize(800, 600)
 
-        # Ana widget ve layout
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        self.main_layout = QVBoxLayout(self.central_widget) # Ana layout dikey olacak
+        self.main_layout = QVBoxLayout(self.central_widget)
 
-        # --- Durum Çubuğu ve Bildirim Alanı ---
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Uygulama başlatılıyor...")
-
+        
         self.notification_label = QLabel("")
         self.notification_label.setStyleSheet("background-color: #FFD2D2; color: red; font-weight: bold; padding: 5px;")
         self.notification_label.setAlignment(Qt.AlignCenter)
         self.notification_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.status_bar.addPermanentWidget(self.notification_label) # Kalıcı bir widget olarak eklendi
-        self.notification_label.setVisible(False) # Başlangıçta gizle
-        self.notification_label.mousePressEvent = self.show_notification_details # Tıklama olayı bağlandı
-
-        self.notification_update_interval = 30000 # 30 saniye
-        self.notification_timer = QTimer(self)
-        self.notification_timer.timeout.connect(self._check_critical_stock) # Zamanlayıcıyı bağla
-
-        # --- Veritabanı Başlangıç Kontrolleri ---
-        try:
-            admin_success, admin_message = self.db.ensure_admin_user()
-            if not admin_success:
-                logging.critical(f"Admin kullanıcısı kontrol/oluşturma başarısız: {admin_message}")
-                QMessageBox.critical(self, "Kritik Hata", "Admin kullanıcısı oluşturulamadı: " + admin_message + "\nLütfen programı yeniden başlatın.")
-                sys.exit(1) # Uygulamayı kapat
-
-            # Diğer ensure metotları (sabitler için)
-            self.db._ensure_perakende_musteri()
-            self.db._ensure_genel_tedarikci()
-            self.db._ensure_default_kasa()
-            self.db._ensure_default_urun_birimi()
-            self.db._ensure_default_ulke()
-
-            logging.info("Tüm başlangıç veritabanı ensure işlemleri başarılı.")
-
-        except Exception as e:
-            logging.critical(f"Veritabanı başlangıç işlemleri sırasında beklenmeyen kritik hata: {e}", exc_info=True)
-            QMessageBox.critical(self, "Kritik Hata", f"Veritabanı başlangıç işlemleri sırasında beklenmeyen bir hata oluştu:\n{e}\nLütfen programı yeniden başlatın.")
-            sys.exit(1) # Uygulamayı kapat
-
-        # --- Giriş Ekranını Göster ---
-        # Şimdilik doğrudan ana arayüzü başlatıyoruz. Giriş ekranı daha sonra entegre edilecek.
-        self.login_user_and_start_main_ui((1, "admin", "admin")) # Geçici olarak admin ile başlat
-
-        self._check_critical_stock() # İlk kontrolü yap
-        self.notification_timer.start(self.notification_update_interval) # Zamanlayıcıyı başlat
+        self.status_bar.addPermanentWidget(self.notification_label)
+        self.notification_label.setVisible(False)
+        
+        self.login_user_and_start_main_ui((1, "admin", "admin"))
 
     def login_user_and_start_main_ui(self, user_info):
         self.current_user = user_info
         self.setWindowTitle(f"Çınar Yapı Ön Muhasebe - Hoş Geldiniz, {self.current_user[1]} ({self.current_user[2].capitalize()})")
+        self.set_status_message(f"Hoş geldiniz, {self.current_user[1]}")
         
-        # Tkinter'daki notebook'un yerini QTabWidget alacak
         self.tab_widget = QTabWidget()
+        self.tab_widget.setTabsClosable(True)
+        self.tab_widget.tabCloseRequested.connect(self.close_tab)
         self.main_layout.addWidget(self.tab_widget)
 
-        # Menü Çubuğu (QMenuBar)
         self._create_menu_bar()
-
-        # Ana sayfa içeriğini ekle (şimdilik basit bir QLabel)
-        # Bu kısım, Tkinter'daki AnaSayfa sınıfınızın PySide6 versiyonu olacak.
-        # Henüz o sınıfları PySide6'ya çevirmediğimiz için placeholder kullanıyoruz.
-        home_page_widget = QLabel("Ana Sayfa İçeriği (PySide6)")
-        home_page_widget.setAlignment(Qt.AlignCenter)
-        self.tab_widget.addTab(home_page_widget, "🏠 Ana Sayfa")
         
-        # Durum çubuğu mesajını güncelle
-        self.set_status_message(f"Hoş geldiniz {self.current_user[1]}. Şirket: {self.db.sirket_bilgileri.get('sirket_adi', 'Belirtilmemiş')}")
+        self.show_tab("Ana Sayfa")
 
     def _create_menu_bar(self):
         menu_bar = self.menuBar()
@@ -380,8 +334,72 @@ class App(QMainWindow): # QMainWindow'dan miras alıyor
     def show_invoice_form(self, invoice_type):
         QMessageBox.information(self, "Fatura Oluştur", f"Yeni {invoice_type} faturası formu burada açılacak.")
 
-    def show_tab(self, tab_name):
-        QMessageBox.information(self, "Sekme Değiştir", f"'{tab_name}' sekmesi burada gösterilecek.")
+    def show_tab(self, page_name: str):
+        if page_name in self.pages:
+            # Eğer sayfa zaten açıksa, o sekmeye geç
+            self.tab_widget.setCurrentWidget(self.pages[page_name])
+            return
+
+        widget = None
+        if page_name == "Ana Sayfa":
+            widget = AnaSayfa(self, self.db, self)
+        elif page_name == "Stok Yönetimi":
+            widget = StokYonetimiSayfasi(self, self.db, self)
+        elif page_name == "Müşteri Yönetimi":
+            widget = MusteriYonetimiSayfasi(self, self.db, self)
+        elif page_name == "Tedarikçi Yönetimi":
+            widget = TedarikciYonetimiSayfasi(self, self.db, self)
+        elif page_name == "Kasa/Banka":
+            widget = KasaBankaYonetimiSayfasi(self, self.db, self)
+        elif page_name == "Faturalar":
+            widget = FaturaListesiSayfasi(self, self.db, self)
+        elif page_name == "Sipariş Yönetimi":
+            widget = SiparisListesiSayfasi(self, self.db, self)
+        elif page_name == "Finansal İşlemler":
+            widget = FinansalIslemlerSayfasi(self, self.db, self)
+        elif page_name == "Gelir/Gider":
+            widget = GelirGiderSayfasi(self, self.db, self)
+        elif page_name == "Raporlama Merkezi":
+            widget = RaporlamaMerkeziSayfasi(self, self.db, self)
+
+        if widget:
+            self.pages[page_name] = widget
+            index = self.tab_widget.addTab(widget, page_name)
+            self.tab_widget.setCurrentIndex(index)
+            # Sayfa yüklendikten sonra listeyi yenileme (eğer varsa)
+            if hasattr(widget, 'stok_listesini_yenile'):
+                widget.stok_listesini_yenile()
+            elif hasattr(widget, 'musteri_listesini_yenile'):
+                widget.musteri_listesini_yenile()
+            elif hasattr(widget, 'tedarikci_listesini_yenile'):
+                widget.tedarikci_listesini_yenile()
+            elif hasattr(widget, 'hesap_listesini_yenile'):
+                widget.hesap_listesini_yenile()
+            elif hasattr(widget, 'fatura_listesini_yukle'):
+                widget.fatura_listesini_yukle()
+            elif hasattr(widget, 'siparis_listesini_yukle'):
+                widget.siparis_listesini_yukle()
+            elif hasattr(widget, 'gg_listesini_yukle'):
+                widget.gg_listesini_yukle()
+            elif hasattr(widget, 'raporu_olustur_ve_yenile'):
+                widget.raporu_olustur_ve_yenile()
+            
+            # self.app.set_status_message yerine doğrudan self.set_status_message kullan
+            self.set_status_message(f"'{page_name}' sekmesi açıldı.") # <-- Burası güncellendi
+        else:
+            QMessageBox.information(self, "Sekme Değiştir", f"'{page_name}' sekmesi henüz programa eklenmedi.")
+            # self.app.set_status_message yerine doğrudan self.set_status_message kullan
+            self.set_status_message(f"Hata: '{page_name}' sekmesi açılamadı.") # <-- Burası güncellendi
+
+
+    def close_tab(self, index):
+        widget = self.tab_widget.widget(index)
+        if widget is not None:
+            page_name = self.tab_widget.tabText(index)
+            if page_name in self.pages:
+                del self.pages[page_name]
+            widget.deleteLater()
+            self.tab_widget.removeTab(index)
 
     def show_order_form(self, order_type):
         QMessageBox.information(self, "Sipariş Oluştur", f"Yeni {order_type} sipariş formu burada açılacak.")
@@ -398,12 +416,39 @@ class App(QMainWindow): # QMainWindow'dan miras alıyor
 if __name__ == "__main__":
     setup_locale() 
     
-    app = QApplication(sys.argv) # sys.argv, komut satırı argümanlarını alır
+    app = QApplication(sys.argv)
     
-    # Veritabanı yöneticinizi burada başlatın
-    db_manager = OnMuhasebe(db_name='on_muhasebe.db', data_dir=data_dir)
+    # --- GÜNCELLENMİŞ: Beyaz Tema Ayarları ---
+    app.setStyle("Fusion")
+
+    # Yeni, özel bir beyaz palet oluşturuyoruz
+    beyaz_palet = QPalette()
+
+    # Pencere arka planları için renkleri ayarla
+    beyaz_palet.setColor(QPalette.ColorRole.Window, QColor(255, 255, 255))        # Ana pencere arka planı (beyaz)
+    beyaz_palet.setColor(QPalette.ColorRole.WindowText, QColor(0, 0, 0))            # Ana yazı rengi (siyah)
+    
+    # Yazı giriş alanları (QLineEdit, QTextEdit vb.) için renkleri ayarla
+    beyaz_palet.setColor(QPalette.ColorRole.Base, QColor(255, 255, 255))           # Entry arka planı (beyaz)
+    beyaz_palet.setColor(QPalette.ColorRole.Text, QColor(0, 0, 0))                 # Entry yazı rengi (siyah)
+    beyaz_palet.setColor(QPalette.ColorRole.PlaceholderText, QColor(120, 120, 120)) # Placeholder yazı rengi (gri)
+
+    # Butonlar ve diğer arayüz elemanları için renkleri ayarla
+    beyaz_palet.setColor(QPalette.ColorRole.Button, QColor(240, 240, 240))         # Buton arka planı (hafif gri)
+    beyaz_palet.setColor(QPalette.ColorRole.ButtonText, QColor(0, 0, 0))           # Buton yazı rengi (siyah)
+    
+    # Vurgu rengi (örneğin seçili öğeler için)
+    beyaz_palet.setColor(QPalette.ColorRole.Highlight, QColor(0, 120, 215))       # Standart mavi
+    beyaz_palet.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255)) # Vurgulu yazı (beyaz)
+
+    # Uygulamaya yeni paletimizi tanıtıyoruz
+    app.setPalette(beyaz_palet)
+    # --- DEĞİŞİKLİK SONU ---
+    
+    # Kodun geri kalanı aynı
+    db_manager = OnMuhasebe(data_dir=data_dir)
     
     main_app_window = App(db_manager=db_manager)
-    # main_app_window.show() # App'in __init__ içinde showMaximized() çağrıldığı için burada gerek yok
+    main_app_window.show() 
     
     sys.exit(app.exec())

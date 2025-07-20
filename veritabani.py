@@ -1,65 +1,86 @@
 # veritabani.py dosyasının içeriği
-import logging
-import sqlite3
+from sqlalchemy import create_engine, Column, Integer, String, Numeric, TIMESTAMP, Date, Boolean, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session, relationship
+from sqlalchemy import func, case, and_, or_ 
+from datetime import datetime, date, timedelta
 import os
-import sys
-import hashlib
-import json
 import shutil
+import hashlib
+import locale
+import logging
 import traceback
-from datetime import datetime, date
 import openpyxl
-from openpyxl.styles import Font, Alignment, PatternFill
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.pdfgen import canvas as rp_canvas
-from reportlab.lib import colors
-from reportlab.platypus import Table, TableStyle, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.lib.pagesizes import landscape, A4
 from reportlab.lib.units import cm
+from reportlab.platypus import Table, TableStyle, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.lib import colors
+from reportlab.pdfgen import canvas as rp_canvas
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from PIL import Image
-import calendar
-from yardimcilar import normalize_turkish_chars
-# VERİTABANI VE LOG DOSYALARI İÇİN TEMEL DİZİN TANIMLAMA (GLOBAL ALAN)
-if getattr(sys, 'frozen', False):
-    base_dir = os.path.dirname(sys.executable)
-else:
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+from reportlab.pdfbase import pdfmetrics, ttfonts
+import sqlite3
+# --- GLOBAL VERİTABANI AYARLARI (UI tarafından doğrudan kullanılacaksa) ---
+# Bu ayarlar, sadece UI'dan OnMuhasebe objesi direkt başlatıldığında kullanılır.
+# API tarafında veritabani.py'nin ayrı bir engine ve SessionLocal'ı vardır.
 
-data_dir = os.path.join(base_dir, 'data') # <-- BURASI GLOBAL TANIMLANMIŞ
-if not os.path.exists(data_dir):
-    os.makedirs(data_dir)
+# `main.py` dosyasının bulunduğu dizini bulalım ve 'data' klasörünü varsayalım.
+# Eğer 'data' klasörü `main.py` ile aynı dizinde değilse bu yolu düzeltmelisiniz.
+_base_dir = os.path.dirname(os.path.abspath(__file__)) # veritabani.py'nin bulunduğu dizin
+_project_root_dir = os.path.abspath(os.path.join(_base_dir, os.pardir)) # Projenin ana kök dizini (onmuhasebe)
+_data_dir = os.path.join(_project_root_dir, 'data') # 'onmuhasebe/data'
+if not os.path.exists(_data_dir):
+    os.makedirs(_data_dir)
 
-# LOGLAMA YAPILANDIRMASI
-log_file_path = os.path.join(data_dir, 'application.log')
+# Geçici olarak SQLite Engine'i. Eğer UI tarafı da PostgreSQL kullanacaksa bu kısım değiştirilmeli.
+# Şu anki hata, OnMuhasebe'nin doğru Engine'i bulamamasından kaynaklandığı için burayı sağlıyoruz.
+_SQL_URL = f"sqlite:///{os.path.join(_data_dir, 'on_muhasebe.db')}" 
+_engine = create_engine(_SQL_URL, connect_args={"check_same_thread": False})
+_SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
-logging.basicConfig(filename=log_file_path, level=logging.DEBUG, # <-- Level'ı DEBUG yapın
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+# --- PDF FONT AYARLARI ---
+# Font dosyalarının proje kök dizinindeki 'fonts' klasöründe olduğunu varsayalım.
+# Eğer bu klasör yoksa veya fontlar farklı bir yerde ise, yolu güncelleyin.
+_font_dir = os.path.join(_project_root_dir, 'fonts')
+if not os.path.exists(_font_dir):
+    os.makedirs(_font_dir) # fonts klasörünü oluştur
 
-TURKISH_FONT_NORMAL = "Helvetica"
-TURKISH_FONT_BOLD = "Helvetica-Bold"
+TURKISH_FONT_NORMAL = "DejaVuSans" 
+TURKISH_FONT_BOLD = "DejaVuSans-Bold"
+
 try:
-    dejavu_sans_normal_path = os.path.join(data_dir, 'DejaVuSans.ttf') # <-- Burayı güncelleyin
-    dejavu_sans_bold_path = os.path.join(data_dir, 'DejaVuSans-Bold.ttf') # <-- Burayı güncelleyin
+    _dejavu_sans_ttf = os.path.join(_font_dir, 'DejaVuSans.ttf')
+    _dejavu_sans_bold_ttf = os.path.join(_font_dir, 'DejaVuSans-Bold.ttf')
 
-    # Font dosyalarının varlığını kontrol et ve sadece varsa kaydet
-    if os.path.exists(dejavu_sans_normal_path):
-        pdfmetrics.registerFont(TTFont('DejaVuSans', dejavu_sans_normal_path))
-        TURKISH_FONT_NORMAL = "DejaVuSans"
+    if not os.path.exists(_dejavu_sans_ttf):
+        logging.warning(f"Font dosyası bulunamadı: {_dejavu_sans_ttf}. PDF'lerde Türkçe karakter sorunları yaşanabilir.")
     else:
-        print(f"UYARI: {dejavu_sans_normal_path} bulunamadı. Varsayılan font kullanılacak.")
+        pdfmetrics.registerFont(ttfonts.TTFont(TURKISH_FONT_NORMAL, _dejavu_sans_ttf))
 
-    if os.path.exists(dejavu_sans_bold_path):
-        pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', dejavu_sans_bold_path))
-        TURKISH_FONT_BOLD = "DejaVuSans-Bold"
+    if not os.path.exists(_dejavu_sans_bold_ttf):
+        logging.warning(f"Font dosyası bulunamadı: {_dejavu_sans_bold_ttf}. PDF'lerde Türkçe karakter sorunları yaşanabilir.")
     else:
-        print(f"UYARI: {dejavu_sans_bold_path} bulunamadı. Varsayılan font kullanılacak.")
+        pdfmetrics.registerFont(ttfonts.TTFont(TURKISH_FONT_BOLD, _dejavu_sans_bold_ttf))
 
 except Exception as e:
-    print(f"KRİTİK FONT YÜKLEME HATASI: {e} - PDF'lerde Türkçe karakter sorunu olabilir.")
+    logging.warning(f"PDF fontları yüklenirken hata oluştu: {e}. PDF'lerde Türkçe karakter sorunları yaşanabilir.")
 
+
+# --- SQLAlchemy ORM Temeli ---
+Base = declarative_base()
+
+# --- SQLAlchemy ORM Modellerinin Import Edilmesi ---
+# semalar.py'deki TÜM ORM MODELLERİ BURADAN IMPORT EDİLECEK.
+# Bu, modelleri tekrar kopyalamak yerine daha temiz bir yaklaşımdır.
+# Ancak semalar.py'nin de doğru relationship tanımlamalarına sahip olduğundan emin olun.
+from api.semalar import (
+    Kullanici, SirketBilgileri, Musteri, Tedarikci, UrunKategorileri, 
+    UrunMarkalari, UrunGruplari, UrunBirimleri, UrunUlkeleri, Stok, StokHareketleri, 
+    KasaBanka, Fatura, FaturaKalemleri, Siparis, SiparisKalemleri, 
+    GelirGider, GelirSiniflandirma, GiderSiniflandirma, CariHareketler
+)
 class OnMuhasebe:
+    PERAKENDE_MUSTERI_KODU = "M-000"
+    GENEL_TEDARIKCI_KODU = "T-000"
     FATURA_TIP_ALIS = "ALIŞ"
     FATURA_TIP_SATIS = "SATIŞ"
     FATURA_TIP_DEVIR_GIRIS = "DEVİR_GİRİŞ"
@@ -132,57 +153,1443 @@ class OnMuhasebe:
     ISKONTO_TIP_YUZDE = "YUZDE"
     ISKONTO_TIP_TUTAR = "TUTAR"
     
-    def __init__(self, db_name='on_muhasebe.db', data_dir=None): # data_dir parametresi eklendi
-        self.app = None
-        # data_dir'i parametre olarak al, eğer yoksa varsayılanı kullan (test veya direkt çağrımlar için)
-        self.data_dir = data_dir if data_dir else os.path.dirname(os.path.abspath(__file__))
-        self.db_name = os.path.join(self.data_dir, db_name)
-        logging.debug(f"Veritabanı yolu: {self.db_name}")
+    def __init__(self, data_dir='data'):
+        """
+        Hem eski (sqlite3) hem de yeni (SQLAlchemy) veritabanı bağlantılarını başlatır.
+        """
+        # --- YENİ EKLENEN KISIM: SQLAlchemy Oturumu ---
+        from api.veritabani import SessionLocal
+        self._db_session = SessionLocal()
+        # ---------------------------------------------
 
-        self.conn = sqlite3.connect(self.db_name, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+        # --- ESKİ YAPI (GEÇİŞ SÜRECİNDE GEREKLİ) ---
+        self.data_dir = data_dir
+        self.db_name = os.path.join(self.data_dir, 'on_muhasebe.db')
+        self.conn = sqlite3.connect(self.db_name, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
         self.conn.row_factory = sqlite3.Row
         self.c = self.conn.cursor()
-        self.c.execute("PRAGMA foreign_keys = ON;")
-
-        self.PERAKENDE_MUSTERI_KODU = "PER000"
-        self.perakende_musteri_id = None
-
-        self.genel_tedarikci_id = None
-        self.pesin_odeme_turleri = ["NAKİT", "KART", "EFT/HAVALE", "ÇEK", "SENET"]
-
-        self.create_tables()
-
-        self._ensure_perakende_musteri()
-        self._ensure_genel_tedarikci()
-        self._ensure_default_kasa()
-        self._ensure_default_urun_birimi()
-        self._ensure_default_ulke()
-
+        
+        # Diğer başlangıç ayarları
         self.sirket_bilgileri = self.sirket_bilgilerini_yukle()
+        self.perakende_musteri_id = self.get_perakende_musteri_id()
+        self.genel_tedarikci_id = None # Bu özellik kaldırılabilir veya ayarlanabilir.
+        
+        logging.info(f"OnMuhasebe sınıfı başlatıldı. Veritabanı yolu: {self.db_name}")
 
-        # Fontları burada kaydetmek, her yeni OnMuhasebe objesi oluştuğunda çalışmasını sağlar
+    # --- Müşteri Yönetimi ---
+    def musteri_ekle(self, kod, ad, telefon=None, adres=None, vergi_dairesi=None, vergi_no=None):
         try:
-            dejavu_sans_normal_path = os.path.join(self.data_dir, 'DejaVuSans.ttf')
-            dejavu_sans_bold_path = os.path.join(self.data_dir, 'DejaVuSans-Bold.ttf')
+            db_musteri = self._db_session.query(Musteri).filter(Musteri.kod == kod).first()
+            if db_musteri:
+                return False, f"Müşteri kodu '{kod}' zaten mevcut."
+            
+            yeni_musteri = Musteri(
+                kod=kod, ad=ad, telefon=telefon, adres=adres,
+                vergi_dairesi=vergi_dairesi, vergi_no=vergi_no,
+                olusturma_tarihi_saat=datetime.now(),
+                olusturan_kullanici_id=self._get_current_user_id()
+            )
+            self._db_session.add(yeni_musteri)
+            self._db_session.commit()
+            self._db_session.refresh(yeni_musteri)
+            return True, yeni_musteri.id # Başarılı olursa ID döndür
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Müşteri eklenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Müşteri eklenirken bir hata oluştu: {e}"
 
-            if os.path.exists(dejavu_sans_normal_path):
-                if 'DejaVuSans' not in pdfmetrics.getRegisteredFontNames(): # Sadece kayıtlı değilse kaydet
-                    pdfmetrics.registerFont(TTFont('DejaVuSans', dejavu_sans_normal_path))
-                    global TURKISH_FONT_NORMAL
-                    TURKISH_FONT_NORMAL = "DejaVuSans"
-            else:
-                print(f"UYARI: {dejavu_sans_normal_path} bulunamadı. Varsayılan font kullanılacak.")
+    def musteri_guncelle(self, musteri_id, kod, ad, telefon=None, adres=None, vergi_dairesi=None, vergi_no=None):
+        try:
+            db_musteri = self._db_session.query(Musteri).filter(Musteri.id == musteri_id).first()
+            if db_musteri is None:
+                return False, "Müşteri bulunamadı."
+            
+            # Kod değişmişse, yeni kodun benzersizliğini kontrol et
+            if db_musteri.kod != kod:
+                existing_musteri_with_new_kod = self._db_session.query(Musteri).filter(Musteri.kod == kod).first()
+                if existing_musteri_with_new_kod:
+                    return False, f"Müşteri kodu '{kod}' zaten başka bir müşteriye ait."
 
-            if os.path.exists(dejavu_sans_bold_path):
-                if 'DejaVuSans-Bold' not in pdfmetrics.getRegisteredFontNames(): # Sadece kayıtlı değilse kaydet
-                    pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', dejavu_sans_bold_path))
-                    global TURKISH_FONT_BOLD
-                    TURKISH_FONT_BOLD = "DejaVuSans-Bold"
+            db_musteri.kod = kod
+            db_musteri.ad = ad
+            db_musteri.telefon = telefon
+            db_musteri.adres = adres
+            db_musteri.vergi_dairesi = vergi_dairesi
+            db_musteri.vergi_no = vergi_no
+            db_musteri.son_guncelleme_tarihi_saat = datetime.now()
+            db_musteri.son_guncelleyen_kullanici_id = self._get_current_user_id()
+            
+            self._db_session.commit()
+            self._db_session.refresh(db_musteri)
+            return True, f"Müşteri '{ad}' başarıyla güncellendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Müşteri güncellenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Müşteri güncellenirken bir hata oluştu: {e}"
+
+    def musteri_sil(self, musteri_id):
+        try:
+            if musteri_id == self.perakende_musteri_id:
+                return False, "Perakende satış müşterisi silinemez."
+
+            db_musteri = self._db_session.query(Musteri).filter(Musteri.id == musteri_id).first()
+            if db_musteri is None:
+                return False, "Müşteri bulunamadı."
+            
+            # Müşteriye ait faturalar veya cari hareketler varsa silme engellenebilir (iş mantığına göre)
+            # Şu an için doğrudan silme işlemi yapılıyor, ancak ilişkili kayıtlar hata verebilir.
+            # CASCADE DELETE ayarlanmadıysa foreign key hatası alınabilir.
+            # Ancak biz ORM kullandığımız için, ilişkileri silmek için önce bağlı objeleri silmemiz gerekir.
+            # VEYA semalar.py'de cascade='all, delete-orphan' gibi ayarlamalar yapmalıyız.
+            
+            # İlişkili cari hareketlerin kontrolü (daha önce manuel SQL ile yapılmıştı, şimdi ORM)
+            if self._db_session.query(CariHareketler).filter(CariHareketler.cari_id == musteri_id, CariHareketler.cari_tip == self.CARI_TIP_MUSTERI).first():
+                return False, "Bu müşteriye ait cari hareketler (fatura, tahsilat vb.) bulunmaktadır.\nBir müşteriyi silebilmek için öncelikle tüm ilişkili kayıtların (faturalar, tahsilatlar vb.) silinmesi gerekir."
+
+            self._db_session.delete(db_musteri)
+            self._db_session.commit()
+            return True, f"Müşteri '{db_musteri.ad}' başarıyla silindi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Müşteri silinirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Müşteri silinirken bir hata oluştu: {e}"
+
+    def musteri_listesi_al(self, arama_terimi=None, perakende_haric=False, limit=None, offset=None):
+        query = self._db_session.query(Musteri)
+        if perakende_haric:
+            query = query.filter(Musteri.kod != self.PERAKENDE_MUSTERI_KODU)
+        if arama_terimi:
+            # SQLAlchemy'de Türkçe karakter normalizasyonu doğrudan SQL ile zor.
+            # Python tarafında normalizasyon yapılıp, like sorgusu gönderilebilir.
+            # Veya veritabanında normalize edilmiş sütunlar tutulabilir.
+            normalized_term = normalize_turkish_chars(arama_terimi) # yardimcilar.py'den gelen fonksiyonu kullanırız
+            query = query.filter(
+                or_(
+                    Musteri.ad.ilike(f"%{normalized_term}%"),
+                    Musteri.kod.ilike(f"%{normalized_term}%"),
+                    Musteri.telefon.ilike(f"%{normalized_term}%"),
+                    Musteri.adres.ilike(f"%{normalized_term}%")
+                )
+            )
+        
+        query = query.order_by(Musteri.ad) # Varsayılan sıralama
+        
+        if limit is not None:
+            query = query.limit(limit)
+        if offset is not None:
+            query = query.offset(offset)
+
+        return query.all() # ORM objelerini döndür
+
+    def musteri_getir_by_id(self, musteri_id):
+        try:
+            return self._db_session.query(Musteri).filter(Musteri.id == musteri_id).first()
+        except Exception as e:
+            logging.error(f"Müşteri ID ile getirilirken hata: {e}\n{traceback.format_exc()}")
+            return None
+            
+    def get_next_musteri_kodu(self, length=4): # Uzunluk 4 olarak ayarlandı (örn: M0001)
+        try:
+            # Sadece 'M' ile başlayan ve sonu rakam olan kodları bul
+            last_musteri = self._db_session.query(Musteri).filter(
+                Musteri.kod.like('M%')
+            ).order_by(
+                Musteri.kod.desc()
+            ).first()
+
+            if last_musteri and last_musteri.kod and len(last_musteri.kod) > 1 and last_musteri.kod[0].upper() == 'M' and last_musteri.kod[1:].isdigit():
+                last_num = int(last_musteri.kod[1:])
+                return f"M{last_num + 1:0{length}d}" # Dinamik uzunluk için format
+            return f"M{1:0{length}d}"
+        except Exception as e:
+            logging.error(f"Sonraki müşteri kodu oluşturulurken hata: {e}\n{traceback.format_exc()}")
+            return f"M{1:0{length}d}" # Hata durumunda varsayılan dön
+
+    def _ensure_perakende_musteri(self):
+        """Varsayılan perakende satış müşterisini oluşturur ve ID'sini döndürür."""
+        try:
+            perakende = self._db_session.query(Musteri).filter(Musteri.kod == self.PERAKENDE_MUSTERI_KODU).first()
+            if not perakende:
+                new_perakende = Musteri(
+                    kod=self.PERAKENDE_MUSTERI_KODU,
+                    ad="Perakende Satış Müşterisi",
+                    adres="Genel Müşteri",
+                    olusturma_tarihi_saat=datetime.now(),
+                    olusturan_kullanici_id=self._get_current_user_id()
+                )
+                self._db_session.add(new_perakende)
+                self._db_session.commit()
+                self._db_session.refresh(new_perakende)
+                logging.info("Varsayılan 'Perakende Satış Müşterisi' oluşturuldu.")
+                return new_perakende.id
+            return perakende.id
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Perakende müşteri oluşturulurken hata: {e}\n{traceback.format_exc()}")
+            return None # Hata durumunda None dön
+
+    def get_perakende_musteri_id(self):
+        perakende = self._db_session.query(Musteri).filter(Musteri.kod == self.PERAKENDE_MUSTERI_KODU).first()
+        return perakende.id if perakende else None
+    
+    def get_musteri_net_bakiye(self, musteri_id):
+        # Müşteri: Alacak (+) Borç (-)
+        try:
+            # SQLAlchemy ORM ile sorgu
+            # func.sum ve case kullanımları SQLAlchemy'de de benzerdir.
+            # Ancak, referans tipleri ve odeme_turu için JOIN gerekebilir.
+            # Bu, API'deki cari_hareketler endpoint'inden gelmelidir, OnMuhasebe'nin kendisi hesaplamamalıdır.
+            # Şimdilik, bu metot API'ye taşınana kadar doğrudan ORM ile simüle edelim.
+
+            # Bu hesaplama çok kritik ve detaylı, direkt API'den alınması daha doğru.
+            # Ama geçici olarak ORM ile yapalım.
+
+            toplam_alacak = self._db_session.query(func.sum(CariHareketler.tutar)).filter(
+                CariHareketler.cari_id == musteri_id,
+                CariHareketler.cari_tip == self.CARI_TIP_MUSTERI,
+                or_(
+                    CariHareketler.islem_tipi == self.ISLEM_TIP_ALACAK,
+                    CariHareketler.referans_tip == self.KAYNAK_TIP_FATURA,
+                    CariHareketler.referans_tip == self.KAYNAK_TIP_VERESIYE_BORC_MANUEL
+                )
+            ).scalar() or 0.0
+
+            toplam_borc = self._db_session.query(func.sum(CariHareketler.tutar)).filter(
+                CariHareketler.cari_id == musteri_id,
+                CariHareketler.cari_tip == self.CARI_TIP_MUSTERI,
+                or_(
+                    CariHareketler.islem_tipi == self.ISLEM_TIP_TAHSILAT,
+                    CariHareketler.referans_tip == self.KAYNAK_TIP_FATURA_SATIS_PESIN,
+                    CariHareketler.referans_tip == self.KAYNAK_TIP_IADE_FATURA
+                )
+            ).scalar() or 0.0
+
+            # Müşterinin net borcu: Alacaklar (bizim ona borcumuz) - Tahsilatlar (onun bize olan borcu)
+            # Bu projede cari net bakiye (Musteri: Bize Borçlu (+), Biz Ona Borçlu (-)) şeklinde tanımlanmış.
+            # Yani müşteri bize borçluysa pozitif, biz ona borçluysak negatif.
+            # ALACAK (müşteri bize borçlu) - BORÇ (biz müşteriye borçluyuz)
+            return float(toplam_alacak - toplam_borc)
+        except Exception as e:
+            logging.error(f"Müşteri net bakiye hesaplanırken hata: {e}\n{traceback.format_exc()}")
+            return 0.0
+
+    # --- Tedarikçi Yönetimi ---
+    def tedarikci_ekle(self, tedarikci_kodu, ad, telefon=None, adres=None, vergi_dairesi=None, vergi_no=None):
+        try:
+            db_tedarikci = self._db_session.query(Tedarikci).filter(Tedarikci.tedarikci_kodu == tedarikci_kodu).first()
+            if db_tedarikci:
+                return False, f"Tedarikçi kodu '{tedarikci_kodu}' zaten mevcut."
+            
+            yeni_tedarikci = Tedarikci(
+                tedarikci_kodu=tedarikci_kodu, ad=ad, telefon=telefon, adres=adres,
+                vergi_dairesi=vergi_dairesi, vergi_no=vergi_no,
+                olusturma_tarihi_saat=datetime.now(),
+                olusturan_kullanici_id=self._get_current_user_id()
+            )
+            self._db_session.add(yeni_tedarikci)
+            self._db_session.commit()
+            self._db_session.refresh(yeni_tedarikci)
+            return True, yeni_tedarikci.id # Başarılı olursa ID döndür
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Tedarikçi eklenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Tedarikçi eklenirken bir hata oluştu: {e}"
+
+    def tedarikci_guncelle(self, tedarikci_id, tedarikci_kodu, ad, telefon=None, adres=None, vergi_dairesi=None, vergi_no=None):
+        try:
+            db_tedarikci = self._db_session.query(Tedarikci).filter(Tedarikci.id == tedarikci_id).first()
+            if db_tedarikci is None:
+                return False, "Tedarikçi bulunamadı."
+            
+            # Kod değişmişse, yeni kodun benzersizliğini kontrol et
+            if db_tedarikci.tedarikci_kodu != tedarikci_kodu:
+                existing_tedarikci_with_new_kod = self._db_session.query(Tedarikci).filter(Tedarikci.tedarikci_kodu == tedarikci_kodu).first()
+                if existing_tedarikci_with_new_kod:
+                    return False, f"Tedarikçi kodu '{tedarikci_kodu}' zaten başka bir tedarikçiye ait."
+
+            db_tedarikci.tedarikci_kodu = tedarikci_kodu
+            db_tedarikci.ad = ad
+            db_tedarikci.telefon = telefon
+            db_tedarikci.adres = adres
+            db_tedarikci.vergi_dairesi = vergi_dairesi
+            db_tedarikci.vergi_no = vergi_no
+            db_tedarikci.son_guncelleme_tarihi_saat = datetime.now()
+            db_tedarikci.son_guncelleyen_kullanici_id = self._get_current_user_id()
+            
+            self._db_session.commit()
+            self._db_session.refresh(db_tedarikci)
+            return True, f"Tedarikçi '{ad}' başarıyla güncellendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Tedarikçi güncellenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Tedarikçi güncellenirken bir hata oluştu: {e}"
+
+    def tedarikci_sil(self, tedarikci_id):
+        try:
+            if tedarikci_id == self.genel_tedarikci_id:
+                return False, "Genel tedarikçi silinemez."
+
+            db_tedarikci = self._db_session.query(Tedarikci).filter(Tedarikci.id == tedarikci_id).first()
+            if db_tedarikci is None:
+                return False, "Tedarikçi bulunamadı."
+            
+            # Tedarikçiye ait faturalar veya cari hareketler varsa silme engellenebilir (iş mantığına göre)
+            if self._db_session.query(CariHareketler).filter(CariHareketler.cari_id == tedarikci_id, CariHareketler.cari_tip == self.CARI_TIP_TEDARIKCI).first():
+                 return False, "Bu tedarikçiye ait cari hareketler (fatura, ödeme vb.) bulunmaktadır.\nBir tedarikçiyi silebilmek için öncelikle tüm ilişkili kayıtların (faturalar, ödemeler vb.) silinmesi gerekir."
+
+            self._db_session.delete(db_tedarikci)
+            self._db_session.commit()
+            return True, f"Tedarikçi '{db_tedarikci.ad}' başarıyla silindi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Tedarikçi silinirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Tedarikçi silinirken bir hata oluştu: {e}"
+
+    def tedarikci_listesi_al(self, arama_terimi=None, limit=None, offset=None):
+        query = self._db_session.query(Tedarikci)
+        if arama_terimi:
+            normalized_term = normalize_turkish_chars(arama_terimi)
+            query = query.filter(
+                or_(
+                    Tedarikci.ad.ilike(f"%{normalized_term}%"),
+                    Tedarikci.tedarikci_kodu.ilike(f"%{normalized_term}%"),
+                    Tedarikci.telefon.ilike(f"%{normalized_term}%"),
+                    Tedarikci.adres.ilike(f"%{normalized_term}%")
+                )
+            )
+        
+        query = query.order_by(Tedarikci.ad) # Varsayılan sıralama
+
+        if limit is not None:
+            query = query.limit(limit)
+        if offset is not None:
+            query = query.offset(offset)
+
+        return query.all() # ORM objelerini döndür
+
+    def tedarikci_getir_by_id(self, tedarikci_id):
+        try:
+            return self._db_session.query(Tedarikci).filter(Tedarikci.id == tedarikci_id).first()
+        except Exception as e:
+            logging.error(f"Tedarikçi ID ile getirilirken hata: {e}\n{traceback.format_exc()}")
+            return None
+
+    def get_next_tedarikci_kodu(self, length=4): # Uzunluk 4 olarak ayarlandı (örn: T0001)
+        try:
+            last_tedarikci = self._db_session.query(Tedarikci).filter(
+                Tedarikci.tedarikci_kodu.like('T%')
+            ).order_by(
+                Tedarikci.tedarikci_kodu.desc()
+            ).first()
+
+            if last_tedarikci and last_tedarikci.tedarikci_kodu and len(last_tedarikci.tedarikci_kodu) > 1 and last_tedarikci.tedarikci_kodu[0].upper() == 'T' and last_tedarikci.tedarikci_kodu[1:].isdigit():
+                last_num = int(last_tedarikci.tedarikci_kodu[1:])
+                return f"T{last_num + 1:0{length}d}"
+            return f"T{1:0{length}d}"
+        except Exception as e:
+            logging.error(f"Sonraki tedarikçi kodu oluşturulurken hata: {e}\n{traceback.format_exc()}")
+            return f"T{1:0{length}d}"
+
+    def _ensure_genel_tedarikci(self):
+        """Varsayılan genel tedarikçiyi oluşturur ve ID'sini döndürür."""
+        try:
+            genel = self._db_session.query(Tedarikci).filter(Tedarikci.tedarikci_kodu == self.GENEL_TEDARIKCI_KODU).first()
+            if not genel:
+                new_genel = Tedarikci(
+                    tedarikci_kodu=self.GENEL_TEDARIKCI_KODU,
+                    ad="Genel Tedarikçi",
+                    adres="Genel",
+                    olusturma_tarihi_saat=datetime.now(),
+                    olusturan_kullanici_id=self._get_current_user_id()
+                )
+                self._db_session.add(new_genel)
+                self._db_session.commit()
+                self._db_session.refresh(new_genel)
+                logging.info("Varsayılan 'Genel Tedarikçi' oluşturuldu.")
+                return new_genel.id
+            return genel.id
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Genel tedarikçi oluşturulurken hata: {e}\n{traceback.format_exc()}")
+            return None
+
+    def get_genel_tedarikci_id(self):
+        genel = self._db_session.query(Tedarikci).filter(Tedarikci.tedarikci_kodu == self.GENEL_TEDARIKCI_KODU).first()
+        return genel.id if genel else None
+
+    def get_tedarikci_net_bakiye(self, tedarikci_id):
+        # Tedarikçi: Borç (+) Alacak (-)
+        try:
+            # Buradaki hesaplama, API'den gelmesi gereken bir iş mantığıdır.
+            # Geçici olarak ORM ile yapıyoruz.
+            toplam_borc = self._db_session.query(func.sum(CariHareketler.tutar)).filter(
+                CariHareketler.cari_id == tedarikci_id,
+                CariHareketler.cari_tip == self.CARI_TIP_TEDARIKCI,
+                or_(
+                    CariHareketler.islem_tipi == self.ISLEM_TIP_BORC,
+                    CariHareketler.referans_tip == self.KAYNAK_TIP_FATURA,
+                    CariHareketler.referans_tip == self.KAYNAK_TIP_VERESIYE_BORC_MANUEL
+                )
+            ).scalar() or 0.0
+
+            toplam_alacak = self._db_session.query(func.sum(CariHareketler.tutar)).filter(
+                CariHareketler.cari_id == tedarikci_id,
+                CariHareketler.cari_tip == self.CARI_TIP_TEDARIKCI,
+                or_(
+                    CariHareketler.islem_tipi == self.ISLEM_TIP_ODEME,
+                    CariHareketler.referans_tip == self.KAYNAK_TIP_FATURA_ALIS_PESIN,
+                    CariHareketler.referans_tip == self.KAYNAK_TIP_IADE_FATURA # Alış iadesi borcu azaltır
+                )
+            ).scalar() or 0.0
+
+            # Tedarikçinin net borcu: Borçlar (Bizim tedarikçiye borcumuz) - Alacaklar (Tedarikçiden aldıklarımız)
+            # Eğer sonuç pozitifse biz borçluyuz, negatifse tedarikçi bize borçlu (yani biz alacaklıyız).
+            return float(toplam_borc - toplam_alacak)
+        except Exception as e:
+            logging.error(f"Tedarikçi net bakiye hesaplanırken hata: {e}\n{traceback.format_exc()}")
+            return 0.0
+
+    # --- Ürün Kategori / Marka / Grup / Birim / Ülke Yönetimi ---
+    def kategori_ekle(self, kategori_adi):
+        try:
+            db_kategori = self._db_session.query(UrunKategorileri).filter(UrunKategorileri.kategori_adi == kategori_adi).first()
+            if db_kategori:
+                return False, "Bu kategori adı zaten mevcut."
+            yeni_kategori = UrunKategorileri(
+                kategori_adi=kategori_adi,
+                olusturma_tarihi_saat=datetime.now(),
+                olusturan_kullanici_id=self._get_current_user_id()
+            )
+            self._db_session.add(yeni_kategori)
+            self._db_session.commit()
+            self._db_session.refresh(yeni_kategori)
+            return True, f"'{kategori_adi}' kategorisi başarıyla eklendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Kategori eklenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Kategori eklenirken bir hata oluştu: {e}"
+
+    def kategori_guncelle(self, kategori_id, yeni_kategori_adi):
+        try:
+            db_kategori = self._db_session.query(UrunKategorileri).filter(UrunKategorileri.id == kategori_id).first()
+            if db_kategori is None:
+                return False, "Kategori bulunamadı."
+            
+            if db_kategori.kategori_adi != yeni_kategori_adi:
+                existing_kategori = self._db_session.query(UrunKategorileri).filter(UrunKategorileri.kategori_adi == yeni_kategori_adi).first()
+                if existing_kategori:
+                    return False, "Bu kategori adı zaten mevcut."
+
+            db_kategori.kategori_adi = yeni_kategori_adi
+            db_kategori.son_guncelleme_tarihi_saat = datetime.now()
+            db_kategori.son_guncelleyen_kullanici_id = self._get_current_user_id()
+            self._db_session.commit()
+            self._db_session.refresh(db_kategori)
+            return True, f"Kategori başarıyla '{yeni_kategori_adi}' olarak güncellendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Kategori güncellenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Kategori güncellenirken bir hata oluştu: {e}"
+
+    def kategori_sil(self, kategori_id):
+        try:
+            db_kategori = self._db_session.query(UrunKategorileri).filter(UrunKategorileri.id == kategori_id).first()
+            if db_kategori is None:
+                return False, "Kategori bulunamadı."
+            
+            # Kategoriye bağlı ürün olup olmadığını kontrol et
+            if self._db_session.query(Stok).filter(Stok.kategori_id == kategori_id).first():
+                return False, "Bu kategoriye bağlı ürünler olduğu için silinemez."
+
+            self._db_session.delete(db_kategori)
+            self._db_session.commit()
+            return True, f"'{db_kategori.kategori_adi}' kategorisi başarıyla silindi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Kategori silinirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Kategori silinirken bir hata oluştu: {e}"
+
+    def kategori_listele(self):
+        try:
+            return self._db_session.query(UrunKategorileri).order_by(UrunKategorileri.kategori_adi).all()
+        except Exception as e:
+            logging.error(f"Kategoriler listelenirken hata: {e}\n{traceback.format_exc()}")
+            return []
+
+    def kategori_getir_by_id(self, kategori_id):
+        try:
+            return self._db_session.query(UrunKategorileri).filter(UrunKategorileri.id == kategori_id).first()
+        except Exception as e:
+            logging.error(f"Kategori ID ile getirilirken hata: {e}\n{traceback.format_exc()}")
+            return None
+
+    def marka_ekle(self, marka_adi):
+        try:
+            db_marka = self._db_session.query(UrunMarkalari).filter(UrunMarkalari.marka_adi == marka_adi).first()
+            if db_marka:
+                return False, "Bu marka adı zaten mevcut."
+            yeni_marka = UrunMarkalari(
+                marka_adi=marka_adi,
+                olusturma_tarihi_saat=datetime.now(),
+                olusturan_kullanici_id=self._get_current_user_id()
+            )
+            self._db_session.add(yeni_marka)
+            self._db_session.commit()
+            self._db_session.refresh(yeni_marka)
+            return True, f"'{marka_adi}' markası başarıyla eklendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Marka eklenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Marka eklenirken bir hata oluştu: {e}"
+
+    def marka_guncelle(self, marka_id, yeni_marka_adi):
+        try:
+            db_marka = self._db_session.query(UrunMarkalari).filter(UrunMarkalari.id == marka_id).first()
+            if db_marka is None:
+                return False, "Marka bulunamadı."
+            
+            if db_marka.marka_adi != yeni_marka_adi:
+                existing_marka = self._db_session.query(UrunMarkalari).filter(UrunMarkalari.marka_adi == yeni_marka_adi).first()
+                if existing_marka:
+                    return False, "Bu marka adı zaten mevcut."
+
+            db_marka.marka_adi = yeni_marka_adi
+            db_marka.son_guncelleme_tarihi_saat = datetime.now()
+            db_marka.son_guncelleyen_kullanici_id = self._get_current_user_id()
+            self._db_session.commit()
+            self._db_session.refresh(db_marka)
+            return True, f"Marka başarıyla '{yeni_marka_adi}' olarak güncellendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Marka güncellenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Marka güncellenirken bir hata oluştu: {e}"
+
+    def marka_sil(self, marka_id):
+        try:
+            db_marka = self._db_session.query(UrunMarkalari).filter(UrunMarkalari.id == marka_id).first()
+            if db_marka is None:
+                return False, "Marka bulunamadı."
+            
+            # Markaya bağlı ürün olup olmadığını kontrol et
+            if self._db_session.query(Stok).filter(Stok.marka_id == marka_id).first():
+                return False, "Bu markaya bağlı ürünler olduğu için silinemez."
+
+            self._db_session.delete(db_marka)
+            self._db_session.commit()
+            return True, f"'{db_marka.marka_adi}' markası başarıyla silindi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Marka silinirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Marka silinirken bir hata oluştu: {e}"
+
+    def marka_getir_by_id(self, marka_id):
+        try:
+            return self._db_session.query(UrunMarkalari).filter(UrunMarkalari.id == marka_id).first()
+        except Exception as e:
+            logging.error(f"Marka ID ile getirilirken hata: {e}\n{traceback.format_exc()}")
+            return None
+
+    def marka_listele(self):
+        try:
+            return self._db_session.query(UrunMarkalari).order_by(UrunMarkalari.marka_adi).all()
+        except Exception as e:
+            logging.error(f"Markalar listelenirken hata: {e}\n{traceback.format_exc()}")
+            return []
+
+    def urun_grubu_ekle(self, grup_adi):
+        try:
+            db_grup = self._db_session.query(UrunGruplari).filter(UrunGruplari.grup_adi == grup_adi).first()
+            if db_grup:
+                return False, "Bu ürün grubu adı zaten mevcut."
+            yeni_grup = UrunGruplari(
+                grup_adi=grup_adi,
+                olusturma_tarihi_saat=datetime.now(),
+                olusturan_kullanici_id=self._get_current_user_id()
+            )
+            self._db_session.add(yeni_grup)
+            self._db_session.commit()
+            self._db_session.refresh(yeni_grup)
+            return True, f"'{grup_adi}' ürün grubu başarıyla eklendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Ürün grubu eklenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Ürün grubu eklenirken bir hata oluştu: {e}"
+
+    def urun_grubu_guncelle(self, grup_id, yeni_grup_adi):
+        try:
+            db_grup = self._db_session.query(UrunGruplari).filter(UrunGruplari.id == grup_id).first()
+            if db_grup is None:
+                return False, "Ürün grubu bulunamadı."
+            
+            if db_grup.grup_adi != yeni_grup_adi:
+                existing_grup = self._db_session.query(UrunGruplari).filter(UrunGruplari.grup_adi == yeni_grup_adi).first()
+                if existing_grup:
+                    return False, "Bu ürün grubu adı zaten mevcut."
+
+            db_grup.grup_adi = yeni_grup_adi
+            db_grup.son_guncelleme_tarihi_saat = datetime.now()
+            db_grup.son_guncelleyen_kullanici_id = self._get_current_user_id()
+            self._db_session.commit()
+            self._db_session.refresh(db_grup)
+            return True, f"Ürün grubu başarıyla '{yeni_grup_adi}' olarak güncellendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Ürün grubu güncellenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Ürün grubu güncellenirken bir hata oluştu: {e}"
+
+    def urun_grubu_sil(self, grup_id):
+        try:
+            db_grup = self._db_session.query(UrunGruplari).filter(UrunGruplari.id == grup_id).first()
+            if db_grup is None:
+                return False, "Ürün grubu bulunamadı."
+            
+            if self._db_session.query(Stok).filter(Stok.urun_grubu_id == grup_id).first():
+                return False, "Bu ürün grubuna bağlı ürünler olduğu için silinemez."
+
+            self._db_session.delete(db_grup)
+            self._db_session.commit()
+            return True, f"'{db_grup.grup_adi}' ürün grubu başarıyla silindi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Ürün grubu silinirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Ürün grubu silinirken bir hata oluştu: {e}"
+
+    def urun_grubu_listele(self):
+        try:
+            return self._db_session.query(UrunGruplari).order_by(UrunGruplari.grup_adi).all()
+        except Exception as e:
+            logging.error(f"Ürün grupları listelenirken hata: {e}\n{traceback.format_exc()}")
+            return []
+
+    def urun_grubu_getir_by_id(self, grup_id):
+        try:
+            return self._db_session.query(UrunGruplari).filter(UrunGruplari.id == grup_id).first()
+        except Exception as e:
+            logging.error(f"Ürün grubu ID ile getirilirken hata: {e}\n{traceback.format_exc()}")
+            return None
+
+    def urun_birimi_ekle(self, birim_adi):
+        try:
+            db_birim = self._db_session.query(UrunBirimleri).filter(UrunBirimleri.birim_adi == birim_adi).first()
+            if db_birim:
+                return False, "Bu ürün birimi adı zaten mevcut."
+            yeni_birim = UrunBirimleri(
+                birim_adi=birim_adi,
+                olusturma_tarihi_saat=datetime.now(),
+                olusturan_kullanici_id=self._get_current_user_id()
+            )
+            self._db_session.add(yeni_birim)
+            self._db_session.commit()
+            self._db_session.refresh(yeni_birim)
+            return True, f"'{birim_adi}' ürün birimi başarıyla eklendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Ürün birimi eklenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Ürün birimi eklenirken bir hata oluştu: {e}"
+
+    def urun_birimi_guncelle(self, birim_id, yeni_birim_adi):
+        try:
+            db_birim = self._db_session.query(UrunBirimleri).filter(UrunBirimleri.id == birim_id).first()
+            if db_birim is None:
+                return False, "Ürün birimi bulunamadı."
+            
+            if db_birim.birim_adi != yeni_birim_adi:
+                existing_birim = self._db_session.query(UrunBirimleri).filter(UrunBirimleri.birim_adi == yeni_birim_adi).first()
+                if existing_birim:
+                    return False, "Bu ürün birimi adı zaten mevcut."
+
+            db_birim.birim_adi = yeni_birim_adi
+            db_birim.son_guncelleme_tarihi_saat = datetime.now()
+            db_birim.son_guncelleyen_kullanici_id = self._get_current_user_id()
+            self._db_session.commit()
+            self._db_session.refresh(db_birim)
+            return True, f"Ürün birimi başarıyla '{yeni_birim_adi}' olarak güncellendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Ürün birimi güncellenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Ürün birimi güncellenirken bir hata oluştu: {e}"
+
+    def urun_birimi_sil(self, birim_id):
+        try:
+            db_birim = self._db_session.query(UrunBirimleri).filter(UrunBirimleri.id == birim_id).first()
+            if db_birim is None:
+                return False, "Ürün birimi bulunamadı."
+            
+            if self._db_session.query(Stok).filter(Stok.urun_birimi_id == birim_id).first():
+                return False, "Bu ürün birimine bağlı ürünler olduğu için silinemez."
+
+            self._db_session.delete(db_birim)
+            self._db_session.commit()
+            return True, f"'{db_birim.birim_adi}' ürün birimi başarıyla silindi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Ürün birimi silinirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Ürün birimi silinirken bir hata oluştu: {e}"
+
+    def urun_birimi_listele(self):
+        try:
+            return self._db_session.query(UrunBirimleri).order_by(UrunBirimleri.birim_adi).all()
+        except Exception as e:
+            logging.error(f"Ürün birimleri listelenirken hata: {e}\n{traceback.format_exc()}")
+            return []
+
+    def urun_birimi_getir_by_id(self, birim_id):
+        try:
+            return self._db_session.query(UrunBirimleri).filter(UrunBirimleri.id == birim_id).first()
+        except Exception as e:
+            logging.error(f"Ürün birimi ID ile getirilirken hata: {e}\n{traceback.format_exc()}")
+            return None
+
+    def ulke_ekle(self, ulke_adi):
+        try:
+            db_ulke = self._db_session.query(UrunUlkeleri).filter(UrunUlkeleri.ulke_adi == ulke_adi).first()
+            if db_ulke:
+                return False, "Bu ülke adı zaten mevcut."
+            yeni_ulke = UrunUlkeleri(
+                ulke_adi=ulke_adi,
+                olusturma_tarihi_saat=datetime.now(),
+                olusturan_kullanici_id=self._get_current_user_id()
+            )
+            self._db_session.add(yeni_ulke)
+            self._db_session.commit()
+            self._db_session.refresh(yeni_ulke)
+            return True, f"'{ulke_adi}' ülkesi başarıyla eklendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Ülke eklenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Ülke eklenirken bir hata oluştu: {e}"
+
+    def ulke_guncelle(self, ulke_id, yeni_ulke_adi):
+        try:
+            db_ulke = self._db_session.query(UrunUlkeleri).filter(UrunUlkeleri.id == ulke_id).first()
+            if db_ulke is None:
+                return False, "Ülke bulunamadı."
+            
+            if db_ulke.ulke_adi != yeni_ulke_adi:
+                existing_ulke = self._db_session.query(UrunUlkeleri).filter(UrunUlkeleri.ulke_adi == yeni_ulke_adi).first()
+                if existing_ulke:
+                    return False, "Bu ülke adı zaten mevcut."
+
+            db_ulke.ulke_adi = yeni_ulke_adi
+            db_ulke.son_guncelleme_tarihi_saat = datetime.now()
+            db_ulke.son_guncelleyen_kullanici_id = self._get_current_user_id()
+            self._db_session.commit()
+            self._db_session.refresh(db_ulke)
+            return True, f"Ülke başarıyla '{yeni_ulke_adi}' olarak güncellendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Ülke güncellenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Ülke güncellenirken bir hata oluştu: {e}"
+
+    def ulke_sil(self, ulke_id):
+        try:
+            db_ulke = self._db_session.query(UrunUlkeleri).filter(UrunUlkeleri.id == ulke_id).first()
+            if db_ulke is None:
+                return False, "Ülke bulunamadı."
+            
+            if self._db_session.query(Stok).filter(Stok.ulke_id == ulke_id).first():
+                return False, "Bu ülkeye bağlı ürünler olduğu için silinemez."
+
+            self._db_session.delete(db_ulke)
+            self._db_session.commit()
+            return True, f"'{db_ulke.ulke_adi}' ülkesi başarıyla silindi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Ülke silinirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Ülke silinirken bir hata oluştu: {e}"
+
+    def ulke_listele(self):
+        try:
+            return self._db_session.query(UrunUlkeleri).order_by(UrunUlkeleri.ulke_adi).all()
+        except Exception as e:
+            logging.error(f"Ülkeler listelenirken hata: {e}\n{traceback.format_exc()}")
+            return []
+
+    def ulke_getir_by_id(self, ulke_id):
+        try:
+            return self._db_session.query(UrunUlkeleri).filter(UrunUlkeleri.id == ulke_id).first()
+        except Exception as e:
+            logging.error(f"Ülke ID ile getirilirken hata: {e}\n{traceback.format_exc()}")
+            return None
+#------------------------------------------
+# --- Ürün Kategori / Marka / Grup / Birim / Ülke Yönetimi --- SONU
+#------------------------------------------
+
+    def stok_ekle(self, urun_kodu, urun_adi, stok_miktari=0.0, alis_fiyati_kdv_haric=0.0, satis_fiyati_kdv_haric=0.0, kdv_orani=0.0, min_stok_seviyesi=0.0, alis_fiyati_kdv_dahil=0.0, satis_fiyati_kdv_dahil=0.0, kategori_id=None, marka_id=None, urun_detayi=None, urun_resmi_yolu=None, fiyat_degisiklik_tarihi=None, urun_grubu_id=None, urun_birimi_id=None, ulke_id=None):
+        try:
+            db_stok = self._db_session.query(Stok).filter(Stok.urun_kodu == urun_kodu).first()
+            if db_stok:
+                return False, "Ürün kodu zaten mevcut."
+            
+            if fiyat_degisiklik_tarihi is None:
+                fiyat_degisiklik_tarihi = date.today()
+
+            yeni_urun = Stok(
+                urun_kodu=urun_kodu,
+                urun_adi=urun_adi,
+                stok_miktari=self.safe_float(stok_miktari),
+                alis_fiyati_kdv_haric=self.safe_float(alis_fiyati_kdv_haric),
+                satis_fiyati_kdv_haric=self.safe_float(satis_fiyati_kdv_haric),
+                kdv_orani=self.safe_float(kdv_orani),
+                min_stok_seviyesi=self.safe_float(min_stok_seviyesi),
+                alis_fiyati_kdv_dahil=self.safe_float(alis_fiyati_kdv_dahil),
+                satis_fiyati_kdv_dahil=self.safe_float(satis_fiyati_kdv_dahil),
+                kategori_id=kategori_id,
+                marka_id=marka_id,
+                urun_detayi=urun_detayi,
+                urun_resmi_yolu=urun_resmi_yolu,
+                fiyat_degisiklik_tarihi=fiyat_degisiklik_tarihi,
+                urun_grubu_id=urun_grubu_id,
+                urun_birimi_id=urun_birimi_id,
+                ulke_id=ulke_id,
+                olusturma_tarihi_saat=datetime.now(),
+                olusturan_kullanici_id=self._get_current_user_id()
+            )
+            self._db_session.add(yeni_urun)
+            self._db_session.commit()
+            self._db_session.refresh(yeni_urun)
+            return True, yeni_urun.id
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Stok eklenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Stok eklenirken bir hata oluştu: {e}"
+
+    def stok_guncelle(self, urun_id, urun_kodu, urun_adi, stok_miktari, alis_fiyati_kdv_haric, satis_fiyati_kdv_haric, kdv_orani, min_stok_seviyesi, alis_fiyati_kdv_dahil, satis_fiyati_kdv_dahil, kategori_id=None, marka_id=None, urun_detayi=None, urun_resmi_yolu=None, fiyat_degisiklik_tarihi=None, urun_grubu_id=None, urun_birimi_id=None, ulke_id=None):
+        try:
+            db_stok = self._db_session.query(Stok).filter(Stok.id == urun_id).first()
+            if db_stok is None:
+                return False, "Ürün bulunamadı."
+            
+            # Kod değişmişse, yeni kodun benzersizliğini kontrol et
+            if db_stok.urun_kodu != urun_kodu:
+                existing_stok_with_new_kod = self._db_session.query(Stok).filter(Stok.urun_kodu == urun_kodu).first()
+                if existing_stok_with_new_kod:
+                    return False, f"Ürün kodu '{urun_kodu}' zaten başka bir ürüne ait."
+
+            # Eski stok miktarını al (değişim hesabı için)
+            eski_stok_miktari_f = float(db_stok.stok_miktari)
+
+            db_stok.urun_kodu = urun_kodu
+            db_stok.urun_adi = urun_adi
+            db_stok.alis_fiyati_kdv_haric = self.safe_float(alis_fiyati_kdv_haric)
+            db_stok.satis_fiyati_kdv_haric = self.safe_float(satis_fiyati_kdv_haric)
+            db_stok.kdv_orani = self.safe_float(kdv_orani)
+            db_stok.min_stok_seviyesi = self.safe_float(min_stok_seviyesi)
+            db_stok.alis_fiyati_kdv_dahil = self.safe_float(alis_fiyati_kdv_dahil)
+            db_stok.satis_fiyati_kdv_dahil = self.safe_float(satis_fiyati_kdv_dahil)
+            db_stok.kategori_id = kategori_id
+            db_stok.marka_id = marka_id
+            db_stok.urun_detayi = urun_detayi
+            db_stok.urun_resmi_yolu = urun_resmi_yolu
+            db_stok.fiyat_degisiklik_tarihi = fiyat_degisiklik_tarihi
+            db_stok.urun_grubu_id = urun_grubu_id
+            db_stok.urun_birimi_id = urun_birimi_id
+            db_stok.ulke_id = ulke_id
+            db_stok.son_guncelleme_tarihi_saat = datetime.now()
+            db_stok.son_guncelleyen_kullanici_id = self._get_current_user_id()
+
+            # Stok miktarını güncelle (bu, eğer API'den geliyorsa doğrudan güncellenecek alan)
+            db_stok.stok_miktari = self.safe_float(stok_miktari) # API'den gelen son stok miktarı
+
+            # Yeni stok miktarı ile eski stok miktarını karşılaştır ve fark varsa stok hareketi oluştur.
+            stok_farki = self.safe_float(stok_miktari) - eski_stok_miktari_f
+
+            if stok_farki != 0:
+                islem_tipi = ""
+                if stok_farki > 0:
+                    islem_tipi = self.STOK_ISLEM_TIP_GIRIS_MANUEL_DUZELTME
+                else:
+                    islem_tipi = self.STOK_ISLEM_TIP_CIKIS_MANUEL_DUZELTME
+
+                # _stok_guncelle_ve_hareket_kaydet metodunu çağır (bu metot stoğu güncellediği için burada db_stok.stok_miktari'nı tekrar güncellemiyoruz)
+                # Ancak _stok_guncelle_ve_hareket_kaydet transaction yönettiği için, burada yeni bir yaklaşım gerekli.
+                # Ya _stok_guncelle_ve_hareket_kaydet'in transaction'ı kaldırılır, ya da burada manuel olarak yapılır.
+                # Şimdilik, _stok_guncelle_ve_hareket_kaydet'i sadece hareketi kaydetmek için kullanalım.
+
+                # Sadece hareket kaydı oluştur (stok zaten db_stok.stok_miktari ile güncellendi)
+                yeni_hareket = StokHareketleri(
+                    urun_id=urun_id,
+                    tarih=date.today(),
+                    islem_tipi=islem_tipi,
+                    miktar=abs(stok_farki),
+                    onceki_stok=eski_stok_miktari_f,
+                    sonraki_stok=self.safe_float(stok_miktari),
+                    kaynak=self.KAYNAK_TIP_MANUEL,
+                    kaynak_id=None,
+                    kaynak_no="Ürün Kartı Düzeltme",
+                    olusturma_tarihi_saat=datetime.now(),
+                    olusturan_kullanici_id=self._get_current_user_id()
+                )
+                self._db_session.add(yeni_hareket)
+
+            self._db_session.commit()
+            self._db_session.refresh(db_stok)
+            return True, f"Ürün '{urun_adi}' başarıyla güncellendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Stok güncellenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Stok güncellenirken bir hata oluştu: {e}"
+
+    def stok_sil(self, urun_id):
+        try:
+            db_stok = self._db_session.query(Stok).filter(Stok.id == urun_id).first()
+            if db_stok is None:
+                return False, "Ürün bulunamadı."
+            
+            # Ürüne bağlı diğer tablolarda kayıt olup olmadığını kontrol et
+            if self._db_session.query(StokHareketleri).filter(StokHareketleri.urun_id == urun_id).first():
+                return False, "Bu ürüne bağlı stok hareketleri olduğu için silinemez."
+            if self._db_session.query(FaturaKalemleri).filter(FaturaKalemleri.urun_id == urun_id).first():
+                return False, "Bu ürüne bağlı fatura kalemleri olduğu için silinemez."
+            if self._db_session.query(SiparisKalemleri).filter(SiparisKalemleri.urun_id == urun_id).first():
+                return False, "Bu ürüne bağlı sipariş kalemleri olduğu için silinemez."
+
+            self._db_session.delete(db_stok)
+            self._db_session.commit()
+            return True, f"Ürün '{db_stok.urun_adi}' başarıyla silindi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Stok silinirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Stok silinirken bir hata oluştu: {e}"
+
+    def stok_listele(self, arama_terimi=None, limit=None, offset=None, kategori_id_filter=None, marka_id_filter=None, urun_grubu_id_filter=None, urun_birimi_id_filter=None, ulke_id_filter=None):
+        # SQLAlchemy ORM ile JOIN'li sorgu
+        query = self._db_session.query(
+            Stok,
+            UrunKategorileri.kategori_adi,
+            UrunMarkalari.marka_adi,
+            UrunGruplari.grup_adi,
+            UrunBirimleri.birim_adi,
+            UrunUlkeleri.ulke_adi
+        ).outerjoin(UrunKategorileri, Stok.kategori_id == UrunKategorileri.id)\
+         .outerjoin(UrunMarkalari, Stok.marka_id == UrunMarkalari.id)\
+         .outerjoin(UrunGruplari, Stok.urun_grubu_id == UrunGruplari.id)\
+         .outerjoin(UrunBirimleri, Stok.urun_birimi_id == UrunBirimleri.id)\
+         .outerjoin(UrunUlkeleri, Stok.ulke_id == UrunUlkeleri.id)
+        
+        if arama_terimi:
+            normalized_term = normalize_turkish_chars(arama_terimi)
+            query = query.filter(
+                or_(
+                    Stok.urun_adi.ilike(f"%{normalized_term}%"),
+                    Stok.urun_kodu.ilike(f"%{normalized_term}%")
+                )
+            )
+        if kategori_id_filter is not None:
+            query = query.filter(Stok.kategori_id == kategori_id_filter)
+        if marka_id_filter is not None:
+            query = query.filter(Stok.marka_id == marka_id_filter)
+        if urun_grubu_id_filter is not None:
+            query = query.filter(Stok.urun_grubu_id == urun_grubu_id_filter)
+        if urun_birimi_id_filter is not None:
+            query = query.filter(Stok.urun_birimi_id == urun_birimi_id_filter)
+        if ulke_id_filter is not None:
+            query = query.filter(Stok.ulke_id == ulke_id_filter)
+        
+        query = query.order_by(Stok.urun_adi) # Varsayılan sıralama
+        
+        if limit is not None:
+            query = query.limit(limit)
+        if offset is not None:
+            query = query.offset(offset)
+        
+        # Sorgu sonuçlarını al
+        stok_result = query.all()
+        
+        results = []
+        for stok_obj, kategori_adi, marka_adi, grup_adi, birim_adi, ulke_adi in stok_result:
+            stok_dict = {
+                'id': stok_obj.id,
+                'urun_kodu': stok_obj.urun_kodu,
+                'urun_adi': stok_obj.urun_adi,
+                'stok_miktari': float(stok_obj.stok_miktari),
+                'alis_fiyati_kdv_haric': float(stok_obj.alis_fiyati_kdv_haric),
+                'alis_fiyati_kdv_dahil': float(stok_obj.alis_fiyati_kdv_dahil),
+                'satis_fiyati_kdv_haric': float(stok_obj.satis_fiyati_kdv_haric),
+                'satis_fiyati_kdv_dahil': float(stok_obj.satis_fiyati_kdv_dahil),
+                'kdv_orani': float(stok_obj.kdv_orani),
+                'min_stok_seviyesi': float(stok_obj.min_stok_seviyesi),
+                'urun_detayi': stok_obj.urun_detayi,
+                'urun_resmi_yolu': stok_obj.urun_resmi_yolu,
+                'fiyat_degisiklik_tarihi': stok_obj.fiyat_degisiklik_tarihi.strftime('%Y-%m-%d') if stok_obj.fiyat_degisiklik_tarihi else None,
+                'kategori_id': stok_obj.kategori_id,
+                'marka_id': stok_obj.marka_id,
+                'urun_grubu_id': stok_obj.urun_grubu_id,
+                'urun_birimi_id': stok_obj.urun_birimi_id,
+                'ulke_id': stok_obj.ulke_id,
+                'kategori_adi': kategori_adi,
+                'marka_adi': marka_adi,
+                'urun_grubu_adi': grup_adi,
+                'urun_birimi_adi': birim_adi,
+                'ulke_adi': ulke_adi,
+            }
+            results.append(stok_dict)
+        return results
+
+    def stok_getir_by_id(self, urun_id):
+        try:
+            stok_obj = self._db_session.query(Stok).filter(Stok.id == urun_id).first()
+            if not stok_obj: return None
+            
+            # ORM ilişkilerini kullanarak ilgili adları al
+            kategori_adi = stok_obj.kategori.kategori_adi if stok_obj.kategori else None
+            marka_adi = stok_obj.marka.marka_adi if stok_obj.marka else None
+            urun_grubu_adi = stok_obj.urun_grubu.grup_adi if stok_obj.urun_grubu else None
+            urun_birimi_adi = stok_obj.urun_birimi.birim_adi if stok_obj.urun_birimi else None
+            ulke_adi = stok_obj.ulke.ulke_adi if stok_obj.ulke else None
+
+            stok_dict = {
+                'id': stok_obj.id, 'urun_kodu': stok_obj.urun_kodu, 'urun_adi': stok_obj.urun_adi,
+                'stok_miktari': float(stok_obj.stok_miktari),
+                'alis_fiyati_kdv_haric': float(stok_obj.alis_fiyati_kdv_haric),
+                'alis_fiyati_kdv_dahil': float(stok_obj.alis_fiyati_kdv_dahil),
+                'satis_fiyati_kdv_haric': float(stok_obj.satis_fiyati_kdv_haric),
+                'satis_fiyati_kdv_dahil': float(stok_obj.satis_fiyati_kdv_dahil),
+                'kdv_orani': float(stok_obj.kdv_orani), 'min_stok_seviyesi': float(stok_obj.min_stok_seviyesi),
+                'urun_detayi': stok_obj.urun_detayi, 'urun_resmi_yolu': stok_obj.urun_resmi_yolu,
+                'fiyat_degisiklik_tarihi': stok_obj.fiyat_degisiklik_tarihi.strftime('%Y-%m-%d') if stok_obj.fiyat_degisiklik_tarihi else None,
+                'kategori_id': stok_obj.kategori_id, 'marka_id': stok_obj.marka_id, 'urun_grubu_id': stok_obj.urun_grubu_id,
+                'urun_birimi_id': stok_obj.urun_birimi_id, 'ulke_id': stok_obj.ulke_id,
+                'kategori_adi': kategori_adi,
+                'marka_adi': marka_adi,
+                'urun_grubu_adi': urun_grubu_adi,
+                'urun_birimi_adi': urun_birimi_adi,
+                'ulke_adi': ulke_adi,
+                'olusturma_tarihi_saat': stok_obj.olusturma_tarihi_saat.strftime('%Y-%m-%d %H:%M:%S') if stok_obj.olusturma_tarihi_saat else None,
+                'olusturan_kullanici_id': stok_obj.olusturan_kullanici_id,
+                'son_guncelleme_tarihi_saat': stok_obj.son_guncelleme_tarihi_saat.strftime('%Y-%m-%d %H:%M:%S') if stok_obj.son_guncelleme_tarihi_saat else None,
+                'son_guncelleyen_kullanici_id': stok_obj.son_guncelleyen_kullanici_id,
+            }
+            return stok_dict
+        except Exception as e:
+            logging.error(f"Stok ID ile getirilirken hata: {e}\n{traceback.format_exc()}")
+            return None
+
+    def get_next_stok_kodu(self, length=4): # Uzunluk 4 olarak ayarlandı (örn: UR0001)
+        try:
+            last_stok = self._db_session.query(Stok).filter(
+                Stok.urun_kodu.like('UR%')
+            ).order_by(
+                Stok.urun_kodu.desc()
+            ).first()
+
+            if last_stok and last_stok.urun_kodu and len(last_stok.urun_kodu) > 1 and last_stok.urun_kodu[0:2].upper() == 'UR' and last_stok.urun_kodu[2:].isdigit():
+                last_num = int(last_stok.urun_kodu[2:])
+                return f"UR{last_num + 1:0{length}d}" # Dinamik uzunluk için format
+            return f"UR{1:0{length}d}"
+        except Exception as e:
+            logging.error(f"Sonraki stok kodu oluşturulurken hata: {e}\n{traceback.format_exc()}")
+            return f"UR{1:0{length}d}" # Hata durumunda varsayılan dön
+
+    def _stok_guncelle_ve_hareket_kaydet(self, urun_id, miktar_degisimi_net, islem_tipi_aciklamasi, kaynak_tipi, kaynak_id=None, referans_no=None):
+        """
+        Belirli bir ürünün stok miktarını günceller ve ilgili stok hareketi kaydını oluşturur.
+        Bu metodun çağrıldığı ana transaction içinde çalışır.
+        
+        Args:
+            urun_id (int): Stok miktarı güncellenecek ürünün ID'si.
+            miktar_degisimi_net (float): Stoğa eklenecek (+) veya çıkarılacak (-) net miktar.
+            islem_tipi_aciklamasi (str): Stok hareketi tipi (örn: 'Fatura Satış', 'Manuel Giriş').
+            kaynak_tipi (str): Stok hareketinin kaynağı (örn: 'FATURA', 'MANUEL', 'İADE_FATURA').
+            kaynak_id (int, optional): Kaynak faturanın/siparişin/işlemin ID'si. None olabilir.
+            referans_no (str, optional): Kaynak faturanın/siparişin/işlemin numarası/açıklaması.
+        
+        Returns:
+            tuple: (bool success, str message)
+        """
+        if miktar_degisimi_net == 0:
+            return True, "Stok değişimi sıfır, işlem yapılmadı."
+
+        try:
+            # Ürünün mevcut stok miktarını kilitli olarak al (optimistik kilit yerine pesimistik)
+            # with_for_update(), SELECT FOR UPDATE gibi çalışır ve bu satırı kilitler.
+            db_stok = self._db_session.query(Stok).filter(Stok.id == urun_id).with_for_update().first()
+            if db_stok is None:
+                return False, "Stok bulunamadı."
+
+            stok_oncesi = float(db_stok.stok_miktari)
+            urun_adi = db_stok.urun_adi
+            stok_sonrasi = stok_oncesi + miktar_degisimi_net
+
+            # db_stok objesinin stok_miktari alanını güncelle
+            db_stok.stok_miktari = stok_sonrasi
+            
+            # Stok hareketi kaydını oluştur
+            yeni_hareket = StokHareketleri(
+                urun_id=urun_id,
+                tarih=date.today(),
+                islem_tipi=islem_tipi_aciklamasi,
+                miktar=abs(miktar_degisimi_net), # Miktar her zaman pozitif kaydedilir
+                onceki_stok=stok_oncesi,
+                sonraki_stok=stok_sonrasi,
+                aciklama=f"{islem_tipi_aciklamasi} - Ürün: {urun_adi}. Ref No: {referans_no if referans_no else ''}",
+                kaynak=kaynak_tipi,
+                kaynak_id=kaynak_id,
+                kaynak_no=referans_no, # referans_no'yu da kaydedelim
+                olusturma_tarihi_saat=datetime.now(),
+                olusturan_kullanici_id=self._get_current_user_id()
+            )
+            self._db_session.add(yeni_hareket)
+            
+            # Commit işlemi bu metodun dışında, ana transaction tarafından yönetilir.
+            return True, "Stok hareketi başarıyla kaydedildi."
+        except Exception as e:
+            logging.error(f"Stok ve hareket kaydedilirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Stok ve hareket kaydedilirken bir hata oluştu: {e}"
+
+    def stok_hareketi_ekle(self, urun_id, islem_tipi, miktar, tarih_str, aciklama=None):
+        try:
+            tarih_obj = datetime.strptime(tarih_str, '%Y-%m-%d').date()
+        except ValueError:
+            return False, "Geçersiz tarih formatı. YYYY-AA-GG olmalıdır."
+        
+        if self.safe_float(miktar) <= 0:
+            return False, "Miktar pozitif bir sayı olmalıdır."
+
+        try:
+            # Transaction'ı burada yönetiyoruz çünkü bu tek başına bir işlemdir.
+            # _stok_guncelle_ve_hareket_kaydet kendi transaction'ını yönetmediği için güvenli.
+            self._db_session.begin_nested() # İç içe transaction başlat
+            
+            success, message = self._stok_guncelle_ve_hareket_kaydet(
+                urun_id=urun_id,
+                miktar_degisimi_net=self.safe_float(miktar) if islem_tipi in [self.STOK_ISLEM_TIP_GIRIS_MANUEL, self.STOK_ISLEM_TIP_SAYIM_FAZLASI, self.STOK_ISLEM_TIP_IADE_GIRIS] else -self.safe_float(miktar),
+                islem_tipi_aciklamasi=islem_tipi,
+                kaynak_tipi=self.KAYNAK_TIP_MANUEL,
+                kaynak_id=None,
+                referans_no=aciklama if aciklama else f"Manuel {islem_tipi}"
+            )
+            
+            if success:
+                self._db_session.commit() # İç içe transaction'ı commit et
+                return True, f"Stok hareketi başarıyla kaydedildi."
             else:
-                print(f"UYARI: {dejavu_sans_bold_path} bulunamadı. Varsayılan font kullanılacak.")
+                self._db_session.rollback() # İç içe transaction'ı rollback et
+                return False, message
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Stok hareketi eklenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Stok hareketi eklenirken bir hata oluştu: {e}"
+
+    def stok_hareketleri_listele(self, urun_id=None, islem_tipi=None, baslangic_tarih=None, bitis_tarih=None):
+        query = self._db_session.query(StokHareketleri)
+        if urun_id:
+            query = query.filter(StokHareketleri.urun_id == urun_id)
+        if islem_tipi and islem_tipi != "TÜMÜ":
+            query = query.filter(StokHareketleri.islem_tipi == islem_tipi)
+        if baslangic_tarih:
+            query = query.filter(StokHareketleri.tarih >= baslangic_tarih)
+        if bitis_tarih:
+            query = query.filter(StokHareketleri.tarih <= bitis_tarih)
+        
+        hareketler = query.order_by(StokHareketleri.tarih.desc(), StokHareketleri.olusturma_tarihi_saat.desc()).all()
+        
+        results = []
+        for h in hareketler:
+            results.append({
+                'id': h.id,
+                'urun_id': h.urun_id,
+                'tarih': h.tarih,
+                'islem_tipi': h.islem_tipi,
+                'miktar': float(h.miktar),
+                'onceki_stok': float(h.onceki_stok),
+                'sonraki_stok': float(h.sonraki_stok),
+                'aciklama': h.aciklama,
+                'kaynak': h.kaynak,
+                'kaynak_id': h.kaynak_id,
+                'kaynak_no': h.kaynak_no,
+                'olusturma_tarihi_saat': h.olusturma_tarihi_saat
+            })
+        return results
+
+    def get_stok_miktari_for_kontrol(self, urun_id, fatura_id_hariç=None):
+        """
+        Bir ürünün güncel stok miktarını döndürür.
+        Eğer fatura_id_hariç belirtilirse (yani bir fatura düzenleniyorsa),
+        o faturadaki ürün miktarını mevcut stoktan düşülmüş gibi hesaplar
+        (çünkü faturadaki miktar zaten stoktan düşülmüştür, düzenleme anında geri eklemiş gibi oluruz).
+        """
+        try:
+            current_stok = self._db_session.query(Stok.stok_miktari).filter(Stok.id == urun_id).scalar()
+            if current_stok is None: return 0.0
+            
+            if fatura_id_hariç:
+                # Düzenlenen faturadaki bu ürünün miktarını ve fatura tipini al.
+                # Sadece SATIŞ ve ALIŞ İADE faturaları stoku azaltır (bu yüzden miktarı geri ekleriz)
+                # Sadece ALIŞ ve SATIŞ İADE faturaları stoku artırır (bu yüzden miktarı geri çıkarırız)
+                fatura_kalem_data = self._db_session.query(
+                    func.sum(FaturaKalemleri.miktar), Fatura.tip
+                ).join(Fatura, FaturaKalemleri.fatura_id == Fatura.id).filter(
+                    FaturaKalemleri.fatura_id == fatura_id_hariç,
+                    FaturaKalemleri.urun_id == urun_id
+                ).group_by(Fatura.tip).first() # Fatura tipi tek olduğu için group_by uygun değil, direkt tip alınmalıydı.
+
+                if fatura_kalem_data:
+                    miktar_bu_faturada = float(fatura_kalem_data[0])
+                    fatura_tipi_bu_faturada = fatura_kalem_data[1]
+
+                    if fatura_tipi_bu_faturada == self.FATURA_TIP_SATIS or \
+                       fatura_tipi_bu_faturada == self.FATURA_TIP_ALIS_IADE:
+                        # Bu fatura stoku azaltmıştır, kontrol için geri ekle
+                        current_stok += miktar_bu_faturada
+                    elif fatura_tipi_bu_faturada == self.FATURA_TIP_ALIS or \
+                         fatura_tipi_bu_faturada == self.FATURA_TIP_SATIS_IADE:
+                        # Bu fatura stoku artırmıştır, kontrol için geri çıkar
+                        current_stok -= miktar_bu_faturada
+            return float(current_stok)
+        except Exception as e:
+            logging.error(f"Stok miktarı kontrolü sırasında hata: {e}\n{traceback.format_exc()}")
+            return 0.0
+
+    def stok_getir_for_fatura(self, fatura_tipi, arama_terimi=None):
+        query = self._db_session.query(Stok)
+        
+        if arama_terimi:
+            normalized_term = normalize_turkish_chars(arama_terimi)
+            query = query.filter(
+                or_(
+                    Stok.urun_adi.ilike(f"%{normalized_term}%"),
+                    Stok.urun_kodu.ilike(f"%{normalized_term}%")
+                )
+            )
+        
+        results = []
+        stok_list = query.order_by(Stok.urun_adi).all()
+
+        for s in stok_list:
+            fiyat = 0.0
+            if fatura_tipi == self.FATURA_TIP_SATIS or fatura_tipi == self.SIPARIS_TIP_SATIS:
+                fiyat = float(s.satis_fiyati_kdv_dahil)
+            elif fatura_tipi == self.FATURA_TIP_ALIS or fatura_tipi == self.SIPARIS_TIP_ALIS:
+                fiyat = float(s.alis_fiyati_kdv_dahil)
+            elif fatura_tipi == self.FATURA_TIP_SATIS_IADE: 
+                fiyat = float(s.alis_fiyati_kdv_dahil) 
+            elif fatura_tipi == self.FATURA_TIP_ALIS_IADE: 
+                fiyat = float(s.alis_fiyati_kdv_dahil) 
+            
+            results.append({
+                'id': s.id,
+                'urun_kodu': s.urun_kodu,
+                'urun_adi': s.urun_adi,
+                'fiyat': fiyat, 
+                'kdv_orani': float(s.kdv_orani),
+                'stok': float(s.stok_miktari),
+                'alis_fiyati_kdv_haric': float(s.alis_fiyati_kdv_haric),
+                'alis_fiyati_kdv_dahil': float(s.alis_fiyati_kdv_dahil),
+                'satis_fiyati_kdv_haric': float(s.satis_fiyati_kdv_haric),
+                'satis_fiyati_kdv_dahil': float(s.satis_fiyati_kdv_dahil)
+            })
+        return results
+
+    def _ensure_default_urun_birimi(self):
+        try:
+            db_birim = self._db_session.query(UrunBirimleri).filter(UrunBirimleri.birim_adi == "Adet").first()
+            if not db_birim:
+                new_birim = UrunBirimleri(
+                    birim_adi="Adet",
+                    olusturma_tarihi_saat=datetime.now(),
+                    olusturan_kullanici_id=self._get_current_user_id()
+                )
+                self._db_session.add(new_birim)
+                self._db_session.commit()
+                self._db_session.refresh(new_birim)
+                logging.info("Varsayılan 'Adet' ürün birimi oluşturuldu.")
+                return new_birim.id
+            return db_birim.id
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Varsayılan ürün birimi oluşturulurken hata: {e}\n{traceback.format_exc()}")
+            return None
+
+    def _ensure_default_ulke(self):
+        try:
+            db_ulke = self._db_session.query(UrunUlkeleri).filter(UrunUlkeleri.ulke_adi == "Türkiye").first()
+            if not db_ulke:
+                new_ulke = UrunUlkeleri(
+                    ulke_adi="Türkiye",
+                    olusturma_tarihi_saat=datetime.now(),
+                    olusturan_kullanici_id=self._get_current_user_id()
+                )
+                self._db_session.add(new_ulke)
+                self._db_session.commit()
+                self._db_session.refresh(new_ulke)
+                logging.info("Varsayılan 'Türkiye' ülkesi oluşturuldu.")
+                return new_ulke.id
+            return db_ulke.id
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Varsayılan ülke oluşturulurken hata: {e}\n{traceback.format_exc()}")
+            return None
+
+    def geriye_donuk_stok_hareketlerini_olustur(self):
+        """
+        Tüm mevcut faturaları tarar ve eksik olan stok hareketlerini oluşturur.
+        Bu işlem, kendi geçici veritabanı oturumunu oluşturarak thread-safe hale getirilmiştir.
+        """
+        # OnMuhasebe sınıfı artık _db_session alıyor. Bu metodun içindeki
+        # sqlite3.connect ve cursor kullanımlarını _db_session'a çevirmeliyiz.
+        
+        # Bu metod API tarafından çağrılacaksa (bir endpoint üzerinden),
+        # o zaman orada zaten Session objesi sağlanır.
+        # Eğer UI'dan direkt çağrılacaksa (main.py'de olduğu gibi),
+        # o zaman _db_session kullanılacaktır.
+
+        db_session_local_for_thread = None # Eğer UI'dan çağrılırsa ve ana session kullanılmazsa
+        try:
+            # Eğer self._db_session mevcut değilse (API dışı, bağımsız çağrı), kendi session'ımızı oluşturalım.
+            # Normalde UI'dan _db_session zaten dolu gelir.
+            if self._db_session is None or not self._db_session.is_active:
+                db_session_local_for_thread = _SessionLocal() # Global _SessionLocal'ı kullan
+                db_to_use = db_session_local_for_thread
+            else:
+                db_to_use = self._db_session
+
+            # İç içe transaction başlat (Savepoint gibi çalışır)
+            with db_to_use.begin_nested():
+                # ÖNLEM: Mükerrer kayıt olmaması için mevcut fatura kaynaklı stok hareketlerini temizle.
+                db_to_use.query(StokHareketleri).filter(
+                    or_(
+                        StokHareketleri.kaynak == self.KAYNAK_TIP_FATURA,
+                        StokHareketleri.kaynak == self.KAYNAK_TIP_IADE_FATURA
+                    )
+                ).delete(synchronize_session=False) # Toplu silme için False
+                logging.info("Mevcut fatura kaynaklı stok hareketleri temizlendi.")
+
+                # Stok miktarlarını sıfırla (önceki hatalı hesaplamaları sıfırdan başlatmak için)
+                # Toplu güncelleme için synchronize_session=False kullanılabilir.
+                db_to_use.query(Stok).update({Stok.stok_miktari: 0.0}, synchronize_session=False)
+                logging.info("Tüm ürünlerin stok miktarları sıfırlandı.")
+
+                # Tüm faturaları ve kalemlerini çek (oluşturulma tarihine göre sıralı)
+                fatura_kalemleri = db_to_use.query(
+                    Fatura.id, Fatura.fatura_no, Fatura.tarih, Fatura.tip,
+                    FaturaKalemleri.urun_id, FaturaKalemleri.miktar
+                ).join(FaturaKalemleri, Fatura.id == FaturaKalemleri.fatura_id)\
+                 .order_by(Fatura.tarih.asc(), Fatura.olusturma_tarihi_saat.asc(), Fatura.id.asc()).all()
+
+                if not fatura_kalemleri:
+                    db_to_use.commit() # Nested transaction'ı commit et (hiçbir şey yapılmadı)
+                    return True, "İşlenecek fatura bulunamadı. Stok hareketi oluşturulmadı."
+
+                hareket_sayisi = 0
+                for fatura_id, fatura_no, tarih_obj, tip, urun_id, miktar in fatura_kalemleri:
+                    tarih_str = tarih_obj.strftime('%Y-%m-%d') # Date objesini string'e çevir
+
+                    # Stok hareketinin tipini ve miktar değişimini belirle
+                    islem_tipi_hareket = ""
+                    miktar_degisimi_net = 0.0
+                    kaynak_tipi_hareket = self.KAYNAK_TIP_FATURA
+
+                    if tip == self.FATURA_TIP_SATIS:
+                        islem_tipi_hareket = self.STOK_ISLEM_TIP_FATURA_SATIS
+                        miktar_degisimi_net = -float(miktar) # Satışta stok azalır
+                    elif tip == self.FATURA_TIP_ALIS:
+                        islem_tipi_hareket = self.STOK_ISLEM_TIP_FATURA_ALIS
+                        miktar_degisimi_net = float(miktar) # Alışta stok artar
+                    elif tip == self.FATURA_TIP_SATIS_IADE:
+                        islem_tipi_hareket = self.STOK_ISLEM_TIP_FATURA_SATIS_IADE
+                        miktar_degisimi_net = float(miktar) # Satış iadesinde stok artar
+                        kaynak_tipi_hareket = self.KAYNAK_TIP_IADE_FATURA
+                    elif tip == self.FATURA_TIP_ALIS_IADE:
+                        islem_tipi_hareket = self.STOK_ISLEM_TIP_FATURA_ALIS_IADE
+                        miktar_degisimi_net = -float(miktar) # Alış iadesinde stok azalır
+                        kaynak_tipi_hareket = self.KAYNAK_TIP_IADE_FATURA
+                    elif tip == self.FATURA_TIP_DEVIR_GIRIS:
+                        islem_tipi_hareket = self.STOK_ISLEM_TIP_DEVIR_GIRIS
+                        miktar_degisimi_net = float(miktar)
+                        kaynak_tipi_hareket = self.KAYNAK_TIP_FATURA
+
+                    # Ürünün mevcut stok miktarını al (sıfırlandıktan sonraki anlık miktar)
+                    urun_obj_current = db_to_use.query(Stok).filter(Stok.id == urun_id).first()
+                    if not urun_obj_current:
+                        logging.warning(f"Ürün ID {urun_id} bulunamadı, stok hareketi oluşturulamadı.")
+                        continue # Bu kalemi atla
+
+                    onceki_stok = float(urun_obj_current.stok_miktari)
+                    sonraki_stok = onceki_stok + miktar_degisimi_net
+
+                    # Stok miktarını güncelle
+                    urun_obj_current.stok_miktari = sonraki_stok
+
+                    # Stok hareketini kaydet
+                    yeni_hareket = StokHareketleri(
+                        urun_id=urun_id,
+                        tarih=tarih_obj,
+                        islem_tipi=islem_tipi_hareket,
+                        miktar=abs(miktar_degisimi_net),
+                        onceki_stok=onceki_stok,
+                        sonraki_stok=sonraki_stok,
+                        aciklama=f"Geçmiş Fatura No: {fatura_no}",
+                        kaynak=kaynak_tipi_hareket,
+                        kaynak_id=fatura_id,
+                        kaynak_no=fatura_no,
+                        olusturma_tarihi_saat=datetime.now(),
+                        olusturan_kullanici_id=self._get_current_user_id()
+                    )
+                    db_to_use.add(yeni_hareket)
+                    hareket_sayisi += 1
+
+                db_to_use.commit() # Nested transaction'ı commit et
+                return True, f"Geçmişe dönük {hareket_sayisi} adet stok hareketi başarıyla oluşturuldu ve stoklar yeniden hesaplandı."
 
         except Exception as e:
-            print(f"KRİTİK FONT YÜKLEME HATASI: {e} - PDF'lerde Türkçe karakter sorunu olabilir.")
+            if db_session_local_for_thread: # Kendi oluşturduğumuz session'ı rollback et
+                db_session_local_for_thread.rollback()
+            elif self._db_session: # Dışarıdan gelen session'da nested transaction'ı rollback et
+                self._db_session.rollback()
+            error_details = traceback.format_exc()
+            logging.error(f"Geçmiş stok hareketleri oluşturulurken hata: {e}\nDetaylar: {error_details}")
+            return False, f"Geçmiş stok hareketleri oluşturulurken hata: {e}\n{error_details}"
+        finally:
+            if db_session_local_for_thread: # Kendi oluşturduğumuz session'ı kapat
+                db_session_local_for_thread.close()
+
+    def manuel_stok_hareketi_sil(self, hareket_id):
+        try:
+            db_hareket = self._db_session.query(StokHareketleri).filter(StokHareketleri.id == hareket_id).first()
+            if db_hareket is None:
+                return False, "Stok hareketi bulunamadı."
+            
+            if db_hareket.kaynak != self.KAYNAK_TIP_MANUEL:
+                return False, "Sadece manuel stok hareketleri silinebilir."
+
+            self._db_session.begin_nested() 
+
+            # Stok miktarını tersine çevir
+            urun_id = db_hareket.urun_id
+            # Miktar değişimini tersine çeviriyoruz (örn: +5 olanı -5 yapar)
+            # islem_tipi içinde 'Giriş' veya 'Fazlası' varsa miktar pozitif demektir, tersi negatif olmalı.
+            miktar_degisimi_net_tersi = -float(db_hareket.miktar) if "Giriş" in db_hareket.islem_tipi or "Fazlası" in db_hareket.islem_tipi or "Alış" in db_hareket.islem_tipi else float(db_hareket.miktar)
+
+            success, message = self._stok_guncelle_ve_hareket_kaydet(
+                urun_id=urun_id,
+                miktar_degisimi_net=miktar_degisimi_net_tersi,
+                islem_tipi_aciklamasi=f"{db_hareket.islem_tipi} (Silme Geri Alma)",
+                kaynak_tipi="MANUEL_SILME_GERI_ALMA",
+                kaynak_id=db_hareket.id,
+                referans_no=f"Orijinal Hareket ID: {db_hareket.id}"
+            )
+            if not success:
+                self._db_session.rollback()
+                return False, f"Stok hareketi geri alınamadı: {message}"
+
+            self._db_session.delete(db_hareket)
+            self._db_session.commit()
+            return True, "Stok hareketi başarıyla silindi ve stok güncellendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Manuel stok hareketi silinirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Manuel stok hareketi silinirken bir hata oluştu: {e}"
+
+    def get_fatura_servisi(self):
+        """
+        API endpoint'lerinin FaturaService'e kolayca erişmesini sağlayan yardımcı metot.
+        """
+        if not hasattr(self, '_fatura_servisi_instance'):
+            # FaturaService'i hizmetler.py dosyasından import ettiğinizden emin olun
+            from hizmetler import FaturaService
+            self._fatura_servisi_instance = FaturaService(self)
+        return self._fatura_servisi_instance
 
     def get_cari_bakiye_snapshot(self, cari_id, cari_tip, tarih_str):
         """
@@ -273,8 +1680,6 @@ class OnMuhasebe:
                 'kalan_borc': 0.0
             }
 
-
-
     def kasa_banka_hareket_ekle(self, kasa_banka_id, tutar, aciklama, referans_id):
         """
         Kasa/Banka hareketini gelir_gider tablosuna kaydeder ve kasa/banka bakiyesini günceller.
@@ -321,31 +1726,11 @@ class OnMuhasebe:
             return False, f"Kasa/Banka hareketi eklenirken bir hata oluştu: {e}"
 
     def _get_current_user_id(self):
-        """
-        Eğer uygulama context'inde geçerli bir kullanıcı varsa ID'sini döndürür.
-        Aksi takdirde varsayılan bir sistem kullanıcısı ID'si (1, genelde admin) döndürür.
-        """
-        if self.app and hasattr(self.app, 'current_user') and self.app.current_user and len(self.app.current_user) > 0:
-            return self.app.current_user[0] # current_user[0] kullanıcının ID'sidir
-        return 1 # Varsayılan olarak admin kullanıcısının ID'si kabul edilebilir.
-
-    def _ensure_genel_tedarikci(self):
-        try:
-            self.c.execute("SELECT id FROM tedarikciler WHERE tedarikci_kodu=?", ("GENEL_TEDARIKCI",))
-            result = self.c.fetchone()
-            if result:
-                self.genel_tedarikci_id = result[0]
-                return True, "Genel Tedarikçi bulundu."
-            else:
-                olusturan_id = 1 # Genellikle 'admin' kullanıcısının ID'si
-                current_time = self.get_current_datetime_str()
-                self.c.execute("INSERT INTO tedarikciler (tedarikci_kodu, ad, telefon, adres, vergi_dairesi, vergi_no, olusturma_tarihi_saat, olusturan_kullanici_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                               ("GENEL_TEDARIKCI", "Genel Tedarikçi (Toplu İşlem)", "-", "-", "-", "-", current_time, olusturan_id))
-                self.genel_tedarikci_id = self.c.lastrowid
-                self.conn.commit()
-                return True, "Genel Tedarikçi başarıyla oluşturuldu."
-        except Exception as e:
-            return False, f"Genel tedarikçi oluşturulurken/kontrol edilirken kritik hata: {e}"
+        # Bu metod App sınıfından mevcut kullanıcı ID'sini almalı.
+        # Geçici olarak 1 (admin) dönelim, veya App objesi üzerinden alalım.
+        if self.app and hasattr(self.app, 'current_user') and self.app.current_user:
+            return self.app.current_user[0]
+        return 1 # Default Admin ID (Üretimde daha güvenli bir mekanizma olmalı)
        
     def clear_log_file(self):
         try:
@@ -359,47 +1744,6 @@ class OnMuhasebe:
         except Exception as e:
             logging.error(f"Log dosyası sıfırlanırken hata oluştu: {e}")
             return False, f"Log dosyası sıfırlanırken hata oluştu: {e}"
-
-
-    def get_perakende_musteri_id(self):
-        """
-        Veritabanındaki "Perakende Satış Müşterisi"nin ID'sini döndürür.
-        Eğer yoksa, oluşturur ve ID'sini döndürür.
-        """
-        conn = self.conn
-        cursor = conn.cursor()
-
-        # Perakende Müşterisi'ni ara
-        # Artık 'kod' sütununu kullanabiliriz.
-        cursor.execute("SELECT id FROM musteriler WHERE ad = ? AND kod = ?", ('Perakende Satış Müşterisi', 'PER000'))
-        perakende_musteri = cursor.fetchone()
-
-        if perakende_musteri:
-            return perakende_musteri['id']
-        else:
-            # Eğer yoksa, oluştur
-            try:
-                default_user_id = 1 
-                if self.app and self.app.current_user:
-                    default_user_id = self.app.current_user[0] 
-
-                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-                cursor.execute("""
-                    INSERT INTO musteriler (ad, soyad, kod, vergi_dairesi, vergi_no, adres, telefon, email, notlar,
-                                            olusturma_tarihi_saat, olusturan_kullanici_id,
-                                            son_guncelleme_tarihi_saat, son_guncelleyen_kullanici_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, ('Perakende Satış Müşterisi', '', 'PER000', '', '', '', '', '', 'Sistem tarafından otomatik oluşturulan perakende satış müşterisi.',
-                      current_time, default_user_id, 
-                      current_time, default_user_id))
-                conn.commit()
-                return cursor.lastrowid
-            except Exception as e:
-                print(f"Perakende müşteri oluşturulurken hata oluştu: {e}")
-                if self.app:
-                    self.app.set_status(f"Hata: Perakende müşteri oluşturulamadı: {e}")
-                return None
 
     def get_monthly_sales_summary(self, baslangic_tarih, bitis_tarih):
         """Belirtilen tarih aralığındaki aylık satış toplamlarını döndürür."""
@@ -630,56 +1974,6 @@ class OnMuhasebe:
         else:
             return None # Kayıt bulunamazsa None döndür
 
-    def manuel_stok_hareketi_sil(self, hareket_id):
-        """
-        Sadece 'MANUEL' kaynaklı bir stok hareketini siler ve stok miktarını tersine günceller.
-        """
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-
-            # 1. Adım: Hareketin detaylarını ve kaynağını kontrol et
-            self.c.execute("SELECT urun_id, miktar, islem_tipi, kaynak FROM stok_hareketleri WHERE id=?", (hareket_id,))
-            hareket = self.c.fetchone()
-
-            if not hareket:
-                self.conn.rollback()
-                return False, "Silinecek stok hareketi bulunamadı."
-
-            if hareket['kaynak'] != 'MANUEL':
-                self.conn.rollback()
-                return False, "Sadece manuel olarak eklenmiş stok hareketleri silinebilir."
-
-            urun_id = hareket['urun_id']
-            miktar = hareket['miktar']
-            islem_tipi = hareket['islem_tipi']
-
-            # 2. Adım: Stok miktarını tersine çevir
-            stok_fark_tersi = 0.0
-            if 'Giriş' in islem_tipi or 'Fazlası' in islem_tipi or 'İade Girişi' in islem_tipi:
-                stok_fark_tersi = -miktar # Giriş siliniyorsa stoktan düş
-            elif 'Çıkış' in islem_tipi or 'Eksiği' in islem_tipi or 'Zayiat' in islem_tipi:
-                stok_fark_tersi = miktar # Çıkış siliniyorsa stoka ekle
-
-            if stok_fark_tersi != 0:
-                # _stok_guncelle_ve_hareket_kaydet metodunu kullanarak stok ve yeni bir hareket kaydı oluşturun.
-                # Bu aslında manuel silme işlemini "geri alma" hareketi olarak kaydedecektir.
-                # Ancak burada istenen direkt kaydı silmek ve ana stoku düzeltmek.
-                # Eğer stok hareketi geçmişini "silinen hareket" olarak tutmak istemiyorsak, manuel UPDATE yapmalıyız.
-                # Mevcut mantık, kaydı silip stoğu manuel düzeltmektir.
-                self.c.execute("UPDATE tbl_stoklar SET stok_miktari = stok_miktari + ? WHERE id = ?", (stok_fark_tersi, urun_id))
-
-            # 3. Adım: Stok hareket kaydını sil
-            self.c.execute("DELETE FROM stok_hareketleri WHERE id=?", (hareket_id,))
-
-            self.conn.commit()
-            return True, f"ID: {hareket_id} numaralı manuel stok hareketi başarıyla silindi ve stok güncellendi."
-
-        except Exception as e:
-            self.conn.rollback()
-            error_details = traceback.format_exc()
-            logging.error(f"Manuel stok hareketi silinirken hata: {e}\nDetaylar: {error_details}")
-            return False, "Manuel stok hareketi silinirken beklenmeyen bir hata oluştu."
-
     def get_gecmis_fatura_kalemi_bilgileri(self, cari_id, urun_id, fatura_tipi, limit=5):
         """
         Belirli bir cari (müşteri/tedarikçi) ve ürün için geçmiş fatura kalemi bilgilerini döndürür.
@@ -748,62 +2042,6 @@ class OnMuhasebe:
             ))
         return formatted_results
 
-    def get_stok_miktari_for_kontrol(self, urun_id, fatura_id_hariç=None):
-        """
-        Bir ürünün güncel stok miktarını döndürür.
-        Eğer fatura_id_hariç belirtilirse (yani bir fatura düzenleniyorsa),
-        o faturadaki kalemlerin stok etkisi geçici olarak hesaptan düşülür (geri alınır).
-        Bu, düzenleme anında o faturadaki ürünlerin hala stokta "gibi" kabul edilmesini sağlar,
-        böylece anlamsız stok yetersizliği uyarıları önlenir.
-        """
-        # Veritabanından ürünün mevcut fiziksel stok miktarını al.
-        self.c.execute("SELECT stok_miktari FROM tbl_stoklar WHERE id=?", (urun_id,))
-        mevcut_stok = self.c.fetchone()
-        if not mevcut_stok:
-            # Eğer ürün bulunamazsa veya stok miktarı boşsa 0.0 kabul et.
-            return 0.0 
-
-        stok_miktari_db = mevcut_stok[0]
-        # Kontrol için kullanılacak başlangıç stok miktarı, mevcut veritabanı stoğudur.
-        stok_miktari_kontrolde_kullanilacak = stok_miktari_db
-
-        # Eğer bir fatura düzenleniyorsa (fatura_id_hariç parametresi varsa)
-        # o faturadaki bu ürünün miktarını hesaptan düşürmeliyiz.
-        # Neden? Çünkü fatura düzenlenirken, fatura zaten var ve stok etkisi zaten gerçekleşti.
-        # Bu miktarı tekrar stoktan düşersek hatalı bir stok kontrolü yapmış oluruz.
-        if fatura_id_hariç is not None:
-            # Düzenlenen faturadaki bu ürünün miktarını ve fatura tipini al.
-            self.c.execute("""
-                SELECT SUM(fk.miktar), f.tip
-                FROM fatura_kalemleri fk
-                JOIN faturalar f ON fk.fatura_id = f.id
-                WHERE fk.fatura_id = ? AND fk.urun_id = ?
-            """, (fatura_id_hariç, urun_id))
-            fatura_kalem_miktari_data = self.c.fetchone()
-
-            if fatura_kalem_miktari_data and fatura_kalem_miktari_data[0] is not None:
-                miktar_bu_faturada = fatura_kalem_miktari_data[0]
-                fatura_tipi_bu_faturada = fatura_kalem_miktari_data[1]
-
-                # Eğer bu bir SATIŞ faturası ise:
-                # Fatura oluşturulduğunda bu miktar stoktan düşülmüştür.
-                # Düzenlerken, bu miktarı geçici olarak stoğa "geri ekleyerek"
-                # yani stoktaymış gibi kabul ederek kontrol yapmalıyız.
-                # Böylece, kullanıcının "zaten sattığı" ürün için "stok yetersiz" uyarısı alması engellenir.
-                if fatura_tipi_bu_faturada == 'SATIŞ':
-                    stok_miktari_kontrolde_kullanilacak += miktar_bu_faturada
-                # Eğer bu bir ALIŞ faturası ise:
-                # Fatura oluşturulduğunda bu miktar stoka eklenmiştir.
-                # Düzenlerken, bu miktarı geçici olarak stoktan "çıkararak"
-                # yani stokta yokmuş gibi kabul ederek kontrol yapmalıyız.
-                # Bu senaryoda aslında çok bir fark yaratmayabilir, çünkü alış faturasında stok artışı beklenir.
-                # Ancak tutarlılık için eklenmiştir.
-                elif fatura_tipi_bu_faturada == 'ALIŞ':
-                    stok_miktari_kontrolde_kullanilacak -= miktar_bu_faturada
-        
-        # Son olarak, hesaplanan stok miktarını döndür.
-        return stok_miktari_kontrolde_kullanilacak
-
     def get_recent_cari_hareketleri(self, cari_tip, cari_id, limit=10):
         """
         Belirli bir cari hesabın son işlemlerini döndürür.
@@ -828,6 +2066,9 @@ class OnMuhasebe:
         """Geçerli tarih ve saati 'YYYY-AA-GG HH:MM:SS' formatında döndürür."""
         return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+    def get_current_date_str(self):
+        """Mevcut tarihi YYYY-AA-GG formatında döndürür."""
+        return date.today().strftime('%Y-%m-%d')
 
     def _get_config_path(self):
         return os.path.join(data_dir, 'config.json')
@@ -935,37 +2176,27 @@ class OnMuhasebe:
         self.c.execute("SELECT id, urun_kodu, urun_adi, stok_miktari, alis_fiyati_kdv_haric, satis_fiyati_kdv_haric, kdv_orani, min_stok_seviyesi, alis_fiyati_kdv_dahil FROM tbl_stoklar WHERE stok_miktari < min_stok_seviyesi ORDER BY urun_adi ASC")
         return self.c.fetchall()
     
-    def kullanici_adi_guncelle(self, user_id, yeni_kullanici_adi):
+    def kullanici_adi_guncelle(self, user_id, new_username):
         try:
-            self.conn.execute("BEGIN TRANSACTION")
-            # Güncellenecek kullanıcının mevcut bilgilerini al
-            self.c.execute("SELECT kullanici_adi FROM kullanicilar WHERE id=?", (user_id,))
-            mevcut_kullanici_adi_tuple = self.c.fetchone()
-            if not mevcut_kullanici_adi_tuple:
-                self.conn.rollback()
-                return False, "Güncellenecek kullanıcı bulunamadı."
+            db_user = self._db_session.query(Kullanici).filter(Kullanici.id == user_id).first()
+            if not db_user:
+                return False, "Kullanıcı bulunamadı."
+            
+            existing_user_with_new_name = self._db_session.query(Kullanici).filter(Kullanici.kullanici_adi == new_username).first()
+            if existing_user_with_new_name and existing_user_with_new_name.id != user_id:
+                return False, "Bu kullanıcı adı zaten başka bir kullanıcı tarafından kullanılıyor."
 
-            mevcut_kullanici_adi = mevcut_kullanici_adi_tuple[0]
-
-            # Başka bir kullanıcının aynı adı almasını engelle
-            self.c.execute("SELECT id FROM kullanicilar WHERE kullanici_adi=? AND id != ?", (yeni_kullanici_adi, user_id))
-            if self.c.fetchone():
-                self.conn.rollback()
-                return False, f"'{yeni_kullanici_adi}' kullanıcı adı zaten başka bir kullanıcı tarafından kullanılıyor."
-
-            current_time = self.get_current_datetime_str()
-            guncelleyen_id = self._get_current_user_id() # Değişiklik
-
-            self.c.execute("UPDATE kullanicilar SET kullanici_adi=?, son_guncelleme_tarihi_saat=?, son_guncelleyen_kullanici_id=? WHERE id=?",
-                       (yeni_kullanici_adi, current_time, guncelleyen_id, user_id))
-            self.conn.commit()
-
-            return True, "Kullanıcı adı başarıyla güncellendi."
-
+            db_user.kullanici_adi = new_username
+            db_user.son_guncelleme_tarihi_saat = datetime.now() # TIMESTAMP
+            db_user.son_guncelleyen_kullanici_id = self._get_current_user_id()
+            self._db_session.commit()
+            self._db_session.refresh(db_user)
+            return True, f"Kullanıcı adı başarıyla '{new_username}' olarak güncellendi."
         except Exception as e:
-            self.conn.rollback()
+            self._db_session.rollback()
+            logging.error(f"Kullanıcı adı güncellenirken hata: {e}\n{traceback.format_exc()}")
             return False, f"Kullanıcı adı güncellenirken bir hata oluştu: {e}"
-        
+                
     def get_faturalar_by_urun_id(self, urun_id, fatura_tipi=None): 
         """
         Belirli bir ürün ID'sinin yer aldığı faturaları (hem alış hem satış) döndürür.
@@ -1015,31 +2246,6 @@ class OnMuhasebe:
         """
         self.c.execute("SELECT id, hesap_adi, hesap_no, bakiye, para_birimi, tip, acilis_tarihi, banka_adi, sube_adi, varsayilan_odeme_turu FROM kasalar_bankalar WHERE varsayilan_odeme_turu = ?", (odeme_turu,))
         return self.c.fetchone()
-
-
-    def get_next_tedarikci_kodu(self, length=6):
-        """
-        Mevcut tedarikçi kodları arasında en yüksek sayısal değeri bulur ve bir sonraki kodu döndürür.
-        Belirtilen uzunluğa kadar baştan sıfırlarla doldurur.
-        """
-        self.c.execute("SELECT tedarikci_kodu FROM tedarikciler")
-        existing_codes = self.c.fetchall()
-        
-        max_numeric_code = 0
-        for code_tuple in existing_codes:
-            code = code_tuple[0]
-            # Sadece sayısal kodları dikkate al
-            if code.isdigit():
-                try:
-                    numeric_code = int(code)
-                    if numeric_code > max_numeric_code:
-                        max_numeric_code = numeric_code
-                except ValueError:
-                    pass
-        
-        next_code = max_numeric_code + 1
-        # Belirtilen uzunluğa kadar baştan sıfırlarla doldur
-        return str(next_code).zfill(length)
     
     def get_total_sales(self, baslangic_tarih, bitis_tarih):
         """Belirtilen tarih aralığındaki toplam satış tutarını (KDV Dahil) döndürür."""
@@ -1226,87 +2432,7 @@ class OnMuhasebe:
         gross_profit_rate = (gross_profit / total_sales_revenue * 100) if total_sales_revenue > 0 else 0.0
 
         return gross_profit, total_cogs, gross_profit_rate    
-        
-    def get_next_musteri_kodu(self, length=6):
-        """
-        Mevcut müşteri kodları arasında en yüksek sayısal değeri bulur ve bir sonraki kodu döndürür.
-        Belirtilen uzunluğa kadar baştan sıfırlarla doldurur.
-        """
-        self.c.execute("SELECT musteri_kodu FROM musteriler")
-        existing_codes = self.c.fetchall()
-        
-        max_numeric_code = 0
-        for code_tuple in existing_codes:
-            code = code_tuple[0]
-            # Sadece sayısal kodları dikkate al (örn: 'PER000' gibi özel kodları atla)
-            if code.isdigit():
-                try:
-                    numeric_code = int(code)
-                    if numeric_code > max_numeric_code:
-                        max_numeric_code = numeric_code
-                except ValueError:
-                    pass
-        
-        next_code = max_numeric_code + 1
-        # Belirtilen uzunluğa kadar baştan sıfırlarla doldur
-        return str(next_code).zfill(length)
-    
-    def _ensure_perakende_musteri(self):
-        # Perakende müşteri ID'sinin zaten ayarlanıp ayarlanmadığını kontrol et
-        if self.perakende_musteri_id is not None:
-            # Eğer zaten ayarlıysa, tekrar işlem yapmaya gerek yok.
-            # Bu, App.__init__ içinde birden fazla çağrıyı optimize eder.
-            # Eğer DB bağlantısı kesilip tekrar kurulursa, bu kontrol hala faydalıdır.
-            self.c.execute("SELECT id FROM musteriler WHERE kod = ?", (self.PERAKENDE_MUSTERI_KODU,))
-            musteri = self.c.fetchone()
-            if musteri:
-                # ID'yi güncelle (eğer None ise) ve başarılı say
-                self.perakende_musteri_id = musteri['id']
-                return True, "Perakende müşteri bulundu ve ID güncellendi."
-            # Eğer ID ayarlıydı ama DB'de yoksa, aşağıdaki oluşturma akışına devam et.
-
-        try:
-            self.c.execute("SELECT id FROM musteriler WHERE kod = ?", (self.PERAKENDE_MUSTERI_KODU,))
-            musteri = self.c.fetchone()
-            if musteri:
-                self.perakende_musteri_id = musteri['id']
-                return True, "Perakende müşteri bulundu."
-            else:
-                default_user_id = 1 
-                # self.app ve self.app.current_user kontrolü sadece eğer app referansı başlatma sırasında ayarlandıysa geçerlidir.
-                # Genellikle bu `_ensure_` metodları App sınıfı oluşmadan önce çağrılabilir.
-                # Bu yüzden güvenli bir varsayılan kullanıcı ID'si kullanmak daha iyidir.
-                # Eğer App sınıfının init'i içinde çağrılıyorsa, self.app.current_user kontrolü uygun olabilir.
-                if self.app and self.app.current_user:
-                    default_user_id = self.app.current_user[0] 
-
-                current_time = self.get_current_datetime_str()
-
-                self.c.execute("""
-                    INSERT INTO musteriler (ad, soyad, kod, vergi_dairesi, vergi_no, adres, telefon, email, notlar,
-                                            olusturma_tarihi_saat, olusturan_kullanici_id,
-                                            son_guncelleme_tarihi_saat, son_guncelleyen_kullanici_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, ('Perakende Satış Müşterisi', '', self.PERAKENDE_MUSTERI_KODU, '', '', '', '', '', 'Sistem tarafından otomatik oluşturulan perakende satış müşterisi.',
-                      current_time, default_user_id, 
-                      current_time, default_user_id))
-                self.conn.commit()
-                self.perakende_musteri_id = self.c.lastrowid
-                return True, "Perakende müşteri başarıyla oluşturuldu."
-        except sqlite3.IntegrityError as e:
-            # Bu genellikle UNIQUE constraint hatasıdır, yani müşteri zaten vardır.
-            self.conn.rollback() # Hata durumunda rollback
-            self.c.execute("SELECT id FROM musteriler WHERE kod = ?", (self.PERAKENDE_MUSTERI_KODU,))
-            musteri = self.c.fetchone()
-            if musteri:
-                self.perakende_musteri_id = musteri['id']
-                return True, f"Perakende müşteri zaten mevcut (IntegrityError: {e})."
-            else:
-                return False, f"Perakende müşteri kontrol edilirken bütünlük hatası oluştu: {e}"
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Perakende müşteri oluşturulurken/kontrol edilirken kritik hata: {e}"
-
+            
     def _add_column_if_not_exists(self, table_name, column_name, column_type, is_unique=False):
         try:
             self.c.execute(f"PRAGMA table_info({table_name})")
@@ -1330,386 +2456,313 @@ class OnMuhasebe:
         except Exception as e:
             logging.error(f"HATA: Sütun ekleme kontrolü sırasında beklenmeyen hata: {e}", exc_info=True) # print yerine logging.error
 
-    def create_tables(self):
-        self.c.execute('''CREATE TABLE IF NOT EXISTS sirket_ayarlari
-                            (anahtar TEXT PRIMARY KEY,
-                            deger TEXT)''')
+    def create_tables(self, cursor):
+        """
+        Veritabanı tablolarını PostgreSQL formatında oluşturur.
+        Bu metot artık dışarıdan bir cursor objesi alır.
+        """
+        # --- Şirket Ayarları ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS sirket_ayarlari(
+                            anahtar VARCHAR(255) PRIMARY KEY,
+                            deger TEXT
+                           )''')
 
-        # Kullanıcılar Tablosu
-        self.c.execute('''CREATE TABLE IF NOT EXISTS kullanicilar
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                            kullanici_adi TEXT UNIQUE NOT NULL, 
-                            sifre TEXT NOT NULL, 
-                            yetki TEXT CHECK(yetki IN ('admin', 'kullanici')) NOT NULL)''')
-        self._add_column_if_not_exists('kullanicilar', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('kullanicilar', 'olusturan_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('kullanicilar', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('kullanicilar', 'son_guncelleyen_kullanici_id', 'INTEGER')
-
-        # Müşteriler Tablosu
-        self.c.execute(
-            """CREATE TABLE IF NOT EXISTS musteriler (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ad TEXT NOT NULL,
-                    soyad TEXT,
-                    kod TEXT UNIQUE,
-                    vergi_dairesi TEXT,
-                    vergi_no TEXT,
-                    adres TEXT,
-                    telefon TEXT,
-                    email TEXT,
-                    notlar TEXT,
-                    olusturma_tarihi_saat TEXT,
-                    olusturan_kullanici_id INTEGER,
-                    son_guncelleme_tarihi_saat TEXT,
-                    son_guncelleyen_kullanici_id INTEGER
-                )"""
-        )
-        self._add_column_if_not_exists('musteriler', 'soyad', 'TEXT')
-        self._add_column_if_not_exists('musteriler', 'kod', 'TEXT', is_unique=True)
-        self._add_column_if_not_exists('musteriler', 'email', 'TEXT')
-        self._add_column_if_not_exists('musteriler', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('musteriler', 'olusturan_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('musteriler', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('musteriler', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        
-        # Tedarikçiler Tablosu
-        self.c.execute('''CREATE TABLE IF NOT EXISTS tedarikciler
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                            tedarikci_kodu TEXT UNIQUE,
-                            ad TEXT NOT NULL, 
-                            telefon TEXT, 
-                            adres TEXT, 
-                            vergi_dairesi TEXT, 
-                            vergi_no TEXT
-                            )'''
-        )
-        self._add_column_if_not_exists('tedarikciler', 'tedarikci_kodu', 'TEXT', is_unique=True)
-        self._add_column_if_not_exists('tedarikciler', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('tedarikciler', 'olusturan_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('tedarikciler', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('tedarikciler', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('musteriler', 'bakiye', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('tedarikciler', 'bakiye', 'REAL DEFAULT 0.0')
-
-        # <<< DÜZELTİLMİŞ STOK TABLOSU OLUŞTURMA SIRASI >>>
-
-        # 1. Adım: Temel Stok Tablosunu Oluştur
-        self.c.execute('''CREATE TABLE IF NOT EXISTS tbl_stoklar
-                                (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                urun_kodu TEXT UNIQUE NOT NULL,
-                                urun_adi TEXT NOT NULL,
-                                stok_miktari REAL DEFAULT 0.0,
-                                alis_fiyati_kdv_haric REAL DEFAULT 0.0,
-                                satis_fiyati_kdv_haric REAL DEFAULT 0.0,
-                                kdv_orani REAL DEFAULT 20.0,
-                                min_stok_seviyesi REAL DEFAULT 0.0)''')
-
-        # 2. Adım: Önce TÜM SÜTUNLARI Ekle (UNIQUE olmayanlar dahil)
-        self._add_column_if_not_exists('tbl_stoklar', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('tbl_stoklar', 'olusturan_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('tbl_stoklar', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('tbl_stoklar', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('tbl_stoklar', 'min_stok_seviyesi', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('tbl_stoklar', 'alis_fiyati_kdv_dahil', 'REAL DEFAULT 0.0') 
-        self._add_column_if_not_exists('tbl_stoklar', 'satis_fiyati_kdv_dahil', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('tbl_stoklar', 'kategori_id', 'INTEGER')
-        self._add_column_if_not_exists('tbl_stoklar', 'marka_id', 'INTEGER')
-        self._add_column_if_not_exists('tbl_stoklar', 'urun_detayi', 'TEXT')
-        self._add_column_if_not_exists('tbl_stoklar', 'urun_resmi_yolu', 'TEXT')
-        self._add_column_if_not_exists('tbl_stoklar', 'fiyat_degisiklik_tarihi', 'DATE')
-        self._add_column_if_not_exists('tbl_stoklar', 'urun_grubu_id', 'INTEGER')
-        self._add_column_if_not_exists('tbl_stoklar', 'urun_birimi_id', 'INTEGER')
-        self._add_column_if_not_exists('tbl_stoklar', 'ulke_id', 'INTEGER')
-
-        # 3. Adım: Sütunlar eklendikten sonra INDEX'leri oluştur
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_tbl_stoklar_urun_adi ON tbl_stoklar (urun_adi);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_tbl_stoklar_kategori_id ON tbl_stoklar (kategori_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_tbl_stoklar_marka_id ON tbl_stoklar (marka_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_tbl_stoklar_urun_grubu_id ON tbl_stoklar (urun_grubu_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_tbl_stoklar_urun_birimi_id ON tbl_stoklar (urun_birimi_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_tbl_stoklar_ulke_id ON tbl_stoklar (ulke_id);")
-        
-        # Diğer tablolar...
-        self.c.execute('''CREATE TABLE IF NOT EXISTS stok_hareketleri
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                            urun_id INTEGER NOT NULL, 
-                            tarih DATE NOT NULL, 
-                            islem_tipi TEXT NOT NULL, 
-                            miktar REAL NOT NULL, 
-                            onceki_stok REAL NOT NULL,
-                            sonraki_stok REAL NOT NULL,
-                            aciklama TEXT,
-                            kaynak TEXT, 
-                            kaynak_id INTEGER, 
-                            olusturma_tarihi_saat TEXT,
+        # --- Kullanıcılar ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS kullanicilar (
+                            id SERIAL PRIMARY KEY, 
+                            kullanici_adi VARCHAR(255) UNIQUE NOT NULL, 
+                            sifre VARCHAR(255) NOT NULL, 
+                            yetki VARCHAR(50) CHECK(yetki IN ('admin', 'kullanici')) NOT NULL,
+                            olusturma_tarihi_saat TIMESTAMP,
                             olusturan_kullanici_id INTEGER,
-                            FOREIGN KEY(urun_id) REFERENCES tbl_stoklar(id) ON DELETE CASCADE)''') 
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_stok_hareketleri_urun_tarih_tip ON stok_hareketleri (urun_id, tarih, islem_tipi);")
+                            son_guncelleme_tarihi_saat TIMESTAMP,
+                            son_guncelleyen_kullanici_id INTEGER
+                           )''')
 
-        self.c.execute('''CREATE TABLE IF NOT EXISTS urun_gruplari
-                                (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                grup_adi TEXT UNIQUE NOT NULL)''')
-        self._add_column_if_not_exists('urun_gruplari', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('urun_gruplari', 'olusturan_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('urun_gruplari', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('urun_gruplari', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        
-        self.c.execute('''CREATE TABLE IF NOT EXISTS urun_birimleri
-                                (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                birim_adi TEXT UNIQUE NOT NULL)''')
-        self._add_column_if_not_exists('urun_birimleri', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('urun_birimleri', 'olusturan_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('urun_birimleri', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('urun_birimleri', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        
-        self.c.execute('''CREATE TABLE IF NOT EXISTS urun_ulkeleri
-                                (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                ulke_adi TEXT UNIQUE NOT NULL)''')
-        self._add_column_if_not_exists('urun_ulkeleri', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('urun_ulkeleri', 'olusturan_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('urun_ulkeleri', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('urun_ulkeleri', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        
-        self.c.execute('''CREATE TABLE IF NOT EXISTS kasalar_bankalar
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            hesap_adi TEXT NOT NULL UNIQUE,
-                            hesap_no TEXT, 
-                            bakiye REAL DEFAULT 0.0,
-                            para_birimi TEXT DEFAULT 'TL',
-                            tip TEXT CHECK(tip IN ('KASA', 'BANKA')) NOT NULL,
+        # --- Müşteriler ---
+        cursor.execute("""CREATE TABLE IF NOT EXISTS musteriler (
+                            id SERIAL PRIMARY KEY,
+                            ad VARCHAR(255) NOT NULL,
+                            soyad VARCHAR(255),
+                            kod VARCHAR(50) UNIQUE,
+                            vergi_dairesi VARCHAR(255),
+                            vergi_no VARCHAR(50),
+                            adres TEXT,
+                            telefon VARCHAR(50),
+                            email VARCHAR(255),
+                            notlar TEXT,
+                            bakiye NUMERIC(15, 2) DEFAULT 0.0,
+                            olusturma_tarihi_saat TIMESTAMP,
+                            olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP,
+                            son_guncelleyen_kullanici_id INTEGER
+                        )""")
+
+        # --- Tedarikçiler ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS tedarikciler (
+                            id SERIAL PRIMARY KEY, 
+                            tedarikci_kodu VARCHAR(50) UNIQUE,
+                            ad VARCHAR(255) NOT NULL, 
+                            telefon VARCHAR(50), 
+                            adres TEXT, 
+                            vergi_dairesi VARCHAR(255), 
+                            vergi_no VARCHAR(50),
+                            bakiye NUMERIC(15, 2) DEFAULT 0.0,
+                            olusturma_tarihi_saat TIMESTAMP,
+                            olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP,
+                            son_guncelleyen_kullanici_id INTEGER
+                           )''')
+
+        # --- Ürün Nitelik Tabloları ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS urun_kategorileri(
+                                id SERIAL PRIMARY KEY,
+                                kategori_adi VARCHAR(255) UNIQUE NOT NULL,
+                                olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                                son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS urun_markalari(
+                                id SERIAL PRIMARY KEY,
+                                marka_adi VARCHAR(255) UNIQUE NOT NULL,
+                                olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                                son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS urun_gruplari(
+                                id SERIAL PRIMARY KEY,
+                                grup_adi VARCHAR(255) UNIQUE NOT NULL,
+                                olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                                son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS urun_birimleri(
+                                id SERIAL PRIMARY KEY,
+                                birim_adi VARCHAR(255) UNIQUE NOT NULL,
+                                olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                                son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS urun_ulkeleri(
+                                id SERIAL PRIMARY KEY,
+                                ulke_adi VARCHAR(255) UNIQUE NOT NULL,
+                                olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                                son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+                                 
+        # --- Stoklar ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS tbl_stoklar (
+                            id SERIAL PRIMARY KEY,
+                            urun_kodu VARCHAR(50) UNIQUE NOT NULL,
+                            urun_adi VARCHAR(255) NOT NULL,
+                            stok_miktari NUMERIC(15, 2) DEFAULT 0.0,
+                            alis_fiyati_kdv_haric NUMERIC(15, 2) DEFAULT 0.0,
+                            satis_fiyati_kdv_haric NUMERIC(15, 2) DEFAULT 0.0,
+                            kdv_orani NUMERIC(5, 2) DEFAULT 20.0,
+                            min_stok_seviyesi NUMERIC(15, 2) DEFAULT 0.0,
+                            alis_fiyati_kdv_dahil NUMERIC(15, 2) DEFAULT 0.0,
+                            satis_fiyati_kdv_dahil NUMERIC(15, 2) DEFAULT 0.0,
+                            kategori_id INTEGER REFERENCES urun_kategorileri(id) ON DELETE SET NULL,
+                            marka_id INTEGER REFERENCES urun_markalari(id) ON DELETE SET NULL,
+                            urun_detayi TEXT,
+                            urun_resmi_yolu TEXT,
+                            fiyat_degisiklik_tarihi DATE,
+                            urun_grubu_id INTEGER REFERENCES urun_gruplari(id) ON DELETE SET NULL,
+                            urun_birimi_id INTEGER REFERENCES urun_birimleri(id) ON DELETE SET NULL,
+                            ulke_id INTEGER REFERENCES urun_ulkeleri(id) ON DELETE SET NULL,
+                            olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+
+        # --- Kasa ve Bankalar ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS kasalar_bankalar (
+                            id SERIAL PRIMARY KEY,
+                            hesap_adi VARCHAR(255) NOT NULL UNIQUE,
+                            hesap_no VARCHAR(255), 
+                            bakiye NUMERIC(15, 2) DEFAULT 0.0,
+                            para_birimi VARCHAR(10) DEFAULT 'TL',
+                            tip VARCHAR(50) CHECK(tip IN ('KASA', 'BANKA')) NOT NULL,
                             acilis_tarihi DATE, 
-                            banka_adi TEXT, 
-                            sube_adi TEXT
-                            )''')
-        self._add_column_if_not_exists('kasalar_bankalar', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('kasalar_bankalar', 'olusturan_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('kasalar_bankalar', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('kasalar_bankalar', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('kasalar_bankalar', 'varsayilan_odeme_turu', 'TEXT') 
+                            banka_adi VARCHAR(255), 
+                            sube_adi VARCHAR(255),
+                            varsayilan_odeme_turu VARCHAR(50),
+                            olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
         
-        self.c.execute('''CREATE TABLE IF NOT EXISTS faturalar
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                            fatura_no TEXT UNIQUE NOT NULL, 
+        # --- Faturalar ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS faturalar (
+                            id SERIAL PRIMARY KEY, 
+                            fatura_no VARCHAR(255) UNIQUE NOT NULL, 
                             tarih DATE NOT NULL, 
-                            tip TEXT CHECK(tip IN ('ALIŞ', 'SATIŞ', 'DEVİR_GİRİŞ', 'SATIŞ İADE', 'ALIŞ İADE')) NOT NULL,
+                            tip VARCHAR(50) CHECK(tip IN ('ALIŞ', 'SATIŞ', 'DEVİR_GİRİŞ', 'SATIŞ İADE', 'ALIŞ İADE')) NOT NULL,
                             cari_id INTEGER NOT NULL,
-                            toplam_kdv_haric REAL NOT NULL, 
-                            toplam_kdv_dahil REAL NOT NULL, 
-                            odeme_turu TEXT,
-                            misafir_adi TEXT,
-                            kasa_banka_id INTEGER REFERENCES kasalar_bankalar(id)
-                            )''') 
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_faturalar_tarih_tip_cari ON faturalar (tarih, tip, cari_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_faturalar_odeme_turu ON faturalar (odeme_turu);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_faturalar_kasa_banka_id ON faturalar (kasa_banka_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_faturalar_fatura_no ON faturalar (fatura_no);")
-        self._add_column_if_not_exists('faturalar', 'fatura_notlari', 'TEXT')
-        self._add_column_if_not_exists('faturalar', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('faturalar', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('faturalar', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('faturalar', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('faturalar', 'odeme_turu', 'TEXT')
-        self._add_column_if_not_exists('faturalar', 'misafir_adi', 'TEXT')
-        self._add_column_if_not_exists('faturalar', 'kasa_banka_id', 'INTEGER')
-        self._add_column_if_not_exists('faturalar', 'vade_tarihi', 'DATE')
-        self._add_column_if_not_exists('faturalar', 'genel_iskonto_tipi', 'TEXT DEFAULT \'YOK\'')
-        self._add_column_if_not_exists('faturalar', 'genel_iskonto_degeri', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('faturalar', 'original_fatura_id', 'INTEGER') # <<< Bu satırın var olduğundan emin olun
-
-        self.c.execute('''CREATE TABLE IF NOT EXISTS fatura_kalemleri
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                            fatura_id INTEGER NOT NULL, 
-                            urun_id INTEGER NOT NULL, 
-                            miktar REAL NOT NULL,
-                            birim_fiyat REAL NOT NULL, 
-                            kdv_orani REAL NOT NULL, 
-                            kdv_tutari REAL NOT NULL, 
-                            kalem_toplam_kdv_haric REAL NOT NULL, 
-                            kalem_toplam_kdv_dahil REAL NOT NULL, 
-                            FOREIGN KEY(fatura_id) REFERENCES faturalar(id) ON DELETE CASCADE, 
-                            FOREIGN KEY(urun_id) REFERENCES tbl_stoklar(id))''')
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_faturakalemleri_fatura_urun ON fatura_kalemleri (fatura_id, urun_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_faturakalemleri_urun_id ON fatura_kalemleri (urun_id);")
-        self._add_column_if_not_exists('fatura_kalemleri', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('fatura_kalemleri', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('fatura_kalemleri', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('fatura_kalemleri', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('fatura_kalemleri', 'alis_fiyati_fatura_aninda', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('fatura_kalemleri', 'kdv_orani_fatura_aninda', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('fatura_kalemleri', 'iskonto_yuzde_1', 'REAL DEFAULT 0.0') 
-        self._add_column_if_not_exists('fatura_kalemleri', 'iskonto_yuzde_2', 'REAL DEFAULT 0.0') 
-        self._add_column_if_not_exists('fatura_kalemleri', 'iskonto_tipi', 'TEXT DEFAULT \'YOK\'') 
-        self._add_column_if_not_exists('fatura_kalemleri', 'iskonto_degeri', 'REAL DEFAULT 0.0') 
+                            toplam_kdv_haric NUMERIC(15, 2) NOT NULL, 
+                            toplam_kdv_dahil NUMERIC(15, 2) NOT NULL, 
+                            odeme_turu VARCHAR(50),
+                            misafir_adi VARCHAR(255),
+                            kasa_banka_id INTEGER REFERENCES kasalar_bankalar(id),
+                            fatura_notlari TEXT,
+                            vade_tarihi DATE,
+                            genel_iskonto_tipi VARCHAR(50) DEFAULT 'YOK',
+                            genel_iskonto_degeri NUMERIC(15, 2) DEFAULT 0.0,
+                            original_fatura_id INTEGER,
+                            olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
         
-        self.c.execute('''CREATE TABLE IF NOT EXISTS gelir_gider
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        # --- Fatura Kalemleri ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS fatura_kalemleri (
+                            id SERIAL PRIMARY KEY, 
+                            fatura_id INTEGER NOT NULL REFERENCES faturalar(id) ON DELETE CASCADE, 
+                            urun_id INTEGER NOT NULL REFERENCES tbl_stoklar(id), 
+                            miktar NUMERIC(15, 2) NOT NULL,
+                            birim_fiyat NUMERIC(15, 2) NOT NULL, 
+                            kdv_orani NUMERIC(5, 2) NOT NULL, 
+                            kdv_tutari NUMERIC(15, 2) NOT NULL, 
+                            kalem_toplam_kdv_haric NUMERIC(15, 2) NOT NULL, 
+                            kalem_toplam_kdv_dahil NUMERIC(15, 2) NOT NULL,
+                            alis_fiyati_fatura_aninda NUMERIC(15, 2) DEFAULT 0.0,
+                            kdv_orani_fatura_aninda NUMERIC(5, 2) DEFAULT 0.0,
+                            iskonto_yuzde_1 NUMERIC(5, 2) DEFAULT 0.0,
+                            iskonto_yuzde_2 NUMERIC(5, 2) DEFAULT 0.0,
+                            iskonto_tipi VARCHAR(50) DEFAULT 'YOK',
+                            iskonto_degeri NUMERIC(15, 2) DEFAULT 0.0,
+                            olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+
+        # --- Gelir/Gider Sınıflandırmaları ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS gelir_siniflandirmalari(
+                                id SERIAL PRIMARY KEY,
+                                siniflandirma_adi VARCHAR(255) UNIQUE NOT NULL,
+                                olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                                son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS gider_siniflandirmalari(
+                                id SERIAL PRIMARY KEY,
+                                siniflandirma_adi VARCHAR(255) UNIQUE NOT NULL,
+                                olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                                son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+                                 
+        # --- Gelir & Gider ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS gelir_gider (
+                            id SERIAL PRIMARY KEY, 
                             tarih DATE NOT NULL, 
-                            tip TEXT CHECK(tip IN ('GELİR', 'GİDER')) NOT NULL, 
-                            tutar REAL NOT NULL, 
+                            tip VARCHAR(50) CHECK(tip IN ('GELİR', 'GİDER')) NOT NULL, 
+                            tutar NUMERIC(15, 2) NOT NULL, 
                             aciklama TEXT,
-                            kaynak TEXT DEFAULT 'MANUEL',
+                            kaynak VARCHAR(255) DEFAULT 'MANUEL',
                             kaynak_id INTEGER,
-                            kasa_banka_id INTEGER REFERENCES kasalar_bankalar(id)
-                            )''') 
-        self._add_column_if_not_exists('gelir_gider', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('gelir_gider', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('gelir_gider', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('gelir_gider', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('gelir_gider', 'kaynak', 'TEXT DEFAULT \'MANUEL\'')
-        self._add_column_if_not_exists('gelir_gider', 'kaynak_id', 'INTEGER')
-        self._add_column_if_not_exists('gelir_gider', 'kasa_banka_id', 'INTEGER')
-        self._add_column_if_not_exists('gelir_gider', 'gelir_siniflandirma_id', 'INTEGER')
-        self._add_column_if_not_exists('gelir_gider', 'gider_siniflandirma_id', 'INTEGER')
-
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_gelir_gider_tarih_tip ON gelir_gider (tarih, tip);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_gelir_gider_kaynak ON gelir_gider (kaynak, kaynak_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_gelir_gider_kasa_banka_id ON gelir_gider (kasa_banka_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_gelir_gider_gelir_siniflandirma_id ON gelir_gider (gelir_siniflandirma_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_gelir_gider_gider_siniflandirma_id ON gelir_gider (gider_siniflandirma_id);")
-
-        self.c.execute('''CREATE TABLE IF NOT EXISTS cari_hareketler
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                            kasa_banka_id INTEGER REFERENCES kasalar_bankalar(id),
+                            gelir_siniflandirma_id INTEGER REFERENCES gelir_siniflandirmalari(id) ON DELETE SET NULL,
+                            gider_siniflandirma_id INTEGER REFERENCES gider_siniflandirmalari(id) ON DELETE SET NULL,
+                            olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+        
+        # --- Cari Hareketler ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS cari_hareketler (
+                            id SERIAL PRIMARY KEY, 
                             tarih DATE NOT NULL, 
-                            cari_tip TEXT CHECK(cari_tip IN ('MUSTERI', 'TEDARIKCI')) NOT NULL, 
+                            cari_tip VARCHAR(50) CHECK(cari_tip IN ('MUSTERI', 'TEDARIKCI')) NOT NULL, 
                             cari_id INTEGER NOT NULL, 
-                            islem_tipi TEXT CHECK(islem_tipi IN ('ALACAK', 'BORC', 'TAHSILAT', 'ODEME')) NOT NULL, 
-                            tutar REAL NOT NULL, 
+                            islem_tipi VARCHAR(50) CHECK(islem_tipi IN ('ALACAK', 'BORC', 'TAHSILAT', 'ODEME')) NOT NULL, 
+                            tutar NUMERIC(15, 2) NOT NULL, 
                             aciklama TEXT,
                             referans_id INTEGER,
-                            referans_tip TEXT,
-                            kasa_banka_id INTEGER REFERENCES kasalar_bankalar(id)
-                            )''') 
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_cari_hareketler_cari_tarih_tip ON cari_hareketler (cari_id, cari_tip, tarih, islem_tipi);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_cari_hareketler_referans ON cari_hareketler (referans_id, referans_tip);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_cari_hareketler_kasa_banka_id ON cari_hareketler (kasa_banka_id);")
-        self._add_column_if_not_exists('cari_hareketler', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('cari_hareketler', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('cari_hareketler', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('cari_hareketler', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('cari_hareketler', 'referans_id', 'INTEGER')
-        self._add_column_if_not_exists('cari_hareketler', 'referans_tip', 'TEXT')
-        self._add_column_if_not_exists('cari_hareketler', 'kasa_banka_id', 'INTEGER')
+                            referans_tip VARCHAR(255),
+                            kasa_banka_id INTEGER REFERENCES kasalar_bankalar(id),
+                            olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
 
-        self.c.execute('''CREATE TABLE IF NOT EXISTS siparisler
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                            siparis_no TEXT UNIQUE NOT NULL, 
+        # --- Siparişler ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS siparisler (
+                            id SERIAL PRIMARY KEY, 
+                            siparis_no VARCHAR(255) UNIQUE NOT NULL, 
                             tarih DATE NOT NULL, 
-                            cari_tip TEXT CHECK(cari_tip IN ('MUSTERI', 'TEDARIKCI')) NOT NULL, 
+                            cari_tip VARCHAR(50) CHECK(cari_tip IN ('MUSTERI', 'TEDARIKCI')) NOT NULL, 
                             cari_id INTEGER NOT NULL, 
-                            toplam_tutar REAL NOT NULL, 
-                            durum TEXT CHECK(durum IN ('BEKLEMEDE', 'TAMAMLANDI', 'İPTAL_EDİLDİ')) NOT NULL)''') # Düzeltildi
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_siparisler_tarih_tip_cari ON siparisler (tarih, cari_tip, cari_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_siparisler_durum ON siparisler (durum);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_siparisler_siparis_no ON siparisler (siparis_no);")
-        self._add_column_if_not_exists('siparisler', 'fatura_id', 'INTEGER')
-        self._add_column_if_not_exists('siparisler', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('siparisler', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('siparisler', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('siparisler', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('siparisler', 'siparis_notlari', 'TEXT')
-        self._add_column_if_not_exists('siparisler', 'onay_durumu', 'TEXT DEFAULT \'ONAY_BEKLIYOR\'')
-        self._add_column_if_not_exists('siparisler', 'teslimat_tarihi', 'DATE')
-        self._add_column_if_not_exists('siparisler', 'genel_iskonto_tipi', 'TEXT DEFAULT \'YOK\'')
-        self._add_column_if_not_exists('siparisler', 'genel_iskonto_degeri', 'REAL DEFAULT 0.0')
+                            toplam_tutar NUMERIC(15, 2) NOT NULL, 
+                            durum VARCHAR(50) CHECK(durum IN ('BEKLEMEDE', 'TAMAMLANDI', 'İPTAL_EDİLDİ', 'KISMİ_TESLİMAT')) NOT NULL,
+                            fatura_id INTEGER,
+                            siparis_notlari TEXT,
+                            onay_durumu VARCHAR(50) DEFAULT 'ONAY_BEKLIYOR',
+                            teslimat_tarihi DATE,
+                            genel_iskonto_tipi VARCHAR(50) DEFAULT 'YOK',
+                            genel_iskonto_degeri NUMERIC(15, 2) DEFAULT 0.0,
+                            olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+        
+        # --- Sipariş Kalemleri ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS siparis_kalemleri (
+                            id SERIAL PRIMARY KEY, 
+                            siparis_id INTEGER NOT NULL REFERENCES siparisler(id) ON DELETE CASCADE, 
+                            urun_id INTEGER NOT NULL REFERENCES tbl_stoklar(id), 
+                            miktar NUMERIC(15, 2) NOT NULL, 
+                            birim_fiyat NUMERIC(15, 2) NOT NULL, 
+                            kdv_orani NUMERIC(5, 2) NOT NULL, 
+                            kdv_tutari NUMERIC(15, 2) NOT NULL, 
+                            kalem_toplam_kdv_haric NUMERIC(15, 2) NOT NULL, 
+                            kalem_toplam_kdv_dahil NUMERIC(15, 2) NOT NULL,
+                            alis_fiyati_siparis_aninda NUMERIC(15, 2) DEFAULT 0.0,
+                            satis_fiyati_siparis_aninda NUMERIC(15, 2) DEFAULT 0.0,
+                            iskonto_yuzde_1 NUMERIC(5, 2) DEFAULT 0.0,
+                            iskonto_yuzde_2 NUMERIC(5, 2) DEFAULT 0.0,
+                            olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
 
-        self.c.execute('''CREATE TABLE IF NOT EXISTS siparis_kalemleri
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                            siparis_id INTEGER NOT NULL, 
-                            urun_id INTEGER NOT NULL, 
-                            miktar REAL NOT NULL, 
-                            birim_fiyat REAL NOT NULL, 
-                            kdv_orani REAL NOT NULL, 
-                            kdv_tutari REAL NOT NULL, 
-                            kalem_toplam_kdv_haric REAL NOT NULL, 
-                            kalem_toplam_kdv_dahil REAL NOT NULL, 
-                            FOREIGN KEY (siparis_id) REFERENCES siparisler(id) ON DELETE CASCADE, 
-                            FOREIGN KEY (urun_id) REFERENCES tbl_stoklar(id))''')
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_siparis_kalemleri_siparis_urun ON siparis_kalemleri (siparis_id, urun_id);")
-        self.c.execute("CREATE INDEX IF NOT EXISTS idx_siparis_kalemleri_urun_id ON siparis_kalemleri (urun_id);")
-        self._add_column_if_not_exists('siparis_kalemleri', 'alis_fiyati_siparis_aninda', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('siparis_kalemleri', 'satis_fiyati_siparis_aninda', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('siparis_kalemleri', 'iskonto_yuzde_1', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('siparis_kalemleri', 'iskonto_yuzde_2', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('siparis_kalemleri', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('siparis_kalemleri', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('siparis_kalemleri', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('siparis_kalemleri', 'son_guncelleyen_kullanici_id', 'INTEGER')
-
-        self.c.execute('''CREATE TABLE IF NOT EXISTS teklifler
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                            teklif_no TEXT UNIQUE NOT NULL, 
+        # --- Stok Hareketleri ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS stok_hareketleri (
+                            id SERIAL PRIMARY KEY, 
+                            urun_id INTEGER NOT NULL REFERENCES tbl_stoklar(id) ON DELETE CASCADE, 
+                            tarih DATE NOT NULL, 
+                            islem_tipi VARCHAR(255) NOT NULL, 
+                            miktar NUMERIC(15, 2) NOT NULL, 
+                            onceki_stok NUMERIC(15, 2) NOT NULL,
+                            sonraki_stok NUMERIC(15, 2) NOT NULL,
+                            aciklama TEXT,
+                            kaynak VARCHAR(255), 
+                            kaynak_id INTEGER, 
+                            olusturma_tarihi_saat TIMESTAMP,
+                            olusturan_kullanici_id INTEGER
+                           )''')
+                           
+        # --- Teklifler ve Teklif Kalemleri ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS teklifler (
+                            id SERIAL PRIMARY KEY, 
+                            teklif_no VARCHAR(255) UNIQUE NOT NULL, 
                             tarih DATE NOT NULL, 
                             musteri_id INTEGER NOT NULL, 
-                            toplam_tutar REAL NOT NULL, 
-                            durum TEXT CHECK(durum IN ('BEKLEMEDE', 'KABUL EDİLDİ', 'REDDEDİLDİ')) NOT NULL, 
-                            FOREIGN KEY (musteri_id) REFERENCES musteriler(id) ON DELETE CASCADE)''')
+                            toplam_tutar NUMERIC(15, 2) NOT NULL, 
+                            durum VARCHAR(50) CHECK(durum IN ('BEKLEMEDE', 'KABUL EDİLDİ', 'REDDEDİLDİ')) NOT NULL,
+                            siparis_id INTEGER,
+                            teklif_notlari TEXT,
+                            genel_iskonto_tipi VARCHAR(50) DEFAULT 'YOK',
+                            genel_iskonto_degeri NUMERIC(15, 2) DEFAULT 0.0,
+                            gecerlilik_tarihi DATE,
+                            olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
 
-        self._add_column_if_not_exists('teklifler', 'siparis_id', 'INTEGER')
-        self._add_column_if_not_exists('teklifler', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('teklifler', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('teklifler', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('teklifler', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        self._add_column_if_not_exists('teklifler', 'teklif_notlari', 'TEXT')
-        self._add_column_if_not_exists('teklifler', 'genel_iskonto_tipi', 'TEXT DEFAULT \'YOK\'')
-        self._add_column_if_not_exists('teklifler', 'genel_iskonto_degeri', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('teklifler', 'gecerlilik_tarihi', 'DATE')
-        
-        self.c.execute('''CREATE TABLE IF NOT EXISTS urun_kategorileri
-                                (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                kategori_adi TEXT UNIQUE NOT NULL)''')
-        self._add_column_if_not_exists('urun_kategorileri', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('urun_kategorileri', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('urun_kategorileri', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('urun_kategorileri', 'son_guncelleyen_kullanici_id', 'INTEGER')
-
-        self.c.execute('''CREATE TABLE IF NOT EXISTS urun_markalari
-                                (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                marka_adi TEXT UNIQUE NOT NULL)''')
-        self._add_column_if_not_exists('urun_markalari', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('urun_markalari', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('urun_markalari', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('urun_markalari', 'son_guncelleyen_kullanici_id', 'INTEGER')
-
-        self.c.execute('''CREATE TABLE IF NOT EXISTS teklif_kalemleri
-                            (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                            teklif_id INTEGER NOT NULL, 
-                            urun_id INTEGER NOT NULL, 
-                            miktar REAL NOT NULL,
-                            birim_fiyat REAL NOT NULL, 
-                            kdv_orani REAL NOT NULL, 
-                            kdv_tutari REAL NOT NULL, 
-                            kalem_toplam_kdv_haric REAL NOT NULL, 
-                            kalem_toplam_kdv_dahil REAL NOT NULL, 
-                            FOREIGN KEY (teklif_id) REFERENCES teklifler(id) ON DELETE CASCADE, 
-                            FOREIGN KEY (urun_id) REFERENCES tbl_stoklar(id))''')
-        self._add_column_if_not_exists('teklif_kalemleri', 'alis_fiyati_teklif_aninda', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('teklif_kalemleri', 'satis_fiyati_teklif_aninda', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('teklif_kalemleri', 'iskonto_yuzde_1', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('teklif_kalemleri', 'iskonto_yuzde_2', 'REAL DEFAULT 0.0')
-        self._add_column_if_not_exists('teklif_kalemleri', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('teklif_kalemleri', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('teklif_kalemleri', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('teklif_kalemleri', 'son_guncelleyen_kullanici_id', 'INTEGER')
-        
-        self.c.execute('''CREATE TABLE IF NOT EXISTS gelir_siniflandirmalari
-                                (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                siniflandirma_adi TEXT UNIQUE NOT NULL)''')
-        self._add_column_if_not_exists('gelir_siniflandirmalari', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('gelir_siniflandirmalari', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('gelir_siniflandirmalari', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('gelir_siniflandirmalari', 'son_guncelleyen_kullanici_id', 'INTEGER')
-
-        self.c.execute('''CREATE TABLE IF NOT EXISTS gider_siniflandirmalari
-                                (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                siniflandirma_adi TEXT UNIQUE NOT NULL)''')
-        self._add_column_if_not_exists('gider_siniflandirmalari', 'olusturma_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('gider_siniflandirmalari', 'olusturan_kullanici_id', 'INTEGER') # Buradaki "o" harfi düzeltildi
-        self._add_column_if_not_exists('gider_siniflandirmalari', 'son_guncelleme_tarihi_saat', 'TEXT')
-        self._add_column_if_not_exists('gider_siniflandirmalari', 'son_guncelleyen_kullanici_id', 'INTEGER')
-
-        self.conn.commit()
-        
+        cursor.execute('''CREATE TABLE IF NOT EXISTS teklif_kalemleri (
+                            id SERIAL PRIMARY KEY, 
+                            teklif_id INTEGER NOT NULL REFERENCES teklifler(id) ON DELETE CASCADE, 
+                            urun_id INTEGER NOT NULL REFERENCES tbl_stoklar(id), 
+                            miktar NUMERIC(15, 2) NOT NULL,
+                            birim_fiyat NUMERIC(15, 2) NOT NULL, 
+                            kdv_orani NUMERIC(5, 2) NOT NULL, 
+                            kdv_tutari NUMERIC(15, 2) NOT NULL, 
+                            kalem_toplam_kdv_haric NUMERIC(15, 2) NOT NULL, 
+                            kalem_toplam_kdv_dahil NUMERIC(15, 2) NOT NULL,
+                            alis_fiyati_teklif_aninda NUMERIC(15, 2) DEFAULT 0.0,
+                            satis_fiyati_teklif_aninda NUMERIC(15, 2) DEFAULT 0.0,
+                            iskonto_yuzde_1 NUMERIC(5, 2) DEFAULT 0.0,
+                            iskonto_yuzde_2 NUMERIC(5, 2) DEFAULT 0.0,
+                            olusturma_tarihi_saat TIMESTAMP, olusturan_kullanici_id INTEGER,
+                            son_guncelleme_tarihi_saat TIMESTAMP, son_guncelleyen_kullanici_id INTEGER
+                           )''')
+                
     def sirket_bilgilerini_yukle(self):
         defaults = {
             "sirket_adi": "ŞİRKET ADINIZ",
@@ -1729,18 +2782,6 @@ class OnMuhasebe:
                 self.c.execute("INSERT INTO sirket_ayarlari (anahtar, deger) VALUES (?,?)", (anahtar, varsayilan_deger))
         return ayarlar
 
-    def sirket_bilgilerini_kaydet(self, yeni_bilgiler):
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-            for anahtar, deger in yeni_bilgiler.items():
-                self.c.execute("UPDATE sirket_ayarlari SET deger=? WHERE anahtar=?", (deger, anahtar))
-            self.conn.commit()
-            self.sirket_bilgileri = self.sirket_bilgilerini_yukle() # Bilgileri yeniden yükle
-            return True, "Şirket bilgileri başarıyla kaydedildi." # Mesaj eklendi
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Şirket bilgileri kaydedilirken hata oluştu: {e}"
-
     def ensure_admin_user(self):
         try:
             self.c.execute("SELECT COUNT(*) FROM kullanicilar WHERE yetki='admin'")
@@ -1754,87 +2795,168 @@ class OnMuhasebe:
             return True, "Varsayılan 'admin' kullanıcısı zaten mevcut."
         except Exception as e:
             return False, f"Admin kullanıcısı oluşturulurken/kontrol edilirken hata: {e}"
-        
+
+    def sirket_bilgilerini_yukle(self):
+        try:
+            sirket = self._db_session.query(SirketBilgileri).first()
+            if not sirket:
+                return {} # Boş dictionary dön
+            return {
+                "sirket_adi": sirket.sirket_adi,
+                "sirket_adresi": sirket.sirket_adresi,
+                "sirket_telefonu": sirket.sirket_telefonu,
+                "sirket_email": sirket.sirket_email,
+                "sirket_vergi_dairesi": sirket.sirket_vergi_dairesi,
+                "sirket_vergi_no": sirket.sirket_vergi_no,
+                "sirket_logo_yolu": sirket.sirket_logo_yolu
+            }
+        except Exception as e:
+            logging.error(f"Şirket bilgileri yüklenirken hata: {e}\n{traceback.format_exc()}")
+            return {}
+
+    def sirket_bilgilerini_kaydet(self, bilgiler):
+        try:
+            sirket = self._db_session.query(SirketBilgileri).first()
+            if not sirket:
+                sirket = SirketBilgileri()
+                self._db_session.add(sirket)
+            
+            for key, value in bilgiler.items():
+                setattr(sirket, key, value)
+            
+            sirket.son_guncelleme_tarihi_saat = datetime.now() # TIMESTAMP
+            self._db_session.commit()
+            self._db_session.refresh(sirket)
+            return True, "Şirket bilgileri başarıyla kaydedildi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Şirket bilgileri kaydedilirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Şirket bilgileri kaydedilirken bir hata oluştu: {e}"
+
+    def _ensure_sirket_bilgileri(self):
+        """Varsayılan şirket bilgilerini oluşturur."""
+        try:
+            if self._db_session.query(SirketBilgileri).count() == 0:
+                default_sirket = SirketBilgileri(
+                    sirket_adi="DEMO ŞİRKETİ",
+                    olusturma_tarihi_saat=datetime.now()
+                )
+                self._db_session.add(default_sirket)
+                self._db_session.commit()
+                self._db_session.refresh(default_sirket)
+                logging.info("Varsayılan 'DEMO ŞİRKETİ' oluşturuldu.")
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Varsayılan şirket bilgileri oluşturulurken hata: {e}\n{traceback.format_exc()}")
+
     def _hash_sifre(self, sifre):
         return hashlib.sha256(sifre.encode()).hexdigest()
 
     def kullanici_dogrula(self, kullanici_adi, sifre):
-        self.c.execute("SELECT id,kullanici_adi,yetki FROM kullanicilar WHERE kullanici_adi=? AND sifre=?", 
-                       (kullanici_adi, self._hash_sifre(sifre)))
-        return self.c.fetchone()
-
-    def kullanici_ekle(self, kullanici_adi, sifre, yetki):
         try:
-            current_time = self.get_current_datetime_str()
-            olusturan_id = self._get_current_user_id() # Değişiklik
-            # Sütunlar ve değerler aynı sayıda olmalı
-            self.c.execute("INSERT INTO kullanicilar (kullanici_adi,sifre,yetki,olusturma_tarihi_saat,olusturan_kullanici_id) VALUES (?,?,?,?,?)",
-                       (kullanici_adi, self._hash_sifre(sifre), yetki, current_time, olusturan_id))
-            self.conn.commit()
-            return True, "Kullanıcı başarıyla eklendi."
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu kullanıcı adı zaten mevcut."
+            db_kullanici = self._db_session.query(Kullanici).filter(Kullanici.kullanici_adi == kullanici_adi).first()
+            if db_kullanici and db_kullanici.sifre == self._hash_sifre(sifre):
+                db_kullanici.son_giris_tarihi_saat = datetime.now() # TIMESTAMP
+                self._db_session.commit()
+                self._db_session.refresh(db_kullanici)
+                return (db_kullanici.id, db_kullanici.kullanici_adi, db_kullanici.yetki)
+            return None
         except Exception as e:
-            self.conn.rollback()
-            return False, f"Kullanıcı ekleme sırasında bir hata oluştu: {e}"
+            logging.error(f"Kullanıcı doğrulama hatası: {e}\n{traceback.format_exc()}")
+            return None
 
-    def kullanici_guncelle_sifre_yetki(self, user_id, sifre_hashed, yetki):
+    def kullanici_ekle(self, kullanici_adi, sifre, yetki="kullanici"):
         try:
-            self.conn.execute("BEGIN TRANSACTION")
-            current_time = self.get_current_datetime_str()
-            guncelleyen_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("UPDATE kullanicilar SET sifre=?, yetki=?, son_guncelleme_tarihi_saat=?, son_guncelleyen_kullanici_id=? WHERE id=?",
-                           (sifre_hashed, yetki, current_time, guncelleyen_id, user_id))
-            self.conn.commit()
-
-            return True, "Kullanıcı şifre/yetki bilgileri başarıyla güncellendi."
-
+            hashed_sifre = self._hash_sifre(sifre)
+            # SQLAlchemy ORM ile sorgu
+            db_kullanici = self._db_session.query(Kullanici).filter(Kullanici.kullanici_adi == kullanici_adi).first()
+            if db_kullanici:
+                return False, "Bu kullanıcı adı zaten mevcut."
+            
+            yeni_kullanici = Kullanici(
+                kullanici_adi=kullanici_adi,
+                sifre=hashed_sifre,
+                yetki=yetki,
+                olusturma_tarihi_saat=datetime.now(), # TIMESTAMP
+                olusturan_kullanici_id=self._get_current_user_id()
+            )
+            self._db_session.add(yeni_kullanici)
+            self._db_session.commit()
+            self._db_session.refresh(yeni_kullanici) # Yeni eklenen objeyi güncelleyerek ID'sini alırız
+            return True, f"'{kullanici_adi}' kullanıcısı başarıyla eklendi."
         except Exception as e:
-            self.conn.rollback()
-            return False, f"Kullanıcı şifre/yetki güncellenirken hata: {e}"
+            self._db_session.rollback()
+            logging.error(f"Kullanıcı eklenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Kullanıcı eklenirken bir hata oluştu: {e}"
+        
+    def kullanici_guncelle_sifre_yetki(self, user_id, hashed_sifre=None, yetki=None):
+        try:
+            db_user = self._db_session.query(Kullanici).filter(Kullanici.id == user_id).first()
+            if not db_user:
+                return False, "Kullanıcı bulunamadı."
+            
+            if hashed_sifre:
+                db_user.sifre = hashed_sifre
+            if yetki:
+                db_user.yetki = yetki
+            
+            db_user.son_guncelleme_tarihi_saat = datetime.now() # TIMESTAMP
+            db_user.son_guncelleyen_kullanici_id = self._get_current_user_id()
+            self._db_session.commit()
+            self._db_session.refresh(db_user)
+            return True, f"Kullanıcı bilgileri başarıyla güncellendi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Kullanıcı bilgileri güncellenirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Kullanıcı bilgileri güncellenirken bir hata oluştu: {e}"
 
     def kullanici_listele(self):
-        self.c.execute("SELECT id,kullanici_adi,yetki FROM kullanicilar")
-        return self.c.fetchall()
-
+        try:
+            return self._db_session.query(Kullanici).all()
+        except Exception as e:
+            logging.error(f"Kullanıcı listelenirken hata: {e}\n{traceback.format_exc()}")
+            return []
+        
     def kullanici_sil(self, user_id):
         try:
-            self.conn.execute("BEGIN TRANSACTION")
-            # Ana admin kullanıcısının silinmesini engelle
-            self.c.execute("SELECT kullanici_adi,yetki FROM kullanicilar WHERE id=?",(user_id,))
-            user_data = self.c.fetchone()
-            if user_data and user_data['kullanici_adi']=="admin" and user_data['yetki']=="admin":
-                self.conn.rollback()
-                return False, "Ana 'admin' kullanıcısı silinemez."
+            if self.app and hasattr(self.app, 'current_user') and self.app.current_user and user_id == self.app.current_user[0]:
+                return False, "Kendi kullanıcı hesabınızı silemezsiniz."
+
+            db_user = self._db_session.query(Kullanici).filter(Kullanici.id == user_id).first()
+            if db_user is None:
+                return False, "Kullanıcı bulunamadı."
             
-            self.c.execute("DELETE FROM kullanicilar WHERE id=?",(user_id,))
-            self.conn.commit()
-            return self.c.rowcount > 0 # Silme başarılıysa True döner
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Kullanıcı silme sırasında bir hata oluştu: {e}"
+            # Admin kullanıcı sayısını kontrol et (en az 1 admin olmalı)
+            if db_user.yetki == 'admin':
+                admin_count = self._db_session.query(Kullanici).filter(Kullanici.yetki == 'admin').count()
+                if admin_count <= 1:
+                    return False, "Sistemde en az bir admin kullanıcısı bulunmalıdır. Bu admin kullanıcısını silemezsiniz."
 
-    def musteri_ekle(self, kod, ad, telefon, adres, vergi_dairesi, vergi_no):
-        if not (kod and ad):
-            return False, "Müşteri Kodu ve Adı zorunludur."
-        if kod == self.PERAKENDE_MUSTERI_KODU:
-            return False, f"'{self.PERAKENDE_MUSTERI_KODU}' özel bir koddur ve manuel olarak eklenemez/kullanılamaz."
+            self._db_session.delete(db_user)
+            self._db_session.commit()
+            return True, f"'{db_user.kullanici_adi}' kullanıcısı başarıyla silindi."
+        except Exception as e:
+            self._db_session.rollback()
+            logging.error(f"Kullanıcı silinirken hata: {e}\n{traceback.format_exc()}")
+            return False, f"Kullanıcı silinirken bir hata oluştu: {e}"
+
+    def _ensure_admin_user(self):
+        """Uygulama başladığında varsayılan bir admin kullanıcısı oluşturur."""
         try:
-            self.conn.execute("BEGIN TRANSACTION")
-            current_time = self.get_current_datetime_str()
-            olusturan_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("INSERT INTO musteriler (ad, kod, telefon, adres, vergi_dairesi, vergi_no, olusturma_tarihi_saat, olusturan_kullanici_id) VALUES (?,?,?,?,?,?,?,?)",
-                           (ad, kod, telefon, adres, vergi_dairesi, vergi_no, current_time, olusturan_id))
-            self.conn.commit()
-            return True, self.c.lastrowid # Başarı durumu ve ID
-
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu müşteri kodu zaten mevcut."
+            if self._db_session.query(Kullanici).count() == 0:
+                admin_user = Kullanici(
+                    kullanici_adi="admin",
+                    sifre=self._hash_sifre("admin"), # Varsayılan şifre "admin"
+                    yetki="admin",
+                    olusturma_tarihi_saat=datetime.now()
+                )
+                self._db_session.add(admin_user)
+                self._db_session.commit()
+                self._db_session.refresh(admin_user)
+                logging.info("Varsayılan 'admin' kullanıcısı oluşturuldu.")
         except Exception as e:
-            self.conn.rollback()
-            return False, f"Müşteri ekleme sırasında hata: {e}"
+            self._db_session.rollback()
+            logging.error(f"Varsayılan admin kullanıcısı oluşturulurken hata: {e}\n{traceback.format_exc()}")
 
     def get_cari_list_summary_data(self, cari_tip, arama_terimi=None, limit=None, offset=None, perakende_haric=False):
         """
@@ -2047,28 +3169,6 @@ class OnMuhasebe:
         self.c.execute(q, p)
         return self.c.fetchone()[0]
 
-    def get_next_stok_kodu(self, length=10):
-        """
-        Mevcut stok kodları arasında en yüksek sayısal değeri bulur ve bir sonraki kodu döndürür.
-        Belirtilen uzunluğa kadar baştan sıfırlarla doldurur.
-        """
-        self.c.execute("SELECT urun_kodu FROM tbl_stoklar")
-        existing_codes = self.c.fetchall()
-        
-        max_numeric_code = 0
-        for code_tuple in existing_codes:
-            code = code_tuple[0]
-            if code.isdigit():
-                try:
-                    numeric_code = int(code)
-                    if numeric_code > max_numeric_code:
-                        max_numeric_code = numeric_code
-                except ValueError:
-                    pass
-        
-        next_code = max_numeric_code + 1
-        return str(next_code).zfill(length)
-
     def get_next_siparis_no(self, prefix="", length=6): # prefix eklendi (örneğin "MS", "AS")
         """
         Mevcut sipariş kodları arasında en yüksek sayısal değeri bulur ve bir sonraki kodu döndürür.
@@ -2137,38 +3237,6 @@ class OnMuhasebe:
             self.conn.rollback()
             return False, f"Sipariş oluşturulurken hata: {e}\n{traceback.format_exc()}"
         
-    def _ensure_default_urun_birimi(self):
-        try:
-            self.c.execute("SELECT id FROM urun_birimleri WHERE birim_adi=?", ("Adet",))
-            result = self.c.fetchone()
-            if result:
-                return True, "Adet ürün birimi bulundu."
-            else:
-                olusturan_id = 1 # Genellikle 'admin' kullanıcısının ID'si
-                current_time = self.get_current_datetime_str()
-                self.c.execute("INSERT INTO urun_birimleri (birim_adi, olusturma_tarihi_saat, olusturan_kullanici_id) VALUES (?,?,?)",
-                               ("Adet", current_time, olusturan_id))
-                self.conn.commit()
-                return True, "Adet ürün birimi başarıyla oluşturuldu."
-        except Exception as e:
-            return False, f"Adet ürün birimi oluşturulurken/kontrol edilirken hata: {e}"
-
-    def _ensure_default_ulke(self):
-        try:
-            self.c.execute("SELECT id FROM urun_ulkeleri WHERE ulke_adi=?", ("Türkiye",))
-            result = self.c.fetchone()
-            if result:
-                return True, "Türkiye ülkesi bulundu."
-            else:
-                olusturan_id = 1 # Genellikle 'admin' kullanıcısının ID'si
-                current_time = self.get_current_datetime_str()
-                self.c.execute("INSERT INTO urun_ulkeleri (ulke_adi, olusturma_tarihi_saat, olusturan_kullanici_id) VALUES (?,?,?)",
-                               ("Türkiye", current_time, olusturan_id))
-                self.conn.commit()
-                return True, "Türkiye ülkesi başarıyla oluşturuldu."
-        except Exception as e:
-            return False, f"Türkiye ülkesi oluşturulurken/kontrol edilirken hata: {e}"
-
     def siparis_guncelle(self, siparis_id, yeni_siparis_no, yeni_siparis_tipi, yeni_cari_id, yeni_toplam_tutar, yeni_durum, yeni_kalemler, yeni_siparis_notlari=None, yeni_teslimat_tarihi=None, genel_iskonto_tipi='YOK', genel_iskonto_degeri=0.0):
         try:
             self.conn.execute("BEGIN TRANSACTION")
@@ -2257,117 +3325,6 @@ class OnMuhasebe:
         """
         self.c.execute("SELECT sk.id, sk.siparis_id, sk.urun_id, sk.miktar, sk.birim_fiyat, sk.kdv_orani, sk.kdv_tutari, sk.kalem_toplam_kdv_haric, sk.kalem_toplam_kdv_dahil, sk.alis_fiyati_siparis_aninda, sk.satis_fiyati_siparis_aninda, sk.iskonto_yuzde_1, sk.iskonto_yuzde_2, sk.olusturma_tarihi_saat, sk.olusturan_kullanici_id, sk.son_guncelleme_tarihi_saat, sk.son_guncelleyen_kullanici_id FROM siparis_kalemleri sk JOIN tbl_stoklar s ON sk.urun_id=s.id WHERE sk.siparis_id=?", (siparis_id,))
         return self.c.fetchall()
-
-    def musteri_guncelle(self, id, kod, ad, telefon, adres, vergi_dairesi, vergi_no):
-        if not (kod and ad):
-            return False, "Müşteri Kodu ve Adı zorunludur."
-
-        if str(id) == str(self.perakende_musteri_id) and kod != self.PERAKENDE_MUSTERI_KODU:
-            kod = self.PERAKENDE_MUSTERI_KODU
-        elif kod == self.PERAKENDE_MUSTERI_KODU and str(id) != str(self.perakende_musteri_id):
-            return False, f"'{self.PERAKENDE_MUSTERI_KODU}' özel bir koddur ve başka bir müşteriye atanamaz."
-
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-            current_time = self.get_current_datetime_str()
-            guncelleyen_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("UPDATE musteriler SET kod=?,ad=?,telefon=?,adres=?,vergi_dairesi=?,vergi_no=?,son_guncelleme_tarihi_saat=?,son_guncelleyen_kullanici_id=? WHERE id=?",
-                           (kod,ad,telefon,adres,vergi_dairesi,vergi_no,current_time,guncelleyen_id,id))
-            self.conn.commit()
-
-            # ### HATA DÜZELTMESİ BURADA ###
-            # Metot artık her zaman iki değer döndürecek.
-            if self.c.rowcount > 0:
-                return True, "Müşteri bilgileri başarıyla güncellendi."
-            else:
-                return True, "Müşteri bilgileri güncellendi (değişiklik yapılmadı)."
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu müşteri kodu başka bir müşteri için kullanılıyor."
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Müşteri güncelleme sırasında hata: {e}"
-
-    def musteri_listesi_al(self, arama_terimi=None, perakende_haric=False, limit=None, offset=None):
-        query = """
-            SELECT id, ad, soyad, kod, vergi_dairesi, vergi_no, adres, telefon, email, notlar
-            FROM musteriler
-        """
-        params = []
-        conditions = []
-
-        if perakende_haric:
-            conditions.append("kod != ?")
-            params.append(self.PERAKENDE_MUSTERI_KODU)
-        
-        if arama_terimi:
-            # Arama terimini Python tarafında normalleştir
-            normalized_term = normalize_turkish_chars(arama_terimi)
-            term_wildcard = f"%{normalized_term}%" # LIKE için %
-
-            # SQLite'da direkt olarak TR karşılığı olmadığı için her sütun için replace zinciri kullanacağız.
-            # Bu performanslı bir çözüm değildir, sadece arama yeteneğini genişletir.
-            # Daha iyi bir çözüm için veritabanında normalize sütunlar tutmak gerekir.
-            turkish_normalize_sql = lambda col: f"""
-                LOWER(
-                    REPLACE(
-                        REPLACE(
-                            REPLACE(
-                                REPLACE(
-                                    REPLACE(
-                                        REPLACE(
-                                            REPLACE(
-                                                REPLACE(
-                                                    REPLACE(
-                                                        REPLACE(
-                                                            REPLACE(
-                                                                REPLACE(
-                                                                    REPLACE(
-                                                                        REPLACE({col}, 'Ş', 'S'),
-                                                                    'İ', 'I'),
-                                                                'Ç', 'C'),
-                                                            'Ğ', 'G'),
-                                                        'Ö', 'O'),
-                                                    'Ü', 'U'),
-                                                'ş', 's'),
-                                            'ı', 'i'),
-                                        'ç', 'c'),
-                                    'ğ', 'g'),
-                                'ö', 'o'),
-                            'ü', 'u'),
-                        'I', 'i'), -- Büyük I'yi küçük i'ye çevir
-                    'İ', 'i')  -- Büyük İ'yi küçük i'ye çevir
-                )
-            """
-
-            search_clauses = [
-                f"{turkish_normalize_sql('kod')} LIKE ?",
-                f"{turkish_normalize_sql('ad')} LIKE ?",
-                f"{turkish_normalize_sql('soyad')} LIKE ?",
-                f"{turkish_normalize_sql('telefon')} LIKE ?",
-                f"{turkish_normalize_sql('adres')} LIKE ?",
-                f"{turkish_normalize_sql('vergi_dairesi')} LIKE ?",
-                f"{turkish_normalize_sql('vergi_no')} LIKE ?"
-            ]
-            
-            conditions.append(f"({ ' OR '.join(search_clauses) })")
-            params.extend([term_wildcard] * len(search_clauses))
-
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-
-        query += " ORDER BY ad ASC"
-
-        if limit is not None:
-            query += " LIMIT ?"
-            params.append(limit)
-        if offset is not None:
-            query += " OFFSET ?"
-            params.append(offset)
-
-        self.c.execute(query, params)
-        return self.c.fetchall()
-
 
     def get_musteri_sayisi(self, arama_terimi="", perakende_haric=False):
         """
@@ -2458,524 +3415,7 @@ class OnMuhasebe:
             
         self.c.execute(query, params)
         return self.c.fetchone()[0]
-
-    def musteri_getir_by_id(self, musteri_id):
-        # 'musteri_kodu' sütunu yerine 'kod' sütununu seçiyoruz
-        self.c.execute("SELECT id,kod,ad,telefon,adres,vergi_dairesi,vergi_no FROM musteriler WHERE id=?",(musteri_id,))
-        result = self.c.fetchone()
-        if result:
-            # Debug mesajını da 'kod' sütununa göre güncelleyelim
-            logging.debug(f"Müşteri adı: {result['ad']}, Kodu: {result['kod']}")
-        return result
-
-    def musteri_sil(self, musteri_id):
-        if str(musteri_id) == str(self.perakende_musteri_id):
-            return False, "Genel perakende müşteri kaydı silinemez."
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-            # Müşteriye ait fatura, tahsilat vb. var mı kontrol et
-            self.c.execute("SELECT COUNT(*) FROM cari_hareketler WHERE cari_id=? AND cari_tip='MUSTERI'",(musteri_id,))
-            if self.c.fetchone()[0]>0:
-                self.conn.rollback()
-                return False, "Bu müşteriye ait cari hareketler (fatura, tahsilat vb.) bulunmaktadır.\nBir müşteriyi silebilmek için öncelikle tüm ilişkili kayıtların (faturalar, tahsilatlar vb.) silinmesi gerekir."
-            
-            self.c.execute("DELETE FROM musteriler WHERE id=?",(musteri_id,))
-            self.conn.commit()
-            # DÜZELTME BAŞLANGICI: Başarı durumu ve mesaj döndürüyoruz
-            if self.c.rowcount > 0:
-                return True, "Müşteri başarıyla silindi."
-            else:
-                return False, "Müşteri bulunamadı veya silinemedi."
-            
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Müşteri silme sırasında hata: {e}"
-        
-    def tedarikci_ekle(self, kod, ad, telefon, adres, vergi_dairesi, vergi_no):
-        if not (kod and ad):
-            return False, "Tedarikçi Kodu ve Adı zorunludur."
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-            current_time = self.get_current_datetime_str()
-            olusturan_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("INSERT INTO tedarikciler (tedarikci_kodu, ad, telefon, adres, vergi_dairesi, vergi_no,olusturma_tarihi_saat,olusturan_kullanici_id) VALUES (?,?,?,?,?,?,?,?)",
-                           (kod, ad, telefon, adres, vergi_dairesi, vergi_no,current_time,olusturan_id))
-            self.conn.commit()
-            # DÜZELTME BAŞLANGICI: İki değer döndürüyoruz
-            return True, self.c.lastrowid # Başarı durumu ve ID
-            # DÜZELTME BİTİŞI
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu tedarikçi kodu zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Tedarikçi ekleme sırasında hata: {e}"
-        
-    def tedarikci_guncelle(self, id, kod, ad, telefon, adres, vergi_dairesi, vergi_no):
-        if not (kod and ad):
-            return False, "Tedarikçi Kodu ve Adı zorunludur."
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-            current_time = self.get_current_datetime_str()
-            guncelleyen_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("UPDATE tedarikciler SET tedarikci_kodu=?, ad=?, telefon=?, adres=?, vergi_dairesi=?, vergi_no=?,son_guncelleme_tarihi_saat=?,son_guncelleyen_kullanici_id=? WHERE id=?",
-                           (kod, ad, telefon, adres, vergi_dairesi, vergi_no,current_time,guncelleyen_id,id))
-            self.conn.commit()
-            if self.c.rowcount > 0:
-                return True, "Tedarikçi bilgileri başarıyla güncellendi."
-            else:
-                return False, "Tedarikçi bulunamadı veya bir değişiklik yapılmadı."
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu tedarikçi kodu başka bir tedarikçi için kullanılıyor."
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Tedarikçi güncelleme sırasında hata: {e}"
-        
-    def tedarikci_listesi_al(self, arama_terimi=None, limit=None, offset=None): 
-        query = "SELECT id, tedarikci_kodu, ad, telefon, adres, vergi_dairesi, vergi_no FROM tedarikciler"
-        params = []
-        conditions = []
-        
-        if arama_terimi:
-            normalized_term = normalize_turkish_chars(arama_terimi)
-            term_wildcard = f"%{normalized_term}%"
-
-            turkish_normalize_sql = lambda col: f"""
-                LOWER(
-                    REPLACE(
-                        REPLACE(
-                            REPLACE(
-                                REPLACE(
-                                    REPLACE(
-                                        REPLACE(
-                                            REPLACE(
-                                                REPLACE(
-                                                    REPLACE(
-                                                        REPLACE(
-                                                            REPLACE(
-                                                                REPLACE(
-                                                                    REPLACE(
-                                                                        REPLACE({col}, 'Ş', 'S'),
-                                                                    'İ', 'I'),
-                                                                'Ç', 'C'),
-                                                            'Ğ', 'G'),
-                                                        'Ö', 'O'),
-                                                    'Ü', 'U'),
-                                                'ş', 's'),
-                                            'ı', 'i'),
-                                        'ç', 'c'),
-                                    'ğ', 'g'),
-                                'ö', 'o'),
-                            'ü', 'u'),
-                        'I', 'i'), -- Büyük I'yi küçük i'ye çevir
-                    'İ', 'i')  -- Büyük İ'yi küçük i'ye çevir
-                )
-            """
-            search_clauses = [
-                f"{turkish_normalize_sql('tedarikci_kodu')} LIKE ?",
-                f"{turkish_normalize_sql('ad')} LIKE ?",
-                f"{turkish_normalize_sql('telefon')} LIKE ?",
-                f"{turkish_normalize_sql('adres')} LIKE ?",
-                f"{turkish_normalize_sql('vergi_dairesi')} LIKE ?",
-                f"{turkish_normalize_sql('vergi_no')} LIKE ?"
-            ]
-            
-            conditions.append(f"({ ' OR '.join(search_clauses) })")
-            params.extend([term_wildcard] * len(search_clauses))
-
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-
-        query += " ORDER BY ad ASC"
-
-        if limit is not None:
-            query += " LIMIT ?"
-            params.append(limit)
-        if offset is not None:
-            query += " OFFSET ?"
-            params.append(offset)
-
-        self.c.execute(query, params)
-        return self.c.fetchall()
-
-    def get_tedarikci_count(self, arama_terimi=None):
-        query = "SELECT COUNT(id) FROM tedarikciler"
-        params = []
-        conditions = []
-        
-        if arama_terimi:
-            normalized_term = normalize_turkish_chars(arama_terimi)
-            term_wildcard = f"%{normalized_term}%"
-
-            turkish_normalize_sql = lambda col: f"""
-                LOWER(
-                    REPLACE(
-                        REPLACE(
-                            REPLACE(
-                                REPLACE(
-                                    REPLACE(
-                                        REPLACE(
-                                            REPLACE(
-                                                REPLACE(
-                                                    REPLACE(
-                                                        REPLACE(
-                                                            REPLACE(
-                                                                REPLACE(
-                                                                    REPLACE(
-                                                                        REPLACE({col}, 'Ş', 'S'),
-                                                                    'İ', 'I'),
-                                                                'Ç', 'C'),
-                                                            'Ğ', 'G'),
-                                                        'Ö', 'O'),
-                                                    'Ü', 'U'),
-                                                'ş', 's'),
-                                            'ı', 'i'),
-                                        'ç', 'c'),
-                                    'ğ', 'g'),
-                                'ö', 'o'),
-                            'ü', 'u'),
-                        'I', 'i'), -- Büyük I'yi küçük i'ye çevir
-                    'İ', 'i')  -- Büyük İ'yi küçük i'ye çevir
-                )
-            """
-            search_clauses = [
-                f"{turkish_normalize_sql('tedarikci_kodu')} LIKE ?",
-                f"{turkish_normalize_sql('ad')} LIKE ?",
-                f"{turkish_normalize_sql('telefon')} LIKE ?",
-                f"{turkish_normalize_sql('adres')} LIKE ?",
-                f"{turkish_normalize_sql('vergi_dairesi')} LIKE ?",
-                f"{turkish_normalize_sql('vergi_no')} LIKE ?"
-            ]
-            
-            conditions.append(f"({ ' OR '.join(search_clauses) })")
-            params.extend([term_wildcard] * len(search_clauses))
-
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-            
-        self.c.execute(query, params)
-        return self.c.fetchone()[0]
-
-    def tedarikci_getir_by_id(self, tedarikci_id):
-        self.c.execute("SELECT id, tedarikci_kodu, ad, telefon, adres, vergi_dairesi, vergi_no,olusturma_tarihi_saat,olusturan_kullanici_id,son_guncelleme_tarihi_saat,son_guncelleyen_kullanici_id FROM tedarikciler WHERE id=?", (tedarikci_id,))
-        return self.c.fetchone()
-
-    def tedarikci_sil(self, tedarikci_id):
-        try:
-            self.c.execute("BEGIN TRANSACTION")
-            self.c.execute("SELECT COUNT(*) FROM cari_hareketler WHERE cari_id=? AND cari_tip='TEDARIKCI'",(tedarikci_id,))
-            if self.c.fetchone()[0]>0:
-                self.conn.rollback()
-                return False, "Bu tedarikçiye ait cari hareketler (fatura, ödeme vb.) bulunmaktadır.\nBir tedarikçiyi silebilmek için öncelikle tüm ilişkili kayıtları silinmesi gerekir."
-            self.c.execute("DELETE FROM tedarikciler WHERE id=?", (tedarikci_id,))
-            self.conn.commit()
-            # DÜZELTME BAŞLANGICI: Başarı durumu ve mesaj döndürüyoruz
-            if self.c.rowcount > 0:
-                return True, "Tedarikçi başarıyla silindi."
-            else:
-                return False, "Tedarikçi bulunamadı veya silinemedi."
-            
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Tedarikçi silme sırasında hata: {e}"
-        
-    def kategori_ekle(self, kategori_adi):
-        if not kategori_adi:
-            return False, "Kategori adı boş olamaz."
-        try:
-            current_time = self.get_current_datetime_str()
-            olusturan_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("INSERT INTO urun_kategorileri (kategori_adi, olusturma_tarihi_saat, olusturan_kullanici_id) VALUES (?,?,?)",
-                           (kategori_adi, current_time, olusturan_id))
-            self.conn.commit()
-            return True, f"'{kategori_adi}' kategorisi başarıyla eklendi."
-        except sqlite3.IntegrityError:
-            self.conn.rollback() # Add rollback on integrity error
-            return False, "Bu kategori adı zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Kategori eklenirken hata: {e}"
-    
-    def kategori_guncelle(self, kategori_id, yeni_kategori_adi):
-        if not yeni_kategori_adi:
-            return False, "Kategori adı boş olamaz."
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-            current_time = self.get_current_datetime_str()
-            guncelleyen_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("UPDATE urun_kategorileri SET kategori_adi=?, son_guncelleme_tarihi_saat=?, son_guncelleyen_kullanici_id=? WHERE id=?",
-                           (yeni_kategori_adi, current_time, guncelleyen_id, kategori_id))
-            self.conn.commit()
-            # DÜZELTME: Başarılı durumda (True, mesaj) döndür
-            if self.c.rowcount > 0:
-                return True, "Kategori başarıyla güncellendi."
-            else:
-                return False, "Kategori bulunamadı veya bir değişiklik yapılmadı."
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu kategori adı zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Kategori güncellenirken hata: {e}"
-
-    def kategori_sil(self, kategori_id):
-        try:
-            # Bu kategoriye ait ürün var mı kontrol et
-            self.c.execute("SELECT COUNT(*) FROM tbl_stoklar WHERE kategori_id=?", (kategori_id,))
-            if self.c.fetchone()[0] > 0:
-                return False, "Bu kategoriye bağlı ürünler bulunmaktadır. Lütfen önce ürünlerin kategorisini değiştirin veya ürünleri silin."
-            self.c.execute("DELETE FROM urun_kategorileri WHERE id=?", (kategori_id,))
-            return self.c.rowcount > 0
-        except Exception as e:
-            return False, f"Kategori silinirken hata: {e}"
-
-    def kategori_listele(self):
-        self.c.execute("SELECT id, kategori_adi FROM urun_kategorileri ORDER BY kategori_adi ASC")
-        return self.c.fetchall()
-
-    def kategori_getir_by_id(self, kategori_id):
-        self.c.execute("SELECT id, kategori_adi FROM urun_kategorileri WHERE id=?", (kategori_id,))
-        return self.c.fetchone()
-
-    # --- Marka Yönetimi Metotları ---
-    def marka_ekle(self, marka_adi):
-        if not marka_adi:
-            return False, "Marka adı boş olamaz."
-        try:
-            current_time = self.get_current_datetime_str()
-            olusturan_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("INSERT INTO urun_markalari (marka_adi, olusturma_tarihi_saat, olusturan_kullanici_id) VALUES (?,?,?)",
-                           (marka_adi, current_time, olusturan_id))
-            self.conn.commit() # Commit here
-            return True, f"'{marka_adi}' markası başarıyla eklendi." # Return tuple
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu marka adı zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Marka eklenirken hata: {e}"
-
-    def marka_guncelle(self, marka_id, yeni_marka_adi):
-        if not yeni_marka_adi:
-            return False, "Marka adı boş olamaz."
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-            current_time = self.get_current_datetime_str()
-            guncelleyen_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("UPDATE urun_markalari SET marka_adi=?, son_guncelleme_tarihi_saat=?, son_guncelleyen_kullanici_id=? WHERE id=?",
-                           (yeni_marka_adi, current_time, guncelleyen_id, marka_id))
-            self.conn.commit()
-            # DÜZELTME: Başarılı durumda (True, mesaj) döndür
-            if self.c.rowcount > 0:
-                return True, "Marka başarıyla güncellendi."
-            else:
-                return False, "Marka bulunamadı veya bir değişiklik yapılmadı."
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu marka adı zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Marka güncellenirken hata: {e}"
-
-    def marka_sil(self, marka_id):
-        try:
-            # Bu markaya ait ürün var mı kontrol et
-            self.c.execute("SELECT COUNT(*) FROM tbl_stoklar WHERE marka_id=?", (marka_id,))
-            if self.c.fetchone()[0] > 0:
-                self.conn.rollback()
-                return False, "Bu markaya bağlı ürünler bulunmaktadır. Lütfen önce ürünlerin markasını değiştirin veya ürünleri silin."
-            self.c.execute("DELETE FROM urun_markalari WHERE id=?", (marka_id,))
-            self.conn.commit()
-            return self.c.rowcount > 0
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Marka silinirken hata: {e}"
-
-    def marka_listele(self):
-        self.c.execute("SELECT id, marka_adi FROM urun_markalari ORDER BY marka_adi ASC")
-        return self.c.fetchall()
-
-    def marka_getir_by_id(self, marka_id):
-        self.c.execute("SELECT id, marka_adi FROM urun_markalari WHERE id=?", (marka_id,))
-        return self.c.fetchone()
-
-    def stok_ekle(self, kod, ad, stok_miktari, alis_haric, satis_haric, kdv_orani, min_stok_seviyesi, alis_kdv_dahil, satis_kdv_dahil, kategori_id=None, marka_id=None, urun_detayi=None, urun_resmi_yolu=None, fiyat_degisiklik_tarihi=None, urun_grubu_id=None, urun_birimi_id=None, ulke_id=None):
-        if not (kod and ad):
-            return False, "Ürün Kodu ve Adı zorunludur."
-        try:
-            s_m = self.safe_float(stok_miktari)
-            a_f_h = self.safe_float(alis_haric)
-            s_f_h = self.safe_float(satis_haric)
-            k_o = self.safe_float(kdv_orani)
-            min_s_s = self.safe_float(min_stok_seviyesi)
-            a_f_d = self.safe_float(alis_kdv_dahil)
-            s_f_d = self.safe_float(satis_kdv_dahil)
-        except ValueError:
-            return False, "Sayısal alanlar doğru formatta olmalıdır."
-        
-        try: # Bu try bloğu kalan tek doğru try bloğu olmalı
-            self.conn.execute("BEGIN TRANSACTION")
-            current_time = self.get_current_datetime_str()
-            olusturan_id = self._get_current_user_id() 
-            self.c.execute("INSERT INTO tbl_stoklar (urun_kodu, urun_adi, stok_miktari, alis_fiyati_kdv_haric, satis_fiyati_kdv_haric, kdv_orani, min_stok_seviyesi, alis_fiyati_kdv_dahil, satis_fiyati_kdv_dahil, kategori_id, marka_id, urun_detayi, urun_resmi_yolu, fiyat_degisiklik_tarihi, urun_grubu_id, urun_birimi_id, ulke_id, olusturma_tarihi_saat, olusturan_kullanici_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                               (kod, ad, s_m, a_f_h, s_f_h, k_o, min_s_s, a_f_d, s_f_d, kategori_id, marka_id, urun_detayi, urun_resmi_yolu, fiyat_degisiklik_tarihi, urun_grubu_id, urun_birimi_id, ulke_id, current_time, olusturan_id))
-
-            yeni_urun_id = self.c.lastrowid
-            self.conn.commit()
-
-            return True, yeni_urun_id
-
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu ürün kodu zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            error_details = traceback.format_exc()
-            logging.error(f"Stok ekleme sırasında beklenmeyen hata: {e}\nDetay: {error_details}")
-            return False, f"Stok ekleme sırasında bir hata oluştu. Detaylar için log dosyasına bakınız."
-
-    def stok_guncelle(self, id, kod, ad, stok_miktari, alis_haric, satis_haric, kdv_orani, min_stok_seviyesi, alis_kdv_dahil, satis_kdv_dahil, kategori_id=None, marka_id=None, urun_detayi=None, urun_resmi_yolu=None, fiyat_degisiklik_tarihi=None, urun_grubu_id=None, urun_birimi_id=None, ulke_id=None):
-        if not (kod and ad):
-            return False, "Ürün Kodu ve Adı zorunludur."
-        
-        try:
-            # Gelen tüm sayısal değerleri güvenli bir şekilde float'a çevir
-            yeni_stok_miktari_f = self.safe_float(stok_miktari)
-            a_f_h = self.safe_float(alis_haric)
-            s_f_h = self.safe_float(satis_haric)
-            k_o = self.safe_float(kdv_orani)
-            min_s_s = self.safe_float(min_stok_seviyesi)
-            a_f_d = self.safe_float(alis_kdv_dahil)
-            s_f_d = self.safe_float(satis_kdv_dahil)
-        except ValueError:
-            return False, "Sayısal alanlar doğru formatta olmalıdır."
-
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-
-            # ADIM 1: Güncellemeden önce ürünün mevcut (eski) stok miktarını al
-            self.c.execute("SELECT stok_miktari FROM tbl_stoklar WHERE id=?", (id,))
-            eski_stok_miktari_tuple = self.c.fetchone()
-            if not eski_stok_miktari_tuple:
-                self.conn.rollback()
-                return False, "Güncellenecek ürün bulunamadı."
-            eski_stok_miktari_f = eski_stok_miktari_tuple[0]
-
-            # ADIM 2: Ürünün stok miktarı dışındaki ana bilgilerini güncelle
-            current_time = self.get_current_datetime_str()
-            guncelleyen_id = self._get_current_user_id() 
-            
-            self.c.execute("""
-                UPDATE tbl_stoklar SET
-                    urun_kodu=?, urun_adi=?, alis_fiyati_kdv_haric=?,
-                    satis_fiyati_kdv_haric=?, kdv_orani=?, min_stok_seviyesi=?,
-                    alis_fiyati_kdv_dahil=?, satis_fiyati_kdv_dahil=?, kategori_id=?,
-                    marka_id=?, urun_detayi=?, urun_resmi_yolu=?, fiyat_degisiklik_tarihi=?,
-                    urun_grubu_id=?, urun_birimi_id=?, ulke_id=?,
-                    son_guncelleme_tarihi_saat=?, son_guncelleyen_kullanici_id=?
-                WHERE id=?
-            """, (kod, ad, a_f_h, s_f_h, k_o, min_s_s, a_f_d, s_f_d,
-                  kategori_id, marka_id, urun_detayi, urun_resmi_yolu, fiyat_degisiklik_tarihi,
-                  urun_grubu_id, urun_birimi_id, ulke_id, current_time, guncelleyen_id, id))
-
-            # ADIM 3: Yeni stok miktarı ile eski stok miktarını karşılaştır ve fark varsa stok hareketi oluştur.
-            stok_farki = yeni_stok_miktari_f - eski_stok_miktari_f
-
-            if stok_farki != 0:
-                islem_tipi = ""
-                # Eğer fark pozitifse, bu bir manuel giriştir.
-                if stok_farki > 0:
-                    islem_tipi = self.STOK_ISLEM_TIP_GIRIS_MANUEL_DUZELTME
-                # Eğer fark negatifse, bu bir manuel çıkıştır.
-                else: 
-                    islem_tipi = self.STOK_ISLEM_TIP_CIKIS_MANUEL_DUZELTME
-
-                # Merkezi stok güncelleme ve hareket kaydetme metodunu çağır.
-                # Bu metot hem stoğu günceller hem de hareketi kaydeder.
-                self._stok_guncelle_ve_hareket_kaydet(
-                    urun_id=id,
-                    miktar_degisimi_net=stok_farki, # Net fark (pozitif veya negatif olabilir)
-                    islem_tipi_aciklamasi=islem_tipi,
-                    kaynak_tipi=self.KAYNAK_TIP_MANUEL, # Kaynak her zaman MANUEL olacak
-                    kaynak_id=None,
-                    referans_no=f"Ürün Kartı Düzeltme"
-                )
-
-            self.conn.commit()
-            return True, f"Ürün '{ad}' başarıyla güncellendi."
-
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu ürün kodu başka bir ürün için kullanılıyor."
-        except Exception as e:
-            self.conn.rollback()
-            logging.error(f"Stok güncelleme sırasında hata: {e}\n{traceback.format_exc()}")
-            return False, f"Stok güncelleme sırasında bir hata oluştu: {e}"
-    
-    def stok_listele(self, arama_terimi=None, limit=None, offset=None, kategori_id_filter=None, marka_id_filter=None, urun_grubu_id_filter=None, urun_birimi_id_filter=None, ulke_id_filter=None): # Yeni filtre parametreleri
-        # DÜZELTME: Sorguda 'stok' yerine 'tbl_stoklar' kullanıldığından emin olun.
-        # Sizin kodunuzda zaten 'tbl_stoklar s' olarak kullanılmış, bu doğru.
-        query = """
-            SELECT
-                s.id, s.urun_kodu, s.urun_adi, s.stok_miktari,
-                s.alis_fiyati_kdv_haric, s.satis_fiyati_kdv_haric, s.kdv_orani, s.min_stok_seviyesi,
-                s.alis_fiyati_kdv_dahil, s.satis_fiyati_kdv_dahil,
-                uk.kategori_adi, um.marka_adi,
-                s.urun_detayi, s.urun_resmi_yolu, s.fiyat_degisiklik_tarihi,
-                ug.grup_adi, ub.birim_adi, ul.ulke_adi,
-                s.kategori_id, s.marka_id, s.urun_grubu_id, s.urun_birimi_id, s.ulke_id
-            FROM tbl_stoklar s  -- Burası önemli!
-            LEFT JOIN urun_kategorileri uk ON s.kategori_id = uk.id
-            LEFT JOIN urun_markalari um ON s.marka_id = um.id
-            LEFT JOIN urun_gruplari ug ON s.urun_grubu_id = ug.id
-            LEFT JOIN urun_birimleri ub ON s.urun_birimi_id = ub.id
-            LEFT JOIN urun_ulkeleri ul ON s.ulke_id = ul.id
-        """
-        params = []
-        conditions = []
-
-        if arama_terimi:
-            conditions.append("(s.urun_kodu LIKE ? OR s.urun_adi LIKE ?)")
-            term = f"%{arama_terimi}%"
-            params.extend([term, term])
-        
-        if kategori_id_filter is not None:
-            conditions.append("s.kategori_id = ?")
-            params.append(kategori_id_filter)
-
-        if marka_id_filter is not None:
-            conditions.append("s.marka_id = ?")
-            params.append(marka_id_filter)
-
-        if urun_grubu_id_filter is not None:
-            conditions.append("s.urun_grubu_id = ?")
-            params.append(urun_grubu_id_filter)
-        
-        if urun_birimi_id_filter is not None:
-            conditions.append("s.urun_birimi_id = ?")
-            params.append(urun_birimi_id_filter)
-
-        if ulke_id_filter is not None:
-            conditions.append("s.ulke_id = ?")
-            params.append(ulke_id_filter)
-
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-            
-        query += " ORDER BY s.urun_adi ASC"
-    
-        if limit is not None:
-            query += " LIMIT ?"
-            params.append(limit)
-        if offset is not None:
-            query += " OFFSET ?"
-            params.append(offset)
-    
-        self.c.execute(query, params) # Hatanın alındığı satır bu.
-        return self.c.fetchall()
-
-        
+                                
     def get_stok_count(self, arama_terimi=None, kategori_id_filter=None, marka_id_filter=None, urun_grubu_id_filter=None, urun_birimi_id_filter=None, ulke_id_filter=None): # Yeni filtre parametreleri
         query = "SELECT COUNT(s.id) FROM tbl_stoklar s"
         params = []
@@ -3012,48 +3452,6 @@ class OnMuhasebe:
         self.c.execute(query, params)
         return self.c.fetchone()[0]
 
-
-    def stok_getir_by_id(self, urun_id):
-        query = """
-            SELECT
-                s.id,                  -- 0
-                s.urun_kodu,           -- 1
-                s.urun_adi,            -- 2
-                s.stok_miktari,        -- 3
-                s.alis_fiyati_kdv_haric, -- 4 (KDV Hariç Alış)
-                s.satis_fiyati_kdv_haric, -- 5 (KDV Hariç Satış)
-                s.kdv_orani,           -- 6
-                s.min_stok_seviyesi,   -- 7
-                s.alis_fiyati_kdv_dahil, -- 8 (KDV Dahil Alış)
-                s.satis_fiyati_kdv_dahil, -- 9 (KDV Dahil Satış)
-                s.olusturma_tarihi_saat,   -- 10
-                s.olusturan_kullanici_id,  -- 11
-                s.son_guncelleme_tarihi_saat, -- 12
-                s.son_guncelleyen_kullanici_id, -- 13
-                uk.kategori_adi,           -- 14 (LEFT JOIN'den gelir)
-                um.marka_adi,              -- 15 (LEFT JOIN'den gelir)
-                s.urun_detayi,             -- 16
-                s.urun_resmi_yolu,         -- 17
-                s.fiyat_degisiklik_tarihi, -- 18
-                ug.grup_adi,               -- 19 (LEFT JOIN'den gelir)
-                ub.birim_adi,              -- 20 (LEFT JOIN'den gelir)
-                ul.ulke_adi,               -- 21 (LEFT JOIN'den gelir)
-                s.kategori_id,             -- 22 (FK)
-                s.marka_id,                -- 23 (FK)
-                s.urun_grubu_id,           -- 24 (FK)
-                s.urun_birimi_id,          -- 25 (FK)
-                s.ulke_id                  -- 26 (FK)
-            FROM tbl_stoklar s
-            LEFT JOIN urun_kategorileri uk ON s.kategori_id = uk.id
-            LEFT JOIN urun_markalari um ON s.marka_id = um.id
-            LEFT JOIN urun_gruplari ug ON s.urun_grubu_id = ug.id
-            LEFT JOIN urun_birimleri ub ON s.urun_birimi_id = ub.id
-            LEFT JOIN urun_ulkeleri ul ON s.ulke_id = ul.id
-            WHERE s.id=?
-        """
-        self.c.execute(query, (urun_id,))
-        return self.c.fetchone()
-    
     def get_kategoriler_for_combobox(self):
         self.c.execute("SELECT id, kategori_adi FROM urun_kategorileri ORDER BY kategori_adi ASC")
         return {row['kategori_adi']: row['id'] for row in self.c.fetchall()}
@@ -3073,195 +3471,6 @@ class OnMuhasebe:
     def get_ulkeler_for_combobox(self):
         self.c.execute("SELECT id, ulke_adi FROM urun_ulkeleri ORDER BY ulke_adi ASC")
         return {row['ulke_adi']: row['id'] for row in self.c.fetchall()}
-
-    def stok_getir_by_kod(self, urun_kodu):
-        
-        self.c.execute("SELECT id,urun_kodu,urun_adi,stok_miktari,alis_fiyati_kdv_haric,satis_fiyati_kdv_haric,kdv_orani FROM tbl_stoklar WHERE urun_kodu=?",(urun_kodu,))
-        return self.c.fetchone()
-
-    def stok_hareketi_ekle(self, urun_id, islem_tipi, miktar, tarih, aciklama=""):
-        """
-        Belirli bir ürün için stok hareketi kaydeder ve stok miktarını günceller.
-        İşlem öncesi ve sonrası stok miktarlarını da kaydeder.
-        """
-        if miktar <= 0:
-            return False, "Miktar pozitif bir sayı olmalıdır."
-
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-
-            self.c.execute("SELECT stok_miktari, urun_adi FROM tbl_stoklar WHERE id = ?", (urun_id,))
-            urun_info = self.c.fetchone()
-            if not urun_info:
-                self.conn.rollback()
-                return False, "Ürün bulunamadı."
-
-            mevcut_stok = urun_info[0]
-            urun_adi = urun_info[1]
-
-            sonraki_stok = mevcut_stok
-
-            if islem_tipi in ["Giriş (Artış)", "Giriş (Manuel)", "Sayım Fazlası", "İade Girişi"]:
-                sonraki_stok = mevcut_stok + miktar
-            elif islem_tipi in ["Çıkış (Azalış)", "Çıkış (Manuel)", "Sayım Eksiği", "Zayiat"]:
-                sonraki_stok = mevcut_stok - miktar
-            else:
-                self.conn.rollback()
-                return False, "Geçersiz işlem tipi. Lütfen geçerli bir işlem tipi seçin."
-
-            self.c.execute("UPDATE tbl_stoklar SET stok_miktari = ? WHERE id = ?", (sonraki_stok, urun_id))
-
-            hareket_aciklamasi = f"{islem_tipi} - {urun_adi} ({miktar:.2f} adet). "
-            if aciklama:
-                hareket_aciklamasi += f"Not: {aciklama}"
-
-            # ### HATA DÜZELTMESİ BURADA ###
-            # INSERT komutuna eksik olan "olusturan_kullanici_id" sütunu eklendi ve
-            # VALUES kısmına bu sütun için "_get_current_user_id()" değeri verildi.
-            current_time = self.get_current_datetime_str()
-            olusturan_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("""
-                INSERT INTO stok_hareketleri
-                (urun_id, tarih, islem_tipi, miktar, onceki_stok, sonraki_stok, aciklama, kaynak, kaynak_id, olusturma_tarihi_saat, olusturan_kullanici_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (urun_id, tarih, islem_tipi, miktar, mevcut_stok, sonraki_stok, hareket_aciklamasi, "MANUEL", None, current_time, olusturan_id))
-
-            self.conn.commit()
-            return True, f"'{urun_adi}' için stok başarıyla güncellendi. Yeni Stok: {sonraki_stok:.2f} adet."
-
-        except ValueError:
-            self.conn.rollback()
-            return False, "Miktar veya tarih formatı hatalı."
-        except Exception as e:
-            self.conn.rollback()
-            error_details = traceback.format_exc()
-            logging.error(f"Stok hareketi kaydedilirken hata oluştu: {e}\nDetaylar: {error_details}")
-            return False, f"Stok hareketi kaydedilirken beklenmeyen bir hata oluştu. Detaylar için log dosyasına bakınız."
-
-    def geriye_donuk_stok_hareketlerini_olustur(self):
-        """
-        Tüm mevcut faturaları tarar ve eksik olan stok hareketlerini oluşturur.
-        Bu işlem, kendi geçici veritabanı bağlantısını oluşturarak thread-safe hale getirilmiştir.
-        """
-        conn_thread = None  # Thread'e özel bağlantı nesnesi
-        try:
-            # Adım 1: Bu thread için yeni, geçici bir veritabanı bağlantısı ve cursor oluştur.
-            conn_thread = sqlite3.connect(self.db_name, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-            cursor_thread = conn_thread.cursor()
-            cursor_thread.row_factory = sqlite3.Row # Row factory ekleyin
-            conn_thread.execute("PRAGMA foreign_keys = ON;") # Foreign key desteğini açın
-
-
-            conn_thread.execute("BEGIN TRANSACTION")
-
-            # ÖNLEM: Mükerrer kayıt olmaması için mevcut fatura kaynaklı stok hareketlerini temizle.
-            cursor_thread.execute("DELETE FROM stok_hareketleri WHERE kaynak IN ('FATURA', 'İADE_FATURA')") # İade faturalarını da temizle
-            print("Mevcut fatura kaynaklı stok hareketleri temizlendi.")
-
-            # Stok miktarlarını sıfırla (önceki hatalı hesaplamaları sıfırdan başlatmak için)
-            cursor_thread.execute("UPDATE tbl_stoklar SET stok_miktari = 0.0")
-            print("Tüm ürünlerin stok miktarları sıfırlandı.")
-
-
-            # Tüm faturaları ve kalemlerini çek (oluşturulma tarihine göre sıralı)
-            cursor_thread.execute("""
-                SELECT f.id, f.fatura_no, f.tarih, f.tip, fk.urun_id, fk.miktar
-                FROM faturalar f
-                JOIN fatura_kalemleri fk ON f.id = fk.fatura_id
-                ORDER BY f.tarih ASC, f.olusturma_tarihi_saat ASC, f.id ASC
-            """)
-            fatura_kalemleri = cursor_thread.fetchall()
-
-            if not fatura_kalemleri:
-                conn_thread.commit()
-                return True, "İşlenecek fatura bulunamadı. Stok hareketi oluşturulmadı."
-
-            hareket_sayisi = 0
-            for kalem in fatura_kalemleri:
-                fatura_id, fatura_no, tarih_str, tip, urun_id, miktar = kalem
-
-                # Stok hareketinin tipini ve miktar değişimini belirle
-                islem_tipi_hareket = ""
-                miktar_degisimi_net = 0.0
-                kaynak_tipi_hareket = 'FATURA'
-
-                if tip == 'SATIŞ':
-                    islem_tipi_hareket = "Fatura Satış"
-                    miktar_degisimi_net = -miktar # Satışta stok azalır
-                elif tip == 'ALIŞ':
-                    islem_tipi_hareket = "Fatura Alış"
-                    miktar_degisimi_net = miktar # Alışta stok artar
-                elif tip == 'SATIŞ İADE':
-                    islem_tipi_hareket = "Fatura Satış İade"
-                    miktar_degisimi_net = miktar # Satış iadesinde stok artar
-                    kaynak_tipi_hareket = 'İADE_FATURA'
-                elif tip == 'ALIŞ İADE':
-                    islem_tipi_hareket = "Fatura Alış İade"
-                    miktar_degisimi_net = -miktar # Alış iadesinde stok azalır
-                    kaynak_tipi_hareket = 'İADE_FATURA'
-                else: # Diğer tipler için (DEVİR_GİRİŞ) özel işlem
-                    # Devir girişleri sadece stok hareketi olarak kaydedilir, fatura tipi olarak özel bir işleme sahip olabilir.
-                    islem_tipi_hareket = "Devir Giriş"
-                    miktar_degisimi_net = miktar
-                    kaynak_tipi_hareket = 'FATURA' # Kaynak fatura olarak kalır
-
-                # Ürünün mevcut stok miktarını al (sıfırlandıktan sonraki anlık miktar)
-                cursor_thread.execute("SELECT stok_miktari, urun_adi FROM tbl_stoklar WHERE id = ?", (urun_id,))
-                urun_info_current = cursor_thread.fetchone()
-                if not urun_info_current:
-                    print(f"UYARI: Ürün ID {urun_id} bulunamadı, stok hareketi oluşturulamadı.")
-                    continue
-
-                onceki_stok = urun_info_current['stok_miktari']
-                sonraki_stok = onceki_stok + miktar_degisimi_net
-
-                # Stok miktarını güncelle
-                cursor_thread.execute("UPDATE tbl_stoklar SET stok_miktari = ? WHERE id = ?", (sonraki_stok, urun_id))
-
-                # Stok hareketini kaydet
-                current_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                olusturan_id = self._get_current_user_id() # Kullanıcı ID'si
-
-                cursor_thread.execute("""
-                    INSERT INTO stok_hareketleri
-                    (urun_id, tarih, islem_tipi, miktar, onceki_stok, sonraki_stok, aciklama, kaynak, kaynak_id, olusturma_tarihi_saat, olusturan_kullanici_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (urun_id, tarih_str, islem_tipi_hareket, abs(miktar), onceki_stok, sonraki_stok, f"Geçmiş Fatura No: {fatura_no}", kaynak_tipi_hareket, fatura_id, current_time_str, olusturan_id))
-                hareket_sayisi += 1
-
-            conn_thread.commit()
-            return True, f"Geçmişe dönük {hareket_sayisi} adet stok hareketi başarıyla oluşturuldu ve stoklar yeniden hesaplandı."
-
-        except Exception as e:
-            if conn_thread:
-                conn_thread.rollback()
-            error_details = traceback.format_exc()
-            logging.error(f"Geçmiş stok hareketleri oluşturulurken hata: {e}\nDetaylar: {error_details}")
-            return False, f"Geçmiş stok hareketleri oluşturulurken hata: {e}\n{error_details}"
-        finally:
-            if conn_thread:
-                conn_thread.close()
-
-    def stok_sil(self, urun_id):
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-            # Ürünün fatura, sipariş, teklif kalemlerinde ve stok hareketlerinde kullanılıp kullanılmadığını kontrol et
-            for tablo_adi in ["fatura_kalemleri", "siparis_kalemleri", "teklif_kalemleri", "stok_hareketleri"]: # stok_hareketleri eklendi
-                self.c.execute(f"SELECT COUNT(*) FROM {tablo_adi} WHERE urun_id=?", (urun_id,))
-                if self.c.fetchone()[0] > 0:
-                    self.conn.rollback()
-                    return False, f"Bu ürün '{tablo_adi}' tablosunda kullanılıyor.\nÖnce ilgili kayıtları düzenlemelisiniz."
-
-            self.c.execute("DELETE FROM tbl_stoklar WHERE id=?",(urun_id,))
-            self.conn.commit()
-            # DÜZELTME: Başarılı durumda da (True, mesaj) tuple'ı döndür.
-            if self.c.rowcount > 0:
-                return True, "Ürün başarıyla silindi."
-            else:
-                return False, "Ürün bulunamadı veya silinemedi."
-        except Exception as e:
-            self.conn.rollback()
-            return False, f"Stok silme sırasında hata: {e}"
 
     def _fatura_hareketlerini_geri_al(self, fatura_ana_bilgileri, fatura_kalemleri_tuple_listesi):
         try:
@@ -3363,131 +3572,18 @@ class OnMuhasebe:
             logging.error(f"Fatura hareketlerini kaydetme sırasında beklenmeyen hata: {e}\n{traceback.format_exc()}")
             return False, f"Fatura hareketleri kaydedilirken beklenmeyen bir hata oluştu: {e}"
 
-    def stok_getir_for_fatura(self, fatura_tipi='SATIŞ', arama_terimi=None): # <-- DÜZELTME: 'arama_termi' -> 'arama_terimi'
-        print(f"DEBUG_DB: stok_getir_for_fatura çağrıldı. fatura_tipi: {fatura_tipi}, arama_terimi: {arama_terimi}")
-
-        fiyat_kolonu = "satis_fiyati_kdv_dahil" if fatura_tipi == 'SATIŞ' else "alis_fiyati_kdv_dahil"
-
-        query = f"SELECT id, urun_kodu, urun_adi, {fiyat_kolonu}, kdv_orani, stok_miktari FROM tbl_stoklar"
-
-        params = []
-        if arama_terimi:
-            query += " WHERE (urun_kodu LIKE ? OR urun_adi LIKE ?)"
-            term = f"%{arama_terimi}%"
-            params.extend([term, term])
-        query += " ORDER BY urun_adi ASC"
-
-        logging.debug(f"Query: {query}")
-        logging.debug(f"Params: {params}")
-
-        self.c.execute(query, params)
-        results = self.c.fetchall()
-
-        logging.debug(f"Sorgu sonuçları (ilk 5 kayıt): {results[:5]}")
-        # Her bir sonucun fiyat kolonundaki değerini de kontrol edelim
-        for idx, row in enumerate(results):
-            if idx < 5: # İlk 5 kaydı detaylı incele
-                logging.debug(f"Row {idx}: id={row[0]}, kod={row[1]}, ad={row[2]}, fiyat={row[3]}, kdv={row[4]}, stok={row[5]}")
-
-        return results
-
     def _format_currency(self, value):
+        """Sayısal değeri Türkçe para birimi formatına dönüştürür."""
+        if value is None: return "0,00 TL"
         try:
-            val_float = float(value)
-            # Locale ayarları doğru yapıldıysa (yardimcilar.py'deki setup_locale),
-            # bu formatlama otomatik olarak Türkçe formatı (virgül ondalık, nokta binlik) kullanır.
-            return f"{val_float:,.2f} TL"
-        except (ValueError, TypeError):
-            return "0,00 TL"
-
-    def _stok_guncelle_ve_hareket_kaydet(self, urun_id, miktar_degisimi_net, islem_tipi_aciklamasi, kaynak_tipi, kaynak_id, referans_no):
-        """
-        Belirli bir ürünün stok miktarını günceller ve ilgili stok hareketi kaydını oluşturur.
-        Bu metodun çağrıldığı ana transaction içinde çalışır.
-        
-        Args:
-            urun_id (int): Stok miktarı güncellenecek ürünün ID'si.
-            miktar_degisimi_net (float): Stoğa eklenecek (+) veya çıkarılacak (-) net miktar.
-            islem_tipi_aciklamasi (str): Stok hareketi tipi (örn: 'Fatura Satış', 'Manuel Giriş').
-            kaynak_tipi (str): Stok hareketinin kaynağı (örn: 'FATURA', 'MANUEL', 'İADE_FATURA').
-            kaynak_id (int, optional): Kaynak faturanın/siparişin/işlemin ID'si. None olabilir.
-            referans_no (str, optional): Kaynak faturanın/siparişin/işlemin numarası/açıklaması.
-        
-        Returns:
-            tuple: (bool success, str message)
-        """
-        print(f"DEBUG_STOK_GUNCELLE: _stok_guncelle_ve_hareket_kaydet BAŞLADI - Ürün ID: {urun_id}, Net Değişim: {miktar_degisimi_net}, İşlem Tipi: {islem_tipi_aciklamasi}")
-        if miktar_degisimi_net == 0:
-            print(f"DEBUG_STOK_GUNCELLE: Net değişim sıfır, stok güncellenmiyor.")
-            return True, "Stok değişimi sıfır, işlem yapılmadı."
-
-        # Ürünün mevcut stok miktarını al
-        self.c.execute("SELECT stok_miktari, urun_adi FROM tbl_stoklar WHERE id=?", (urun_id,))
-        urun_info = self.c.fetchone()
-        if not urun_info:
-            print(f"DEBUG_STOK_GUNCELLE: Ürün ID {urun_id} bulunamadı.")
-            return False, "Ürün bulunamadı."
-
-        stok_oncesi = urun_info['stok_miktari']
-        urun_adi = urun_info['urun_adi']
-        stok_sonrasi = stok_oncesi + miktar_degisimi_net
-
-        print(f"DEBUG_STOK_GUNCELLE: Ürün: {urun_adi} (ID: {urun_id}) - Önceki Stok: {stok_oncesi}, Net Değişim: {miktar_degisimi_net}, Sonraki Stok Hesaplandı: {stok_sonrasi}")
-
-        # tbl_stoklar tablosundaki stok miktarını güncelle
-        self.c.execute("UPDATE tbl_stoklar SET stok_miktari = ? WHERE id=?", (stok_sonrasi, urun_id))
-
-        aciklama_hareket_tam = f"{islem_tipi_aciklamasi} - Ürün: {urun_adi}. Referans No: {referans_no if referans_no else ''}"
-
-        current_time = self.get_current_datetime_str()
-        olusturan_id = self._get_current_user_id() # Güncel kullanıcı ID'sini alın
-        print(f"DEBUG_STOK_GUNCELLE: Oluşturan Kullanıcı ID: {olusturan_id}")
-
-        # Stok hareketi kaydını oluştur
-        self.c.execute("""
-            INSERT INTO stok_hareketleri
-            (urun_id, tarih, islem_tipi, miktar, onceki_stok, sonraki_stok, aciklama, kaynak, kaynak_id, olusturma_tarihi_saat, olusturan_kullanici_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (urun_id, datetime.now().strftime('%Y-%m-%d'), islem_tipi_aciklamasi, abs(miktar_degisimi_net), stok_oncesi, stok_sonrasi, aciklama_hareket_tam, kaynak_tipi, kaynak_id, current_time, olusturan_id))
-
-        print(f"DEBUG_STOK_GUNCELLE: _stok_guncelle_ve_hareket_kaydet BAŞARILI BİTTİ.")
-        return True, "Stok hareketi başarıyla kaydedildi."
+            # locale.format_string kullanımı için locale ayarının yapılmış olması gerekir.
+            # yardimcilar.py'deki setup_locale() çağrılıyor olmalı.
+            return locale.format_string("%.2f", self.safe_float(value), grouping=True) + " TL"
+        except TypeError:
+            return f"{self.safe_float(value):.2f} TL" # Hata durumunda basit formatlama
+        except Exception:
+            return f"{self.safe_float(value):.2f} TL" # Diğer hatalar için
                         
-    def stok_hareketleri_listele(self, urun_id, islem_tipi=None, baslangic_tarih=None, bitis_tarih=None):
-        """
-        Belirli bir ürünün stok hareketlerini listeler.
-        İsteğe bağlı olarak işlem tipine, başlangıç ve bitiş tarihlerine göre filtreleme yapar.
-        Dönüş: (id, urun_id, tarih, islem_tipi, miktar, onceki_stok, sonraki_stok, aciklama, kaynak)
-        """
-        query = """
-            SELECT
-                id, urun_id, tarih, islem_tipi, miktar, onceki_stok, sonraki_stok, aciklama, kaynak
-            FROM stok_hareketleri
-            WHERE urun_id = ?
-        """
-        params = [urun_id]
-        conditions = []
-
-        if islem_tipi and islem_tipi != "TÜMÜ":
-            conditions.append("islem_tipi = ?")
-            params.append(islem_tipi)
-
-        if baslangic_tarih:
-            conditions.append("tarih >= ?")
-            params.append(baslangic_tarih)
-
-        if bitis_tarih:
-            conditions.append("tarih <= ?")
-            params.append(bitis_tarih)
-
-        if conditions:
-            query += " AND " + " AND ".join(conditions)
-
-        query += " ORDER BY tarih DESC, id DESC" # En yeni hareketler başta
-
-        self.c.execute(query, params)
-        return self.c.fetchall()
-
     def siparis_faturaya_donustur(self, siparis_id, olusturan_kullanici_id, odeme_turu_secilen, kasa_banka_id_secilen, vade_tarihi_secilen):
         """
         Belirtilen siparişi bir faturaya dönüştürür. Tüm mantık artık bu servistedir.
@@ -4326,78 +4422,7 @@ class OnMuhasebe:
         # En vadesi geçmiş olanları öne almak için sırala
         overdue_payables.sort(key=lambda x: x[3], reverse=True)
         return overdue_payables
-    
-    def get_tedarikci_net_bakiye(self, tedarikci_id, tarih_filtresi=None):
-        net_bakiye = 0.0
-        try:
-            query = """
-                SELECT ch.islem_tipi, ch.tutar, ch.referans_tip, f.odeme_turu
-                FROM cari_hareketler ch
-                LEFT JOIN faturalar f ON ch.referans_id = f.id
-                WHERE ch.cari_id = ? AND ch.cari_tip = 'TEDARIKCI'
-            """
-            params = [tedarikci_id]
-            if tarih_filtresi:
-                query += " AND ch.tarih < ?"
-                params.append(tarih_filtresi)
 
-            self.c.execute(query, tuple(params))
-            for hareket in self.c.fetchall():
-                tutar = hareket['tutar'] or 0.0
-                referans_tip = hareket['referans_tip']
-                odeme_turu = hareket['odeme_turu']
-
-                # SADECE AÇIK HESAP FATURALAR VE MANUEL ÖDEME/VERESİYE HAREKETLERİ DAHİL EDİLİR.
-                # Peşin alış faturaları (FATURA_ALIS_PESIN) ve onların ödemeleri bu bakiyeyi etkilemez.
-                # İade faturaları da sadece açık hesap ise etkiler.
-
-                # Borç artırıcı hareketler (Bizim tedarikçiye borcumuz)
-                if (referans_tip == self.KAYNAK_TIP_FATURA and odeme_turu == self.ODEME_TURU_ACIK_HESAP) or \
-                   referans_tip == self.KAYNAK_TIP_VERESIYE_BORC_MANUEL:
-                    net_bakiye += tutar
-                # Borç azaltıcı hareketler (Tedarikçiye ödeme veya Alış İade Faturası)
-                elif referans_tip == self.KAYNAK_TIP_ODEME or \
-                     (referans_tip == self.KAYNAK_TIP_IADE_FATURA and odeme_turu == self.ODEME_TURU_ACIK_HESAP):
-                    net_bakiye -= tutar
-
-            return net_bakiye
-        except Exception as e:
-            logging.error(f"Tedarikçi net bakiye hesaplanırken hata: {e}\n{traceback.format_exc()}")
-            return 0.0
-                
-    def get_musteri_net_bakiye(self, musteri_id, tarih_filtresi=None):
-        net_bakiye = 0.0
-        try:
-            query = """
-                SELECT ch.islem_tipi, ch.tutar, ch.referans_tip, f.odeme_turu
-                FROM cari_hareketler ch
-                LEFT JOIN faturalar f ON ch.referans_id = f.id
-                WHERE ch.cari_id = ? AND ch.cari_tip = 'MUSTERI'
-            """
-            params = [musteri_id]
-            if tarih_filtresi:
-                query += " AND ch.tarih < ?"
-                params.append(tarih_filtresi)
-                
-            self.c.execute(query, tuple(params))
-            for hareket in self.c.fetchall():
-                tutar = hareket['tutar'] or 0.0
-                referans_tip = hareket['referans_tip']
-                odeme_turu = hareket['odeme_turu']
-                # Alacak artırıcı hareketler (Müşterinin bize borcu)
-                if (referans_tip == self.KAYNAK_TIP_FATURA and odeme_turu == self.ODEME_TURU_ACIK_HESAP) or \
-                   referans_tip == self.KAYNAK_TIP_VERESIYE_BORC_MANUEL:
-                    net_bakiye += tutar
-                # Borç azaltıcı hareketler (Müşteriden tahsilat veya İade Faturası)
-                elif referans_tip == self.KAYNAK_TIP_TAHSILAT or \
-                     (referans_tip == self.KAYNAK_TIP_IADE_FATURA and odeme_turu == self.ODEME_TURU_ACIK_HESAP):
-                    net_bakiye -= tutar
-
-            return net_bakiye
-        except Exception as e:
-            logging.error(f"Müşteri net bakiye hesaplanırken hata: {e}\n{traceback.format_exc()}")
-            return 0.0
-                        
     def _get_cari_devir_bakiye(self, cari_tip, cari_id, baslangic_tarih_str):
         devir_bakiye = 0.0
         try:
@@ -6207,57 +6232,16 @@ class OnMuhasebe:
         except Exception as e:
             return False, f"MERKEZİ NAKİT kasa hesabı kontrol edilirken/oluşturulurken kritik hata: {e}\n{traceback.format_exc()}"
 
-    def safe_float(self, val):
-        """
-        Gelen değeri güvenli bir şekilde float'a dönüştürür.
-        Boş değerler, boşluklar, para birimi sembolleri ve yüzde işaretleri kaldırılır.
-        Türkçe ve İngilizce ondalık/binlik ayraçlarını destekler (virgülü ondalık, noktayı binlik olarak kabul eder).
-        Geçersiz dönüşümlerde 0.0 döndürür.
-        """
-        if val is None:
-            return 0.0
-
-        if isinstance(val, (int, float)):
-            return float(val)
-
-        s_val = str(val).strip()
-
-        # Eğer boş bir string ise
-        if not s_val:
-            return 0.0
-
+    def safe_float(self, value):
+        """String veya sayısal değeri güvenli bir şekilde float'a dönüştürür."""
         try:
-            # Para birimi sembollerini, yüzde işaretlerini ve binlik ayraçlarını kaldır.
-            cleaned_val_str = s_val.replace(' ', '').replace('TL', '').replace('₺', '').replace('%', '')
-
-            # Türkçe ve İngilizce ondalık/binlik ayrımı kontrolü:
-            last_comma_idx = cleaned_val_str.rfind(',')
-            last_dot_idx = cleaned_val_str.rfind('.')
-
-            if last_comma_idx != -1 and last_dot_idx != -1:
-                if last_comma_idx > last_dot_idx:
-                    # Virgül en son. Noktaları kaldır, virgülü noktaya çevir. (Türkçe format)
-                    cleaned_val_str = cleaned_val_str.replace('.', '') # Binlik noktaları kaldır
-                    cleaned_val_str = cleaned_val_str.replace(',', '.') # Ondalık virgülü noktaya çevir
-                else:
-                    # Nokta en son. Virgülleri kaldır. (İngilizce format)
-                    cleaned_val_str = cleaned_val_str.replace(',', '') # Binlik virgülleri kaldır
-                    # Nokta zaten ondalık olarak kalacak
-            elif last_comma_idx != -1:
-                # Sadece virgül var. Virgülü noktaya çevir (Türkçe ondalık)
-                cleaned_val_str = cleaned_val_str.replace(',', '.')
-            # Eğer sadece nokta varsa, zaten İngilizce ondalık formatındadır, dokunma.
-
-            result = float(cleaned_val_str)
-            return result
-        except ValueError:
-            # Dönüşüm hatası durumunda 0.0 döndür (örn: "abc" veya "--")
+            if isinstance(value, (int, float)):
+                return float(value)
+            # Türkçe virgüllü sayıları noktaya çevirerek dönüştür
+            return float(str(value).replace('.', '').replace(',', '.'))
+        except (ValueError, TypeError):
             return 0.0
-        except Exception as e:
-            # Beklenmeyen diğer hatalar için
-            print(f"UYARI: safe_float sırasında beklenmeyen hata: '{val}' -> {e}")
-            return 0.0
-
+        
     def gecmis_hatali_kayitlari_temizle(self):
         """
         Veritabanını tarar ve artık 'faturalar' tablosunda var olmayan faturalara ait
@@ -6309,193 +6293,3 @@ class OnMuhasebe:
             logging.error(f"Geçmiş hatalı kayıtlar temizlenirken hata: {e}\n{traceback.format_exc()}")
             return False, f"Temizleme sırasında bir hata oluştu: {e}"
 
-    def urun_grubu_ekle(self, grup_adi):
-        if not grup_adi:
-            return False, "Ürün grubu adı boş olamaz."
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-            current_time = self.get_current_datetime_str()
-            olusturan_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("INSERT INTO urun_gruplari (grup_adi, olusturma_tarihi_saat, olusturan_kullanici_id) VALUES (?,?,?)",
-                           (grup_adi, current_time, olusturan_id))
-            self.conn.commit()
-            return True, f"'{grup_adi}' ürün grubu başarıyla eklendi."
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu ürün grubu adı zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            logging.error(f"Ürün grubu eklenirken hata: {e}\n{traceback.format_exc()}")
-            return False, f"Ürün grubu eklenirken beklenmeyen hata: {e}"
-
-    def urun_grubu_listele(self):
-        self.c.execute("SELECT id, grup_adi FROM urun_gruplari ORDER BY grup_adi ASC")
-        return self.c.fetchall()
-
-    def urun_grubu_guncelle(self, grup_id, yeni_grup_adi):
-        if not yeni_grup_adi:
-            return False, "Ürün grubu adı boş olamaz."
-        try:
-            self.conn.execute("BEGIN TRANSACTION") # Atomik işlem başlat
-            current_time = self.get_current_datetime_str()
-            guncelleyen_id = self.app.current_user[0] if self.app and self.app.current_user else None
-            self.c.execute("UPDATE urun_gruplari SET grup_adi=?, son_guncelleme_tarihi_saat=?, son_guncelleyen_kullanici_id=? WHERE id=?",
-                           (yeni_grup_adi, current_time, guncelleyen_id, grup_id))
-            self.conn.commit()
-            if self.c.rowcount > 0:
-                return True, "Ürün grubu başarıyla güncellendi."
-            else:
-                return False, "Ürün grubu bulunamadı veya bir değişiklik yapılmadı."
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu ürün grubu adı zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            logging.error(f"Ürün grubu güncellenirken hata: {e}\n{traceback.format_exc()}")
-            return False, f"Ürün grubu güncellenirken beklenmeyen hata: {e}"
-
-    def urun_grubu_sil(self, grup_id):
-        try:
-            self.conn.execute("BEGIN TRANSACTION") # Atomik işlem başlat
-            self.c.execute("SELECT COUNT(*) FROM tbl_stoklar WHERE urun_grubu_id=?", (grup_id,))
-            if self.c.fetchone()[0] > 0:
-                self.conn.rollback()
-                return False, "Bu ürün grubuna bağlı ürünler bulunmaktadır. Lütfen önce ürünlerin grubunu değiştirin veya ürünleri silin."
-            self.c.execute("DELETE FROM urun_gruplari WHERE id=?", (grup_id,))
-            self.conn.commit()
-            if self.c.rowcount > 0:
-                return True, "Ürün grubu başarıyla silindi."
-            else:
-                return False, "Ürün grubu bulunamadı veya silinemedi."
-        except Exception as e:
-            self.conn.rollback()
-            logging.error(f"Ürün grubu silinirken hata: {e}\n{traceback.format_exc()}")
-            return False, f"Ürün grubu silinirken beklenmeyen hata: {e}"
-
-    # --- Ürün Birimi Yönetimi Metotları ---
-    def urun_birimi_ekle(self, birim_adi):
-        if not birim_adi:
-            return False, "Ürün birimi adı boş olamaz."
-        try:
-            self.conn.execute("BEGIN TRANSACTION")
-            current_time = self.get_current_datetime_str()
-            olusturan_id = self._get_current_user_id() # Değişiklik
-            self.c.execute("INSERT INTO urun_birimleri (birim_adi, olusturma_tarihi_saat, olusturan_kullanici_id) VALUES (?,?,?)",
-                           (birim_adi, current_time, olusturan_id))
-            self.conn.commit()
-            return True, f"'{birim_adi}' ürün birimi başarıyla eklendi."
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu ürün birimi adı zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            logging.error(f"Ürün birimi eklenirken hata: {e}\n{traceback.format_exc()}")
-            return False, f"Ürün birimi eklenirken beklenmeyen hata: {e}"
-        
-    def urun_birimi_listele(self):
-        self.c.execute("SELECT id, birim_adi FROM urun_birimleri ORDER BY birim_adi ASC")
-        return self.c.fetchall()
-
-    def urun_birimi_guncelle(self, birim_id, yeni_birim_adi):
-        if not yeni_birim_adi:
-            return False, "Ürün birimi adı boş olamaz."
-        try:
-            self.conn.execute("BEGIN TRANSACTION") # Atomik işlem başlat
-            current_time = self.get_current_datetime_str()
-            guncelleyen_id = self.app.current_user[0] if self.app and self.app.current_user else None
-            self.c.execute("UPDATE urun_birimleri SET birim_adi=?, son_guncelleme_tarihi_saat=?, son_guncelleyen_kullanici_id=? WHERE id=?",
-                           (yeni_birim_adi, current_time, guncelleyen_id, birim_id))
-            self.conn.commit()
-            if self.c.rowcount > 0:
-                return True, "Ürün birimi başarıyla güncellendi."
-            else:
-                return False, "Ürün birimi bulunamadı veya bir değişiklik yapılmadı."
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu ürün birimi adı zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            logging.error(f"Ürün birimi güncellenirken hata: {e}\n{traceback.format_exc()}")
-            return False, f"Ürün birimi güncellenirken beklenmeyen hata: {e}"
-
-    def urun_birimi_sil(self, birim_id):
-        try:
-            self.conn.execute("BEGIN TRANSACTION") # Atomik işlem başlat
-            self.c.execute("SELECT COUNT(*) FROM tbl_stoklar WHERE urun_birimi_id=?", (birim_id,))
-            if self.c.fetchone()[0] > 0:
-                self.conn.rollback()
-                return False, "Bu ürün birimi başka ürünlere bağlı olduğu için silinemez."
-            self.c.execute("DELETE FROM urun_birimleri WHERE id=?", (birim_id,))
-            self.conn.commit()
-            if self.c.rowcount > 0:
-                return True, f"Ürün birimi ID {birim_id} başarıyla silindi."
-            else:
-                return False, f"Ürün birimi ID {birim_id} bulunamadı veya silinemedi."
-        except Exception as e:
-            self.conn.rollback()
-            logging.error(f"Ürün birimi silinirken hata: {e}\n{traceback.format_exc()}")
-            return False, f"Ürün birimi silinirken beklenmeyen hata: {e}"
-
-    # --- Ülke Yönetimi Metotları (Menşe için) ---
-    def ulke_ekle(self, ulke_adi):
-        if not ulke_adi:
-            return False, "Ülke adı boş olamaz."
-        try:
-            self.conn.execute("BEGIN TRANSACTION") # Atomik işlem başlat
-            current_time = self.get_current_datetime_str()
-            olusturan_id = self.app.current_user[0] if self.app and self.app.current_user else None
-            self.c.execute("INSERT INTO urun_ulkeleri (ulke_adi, olusturma_tarihi_saat, olusturan_kullanici_id) VALUES (?,?,?)",
-                           (ulke_adi, current_time, olusturan_id))
-            self.conn.commit()
-            return True, f"'{ulke_adi}' ülkesi başarıyla eklendi."
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu ülke adı zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            logging.error(f"Ülke eklenirken hata: {e}\n{traceback.format_exc()}")
-            return False, f"Ülke eklenirken beklenmeyen hata: {e}"
-
-    def ulke_listele(self):
-        self.c.execute("SELECT id, ulke_adi FROM urun_ulkeleri ORDER BY ulke_adi ASC")
-        return self.c.fetchall()
-
-    def ulke_guncelle(self, ulke_id, yeni_ulke_adi):
-        if not yeni_ulke_adi:
-            return False, "Ülke adı boş olamaz."
-        try:
-            self.conn.execute("BEGIN TRANSACTION") # Atomik işlem başlat
-            current_time = self.get_current_datetime_str()
-            guncelleyen_id = self.app.current_user[0] if self.app and self.app.current_user else None
-            self.c.execute("UPDATE urun_ulkeleri SET ulke_adi=?, son_guncelleme_tarihi_saat=?, son_guncelleyen_kullanici_id=? WHERE id=?",
-                           (yeni_ulke_adi, current_time, guncelleyen_id, ulke_id))
-            self.conn.commit()
-            if self.c.rowcount > 0:
-                return True, f"Ülke başarıyla güncellendi."
-            else:
-                return False, "Ülke bulunamadı veya bir değişiklik yapılmadı."
-        except sqlite3.IntegrityError:
-            self.conn.rollback()
-            return False, "Bu ülke adı zaten mevcut."
-        except Exception as e:
-            self.conn.rollback()
-            logging.error(f"Ülke güncellenirken hata: {e}\n{traceback.format_exc()}")
-            return False, f"Ülke güncellenirken beklenmeyen hata: {e}"
-
-    def ulke_sil(self, ulke_id):
-        try:
-            self.conn.execute("BEGIN TRANSACTION") # Atomik işlem başlat
-            self.c.execute("SELECT COUNT(*) FROM tbl_stoklar WHERE ulke_id=?", (ulke_id,))
-            if self.c.fetchone()[0] > 0:
-                self.conn.rollback()
-                return False, "Bu ülkeye bağlı ürünler bulunmaktadır. Lütfen önce ürünlerin ülkesini değiştirin veya ürünleri silin."
-            self.c.execute("DELETE FROM urun_ulkeleri WHERE id=?", (ulke_id,))
-            self.conn.commit()
-            if self.c.rowcount > 0:
-                return True, f"Ülke başarıyla silindi."
-            else:
-                return False, f"Ülke bulunamadı veya silinemedi."
-        except Exception as e:
-            self.conn.rollback()
-            logging.error(f"Ülke silinirken hata: {e}\n{traceback.format_exc()}")
-            return False, f"Ülke silinirken beklenmeyen hata: {e}"

@@ -1,1481 +1,348 @@
-2025-07-15 14:07:48,216 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:07:48,311 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:07:48,313 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:07:48,313 - DEBUG - Devir bakiye hesaplandý: 0.0
-2025-07-15 14:07:48,315 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:07:48,316 - DEBUG - Devir bakiye hesaplandý: 0.0
-2025-07-15 14:07:52,498 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:07:52,501 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=0.0, Ýþlem Tutarý=50.0, Artýr=True, Yeni Bakiye (Hesaplanan)=50.0
-2025-07-15 14:07:52,501 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=50.0
-2025-07-15 14:07:54,131 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:07:54,134 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:07:54,136 - DEBUG - Devir bakiye hesaplandý: 0.0
-2025-07-15 14:08:01,186 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:08:01,189 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=50.0, Ýþlem Tutarý=100.0, Artýr=True, Yeni Bakiye (Hesaplanan)=150.0
-2025-07-15 14:08:01,189 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=150.0
-2025-07-15 14:08:02,489 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:08:02,491 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:08:02,492 - DEBUG - Devir bakiye hesaplandý: 0.0
-2025-07-15 14:08:45,041 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:08:45,123 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:08:45,124 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:08:45,125 - DEBUG - Devir bakiye hesaplandý: 0.0
-2025-07-15 14:08:45,127 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:08:45,127 - DEBUG - Devir bakiye hesaplandý: 0.0
-2025-07-15 14:11:47,960 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:11:57,467 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:11:57,469 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:11:57,470 - DEBUG - Devir bakiye hesaplandý: 0.0
-2025-07-15 14:12:00,103 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=150.0, Ýþlem Tutarý=50.0, Artýr=False, Yeni Bakiye (Hesaplanan)=100.0
-2025-07-15 14:12:00,113 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=100.0
-2025-07-15 14:12:00,355 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:12:00,359 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:12:00,360 - DEBUG - Devir bakiye hesaplandý: 0.0
-2025-07-15 14:12:01,942 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=100.0, Ýþlem Tutarý=100.0, Artýr=False, Yeni Bakiye (Hesaplanan)=0.0
-2025-07-15 14:12:01,944 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=0.0
-2025-07-15 14:12:02,368 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:12:02,369 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:12:02,370 - DEBUG - Devir bakiye hesaplandý: 0.0
-2025-07-15 14:39:54,649 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 14:39:54,665 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:39:54,667 - DEBUG - interactive is False
-2025-07-15 14:39:54,667 - DEBUG - platform is win32
-2025-07-15 14:39:54,717 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:39:54,725 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 14:39:55,157 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 14:39:56,609 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 14:39:56,629 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 14:39:59,048 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:40:14,672 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:40:14,756 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:40:14,758 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:40:14,759 - DEBUG - Devir bakiye hesaplandý: 0.0
-2025-07-15 14:40:14,898 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:40:14,899 - DEBUG - Devir bakiye hesaplandý: 0.0
-2025-07-15 14:43:14,478 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 14:43:14,495 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:43:14,497 - DEBUG - interactive is False
-2025-07-15 14:43:14,497 - DEBUG - platform is win32
-2025-07-15 14:43:14,540 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:43:14,546 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 14:43:14,945 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 14:43:16,329 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 14:43:16,354 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 14:43:18,662 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:43:54,902 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 14:43:54,921 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:43:54,924 - DEBUG - interactive is False
-2025-07-15 14:43:54,925 - DEBUG - platform is win32
-2025-07-15 14:43:54,982 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:43:54,988 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 14:43:55,908 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 14:43:57,722 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 14:43:57,741 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 14:43:59,895 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:48:22,267 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 14:48:22,283 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:48:22,286 - DEBUG - interactive is False
-2025-07-15 14:48:22,286 - DEBUG - platform is win32
-2025-07-15 14:48:22,325 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:48:22,330 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 14:48:22,714 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 14:48:23,953 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 14:48:23,966 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 14:48:25,893 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:48:26,950 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:48:29,290 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: ALIÞ
-2025-07-15 14:48:29,292 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 41
-2025-07-15 14:48:29,292 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, alis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 14:48:29,292 - DEBUG - Params: []
-2025-07-15 14:48:29,293 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000001675EF3AEF0>, <sqlite3.Row object at 0x000001675EF3AF20>, <sqlite3.Row object at 0x000001675EF3AF50>, <sqlite3.Row object at 0x000001675EF3AF80>, <sqlite3.Row object at 0x000001675EF3AFB0>]
-2025-07-15 14:48:29,293 - DEBUG - Row 0: id=84, kod=123123, ad=123123deneme, fiyat=100.0, kdv=2.0, stok=5.0
-2025-07-15 14:48:29,293 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=1200.0, kdv=20.0, stok=1.0
-2025-07-15 14:48:29,294 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=800.0, kdv=20.0, stok=1.0
-2025-07-15 14:48:29,294 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=850.0, kdv=20.0, stok=5.0
-2025-07-15 14:48:29,294 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=625.0, kdv=20.0, stok=5.0
-2025-07-15 14:48:29,299 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-15 14:48:29,302 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, alis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 14:48:29,302 - DEBUG - Params: []
-2025-07-15 14:48:29,303 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000001675EF48D00>, <sqlite3.Row object at 0x000001675EF48D30>, <sqlite3.Row object at 0x000001675EF48910>, <sqlite3.Row object at 0x000001675EF49150>, <sqlite3.Row object at 0x000001675EF49180>]
-2025-07-15 14:48:29,303 - DEBUG - Row 0: id=84, kod=123123, ad=123123deneme, fiyat=100.0, kdv=2.0, stok=5.0
-2025-07-15 14:48:29,303 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=1200.0, kdv=20.0, stok=1.0
-2025-07-15 14:48:29,303 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=800.0, kdv=20.0, stok=1.0
-2025-07-15 14:48:29,303 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=850.0, kdv=20.0, stok=5.0
-2025-07-15 14:48:29,303 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=625.0, kdv=20.0, stok=5.0
-2025-07-15 14:48:31,073 - DEBUG - ALIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 14:48:45,358 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 14:48:45,375 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:48:45,377 - DEBUG - interactive is False
-2025-07-15 14:48:45,377 - DEBUG - platform is win32
-2025-07-15 14:48:45,418 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:48:45,424 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 14:48:45,844 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 14:48:55,933 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 14:48:55,949 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:48:55,952 - DEBUG - interactive is False
-2025-07-15 14:48:55,952 - DEBUG - platform is win32
-2025-07-15 14:48:55,990 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:48:55,996 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 14:48:56,672 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 14:48:58,030 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 14:48:58,045 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 14:48:59,891 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:49:51,655 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 14:49:51,670 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:49:51,673 - DEBUG - interactive is False
-2025-07-15 14:49:51,674 - DEBUG - platform is win32
-2025-07-15 14:49:51,713 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:49:51,718 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 14:49:52,102 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 14:49:53,393 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 14:49:53,407 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 14:49:55,741 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:55:48,125 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 14:55:48,140 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:55:48,143 - DEBUG - interactive is False
-2025-07-15 14:55:48,144 - DEBUG - platform is win32
-2025-07-15 14:55:48,183 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 14:55:48,188 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 14:55:48,589 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 14:55:49,947 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 14:55:49,959 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 14:55:51,787 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 14:56:12,240 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-15 14:56:12,242 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-15 14:56:12,242 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 14:56:12,242 - DEBUG - Params: []
-2025-07-15 14:56:12,244 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000002832A1B5A80>, <sqlite3.Row object at 0x000002832A1B5AB0>, <sqlite3.Row object at 0x000002832A1B5AE0>, <sqlite3.Row object at 0x000002832A1B5B10>, <sqlite3.Row object at 0x000002832A1B5B40>]
-2025-07-15 14:56:12,244 - DEBUG - Row 0: id=84, kod=123123, ad=123123deneme, fiyat=150.0, kdv=2.0, stok=5.0
-2025-07-15 14:56:12,244 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
-2025-07-15 14:56:12,244 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 14:56:12,244 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 14:56:12,244 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 14:56:12,247 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 14:56:12,248 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-15 14:56:12,248 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 14:56:12,253 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 14:56:12,253 - DEBUG - Params: []
-2025-07-15 14:56:12,253 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000002832A1B7700>, <sqlite3.Row object at 0x000002832A1B7730>, <sqlite3.Row object at 0x000002832A1B7B20>, <sqlite3.Row object at 0x000002832A1B7B80>, <sqlite3.Row object at 0x000002832A1B7BB0>]
-2025-07-15 14:56:12,253 - DEBUG - Row 0: id=84, kod=123123, ad=123123deneme, fiyat=150.0, kdv=2.0, stok=5.0
-2025-07-15 14:56:12,254 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
-2025-07-15 14:56:12,254 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 14:56:12,254 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 14:56:12,254 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 14:56:26,904 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 15:13:29,216 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 15:13:29,238 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:13:29,242 - DEBUG - interactive is False
-2025-07-15 15:13:29,242 - DEBUG - platform is win32
-2025-07-15 15:13:29,287 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:13:29,293 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 15:13:30,053 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 15:13:31,553 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 15:13:31,571 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 15:13:33,655 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 15:19:58,624 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 15:19:58,646 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:19:58,648 - DEBUG - interactive is False
-2025-07-15 15:19:58,648 - DEBUG - platform is win32
-2025-07-15 15:19:58,700 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:19:58,709 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 15:19:59,389 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 15:20:00,759 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 15:20:00,777 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 15:20:02,696 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 15:22:27,963 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 15:22:27,979 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:22:27,981 - DEBUG - interactive is False
-2025-07-15 15:22:27,982 - DEBUG - platform is win32
-2025-07-15 15:22:28,021 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:22:28,027 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 15:22:28,705 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 15:22:30,017 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 15:22:30,042 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 15:22:31,984 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 15:26:22,044 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 15:26:22,060 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:26:22,063 - DEBUG - interactive is False
-2025-07-15 15:26:22,063 - DEBUG - platform is win32
-2025-07-15 15:26:22,102 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:26:22,108 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 15:26:22,807 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 15:26:24,187 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 15:26:24,229 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 15:26:26,649 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 15:30:50,116 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 15:30:50,132 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:30:50,134 - DEBUG - interactive is False
-2025-07-15 15:30:50,134 - DEBUG - platform is win32
-2025-07-15 15:30:50,176 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:30:50,181 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 15:30:50,858 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 15:30:52,157 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 15:30:52,173 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 15:30:54,011 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 15:33:01,764 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 15:33:01,780 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:33:01,781 - DEBUG - interactive is False
-2025-07-15 15:33:01,782 - DEBUG - platform is win32
-2025-07-15 15:33:01,821 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:33:01,828 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 15:33:02,523 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 15:33:03,842 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 15:33:03,857 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 15:33:05,931 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 15:43:49,675 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 15:43:49,734 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:43:49,748 - DEBUG - interactive is False
-2025-07-15 15:43:49,749 - DEBUG - platform is win32
-2025-07-15 15:43:49,848 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:43:49,864 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 15:43:50,822 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 15:43:52,751 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 15:43:52,770 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 15:43:55,258 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 15:46:21,572 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 15:46:21,592 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:46:21,595 - DEBUG - interactive is False
-2025-07-15 15:46:21,595 - DEBUG - platform is win32
-2025-07-15 15:46:21,637 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 15:46:21,650 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 15:46:22,058 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 15:46:23,371 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 15:46:23,386 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 15:46:25,705 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:01:37,917 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:01:37,933 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:01:37,936 - DEBUG - interactive is False
-2025-07-15 16:01:37,936 - DEBUG - platform is win32
-2025-07-15 16:01:37,977 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:01:37,983 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:01:38,735 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:01:40,308 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:01:40,329 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:01:42,788 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:03:44,202 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:03:44,218 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:03:44,221 - DEBUG - interactive is False
-2025-07-15 16:03:44,221 - DEBUG - platform is win32
-2025-07-15 16:03:44,261 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:03:44,267 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:03:44,999 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:03:46,533 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:03:46,554 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:03:49,030 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:06:21,591 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:06:21,607 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:06:21,609 - DEBUG - interactive is False
-2025-07-15 16:06:21,610 - DEBUG - platform is win32
-2025-07-15 16:06:21,648 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:06:21,654 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:06:22,361 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:06:23,776 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:06:23,801 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:06:25,831 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:08:20,057 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:08:20,073 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:08:20,075 - DEBUG - interactive is False
-2025-07-15 16:08:20,075 - DEBUG - platform is win32
-2025-07-15 16:08:20,115 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:08:20,121 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:08:20,804 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:08:22,288 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:08:22,311 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:08:24,824 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:12:45,609 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:12:45,627 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:12:45,629 - DEBUG - interactive is False
-2025-07-15 16:12:45,629 - DEBUG - platform is win32
-2025-07-15 16:12:45,669 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:12:45,675 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:12:46,358 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:12:47,824 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:12:47,842 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:12:50,310 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:19:19,599 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:19:19,615 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:19:19,617 - DEBUG - interactive is False
-2025-07-15 16:19:19,618 - DEBUG - platform is win32
-2025-07-15 16:19:19,657 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:19:19,663 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:19:20,366 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:19:21,891 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:19:21,911 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:19:24,318 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:25:20,296 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:25:20,313 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:25:20,315 - DEBUG - interactive is False
-2025-07-15 16:25:20,316 - DEBUG - platform is win32
-2025-07-15 16:25:20,361 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:25:20,366 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:25:21,112 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:25:22,478 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:25:22,493 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:25:24,310 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:28:48,298 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-15 16:28:48,300 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-15 16:28:48,302 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 16:28:48,302 - DEBUG - Params: []
-2025-07-15 16:28:48,303 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000001C8AD037A00>, <sqlite3.Row object at 0x000001C8AD037A30>, <sqlite3.Row object at 0x000001C8AD037A60>, <sqlite3.Row object at 0x000001C8AD037A90>, <sqlite3.Row object at 0x000001C8AD037AC0>]
-2025-07-15 16:28:48,303 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-15 16:28:48,303 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
-2025-07-15 16:28:48,303 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 16:28:48,303 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 16:28:48,303 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 16:28:48,306 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 16:28:48,308 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-15 16:28:48,308 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 16:28:48,312 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 16:28:48,312 - DEBUG - Params: []
-2025-07-15 16:28:48,312 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000001C8AD0398D0>, <sqlite3.Row object at 0x000001C8AD039900>, <sqlite3.Row object at 0x000001C8AD039CF0>, <sqlite3.Row object at 0x000001C8AD039D50>, <sqlite3.Row object at 0x000001C8AD039D80>]
-2025-07-15 16:28:48,312 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-15 16:28:48,312 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
-2025-07-15 16:28:48,313 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 16:28:48,313 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 16:28:48,313 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 16:28:51,978 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 16:28:57,191 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-15 16:28:57,193 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-15 16:28:57,194 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 16:28:57,194 - DEBUG - Params: []
-2025-07-15 16:28:57,194 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000001C8AD2830D0>, <sqlite3.Row object at 0x000001C8AD283100>, <sqlite3.Row object at 0x000001C8AD283130>, <sqlite3.Row object at 0x000001C8AD283160>, <sqlite3.Row object at 0x000001C8AD283190>]
-2025-07-15 16:28:57,194 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-15 16:28:57,194 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
-2025-07-15 16:28:57,194 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 16:28:57,194 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 16:28:57,194 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 16:28:57,198 - DEBUG - FaturaOlusturmaSayfasi - initial_data ile taslak veri yüklendi.
-2025-07-15 16:28:59,456 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 16:33:34,289 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:33:34,305 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:33:34,307 - DEBUG - interactive is False
-2025-07-15 16:33:34,307 - DEBUG - platform is win32
-2025-07-15 16:33:34,349 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:33:34,355 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:33:34,775 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:33:36,270 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:33:36,285 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:33:38,558 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:35:45,159 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:35:45,174 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:35:45,176 - DEBUG - interactive is False
-2025-07-15 16:35:45,177 - DEBUG - platform is win32
-2025-07-15 16:35:45,217 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:35:45,223 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:35:45,625 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:35:47,082 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:35:47,112 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:39:22,430 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:39:22,446 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:39:22,447 - DEBUG - interactive is False
-2025-07-15 16:39:22,449 - DEBUG - platform is win32
-2025-07-15 16:39:22,489 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:39:22,495 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:39:22,942 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:39:24,542 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:39:24,567 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:41:28,099 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:41:28,115 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:41:28,118 - DEBUG - interactive is False
-2025-07-15 16:41:28,118 - DEBUG - platform is win32
-2025-07-15 16:41:28,159 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:41:28,165 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:41:28,916 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:41:30,412 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:41:30,436 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:45:12,338 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:45:12,354 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:45:12,356 - DEBUG - interactive is False
-2025-07-15 16:45:12,357 - DEBUG - platform is win32
-2025-07-15 16:45:12,400 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:45:12,406 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:45:12,837 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:45:14,310 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:45:14,330 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:45:16,432 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:50:33,419 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:50:33,436 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:50:33,438 - DEBUG - interactive is False
-2025-07-15 16:50:33,439 - DEBUG - platform is win32
-2025-07-15 16:50:33,479 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:50:33,485 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:50:34,214 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:50:35,708 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:50:35,723 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:50:37,997 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:54:21,099 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:54:21,115 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:54:21,117 - DEBUG - interactive is False
-2025-07-15 16:54:21,118 - DEBUG - platform is win32
-2025-07-15 16:54:21,156 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:54:21,162 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:54:21,544 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:54:22,837 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:54:22,853 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:54:24,890 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:54:53,685 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:54:53,701 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:54:53,703 - DEBUG - interactive is False
-2025-07-15 16:54:53,704 - DEBUG - platform is win32
-2025-07-15 16:54:53,751 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:54:53,758 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:54:54,181 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:54:55,621 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:54:55,644 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:54:57,789 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:55:23,091 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:55:23,107 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:55:23,109 - DEBUG - interactive is False
-2025-07-15 16:55:23,109 - DEBUG - platform is win32
-2025-07-15 16:55:23,152 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:55:23,159 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:55:23,558 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:55:25,006 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:55:25,026 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:55:27,118 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:57:05,696 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:57:05,718 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:57:05,721 - DEBUG - interactive is False
-2025-07-15 16:57:05,722 - DEBUG - platform is win32
-2025-07-15 16:57:05,774 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:57:05,784 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:57:06,218 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:57:07,824 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:57:07,842 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:57:10,073 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:57:40,743 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:57:40,760 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:57:40,762 - DEBUG - interactive is False
-2025-07-15 16:57:40,763 - DEBUG - platform is win32
-2025-07-15 16:57:40,806 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:57:40,812 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:57:41,246 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:57:42,713 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:57:42,730 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:57:45,061 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 16:59:25,478 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 16:59:25,494 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:59:25,496 - DEBUG - interactive is False
-2025-07-15 16:59:25,497 - DEBUG - platform is win32
-2025-07-15 16:59:25,539 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 16:59:25,545 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 16:59:25,993 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 16:59:27,620 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 16:59:27,649 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 16:59:30,037 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 17:02:18,795 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 17:02:18,810 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:02:18,812 - DEBUG - interactive is False
-2025-07-15 17:02:18,813 - DEBUG - platform is win32
-2025-07-15 17:02:18,853 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:02:18,859 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 17:02:19,250 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 17:02:20,615 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 17:02:20,637 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 17:02:23,015 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 17:03:45,605 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 17:03:45,621 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:03:45,624 - DEBUG - interactive is False
-2025-07-15 17:03:45,624 - DEBUG - platform is win32
-2025-07-15 17:03:45,662 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:03:45,668 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 17:03:46,062 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 17:03:47,538 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 17:03:47,557 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 17:03:49,965 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 17:05:52,370 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 17:05:52,385 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:05:52,387 - DEBUG - interactive is False
-2025-07-15 17:05:52,388 - DEBUG - platform is win32
-2025-07-15 17:05:52,430 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:05:52,436 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 17:05:52,839 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 17:05:54,298 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 17:05:54,324 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 17:05:56,545 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 17:09:23,549 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 17:09:23,567 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:09:23,569 - DEBUG - interactive is False
-2025-07-15 17:09:23,569 - DEBUG - platform is win32
-2025-07-15 17:09:23,612 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:09:23,618 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 17:09:24,015 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 17:09:25,458 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 17:09:25,485 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 17:09:27,668 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 17:10:58,015 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 17:10:58,033 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:10:58,036 - DEBUG - interactive is False
-2025-07-15 17:10:58,037 - DEBUG - platform is win32
-2025-07-15 17:10:58,076 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:10:58,082 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 17:10:58,497 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 17:10:59,872 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 17:10:59,895 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 17:11:02,093 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 17:15:08,437 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 17:15:08,456 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:15:08,459 - DEBUG - interactive is False
-2025-07-15 17:15:08,459 - DEBUG - platform is win32
-2025-07-15 17:15:08,500 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:15:08,505 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 17:15:09,017 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 17:15:10,822 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 17:15:10,835 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 17:15:13,084 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 17:16:53,623 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 17:16:53,642 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:16:53,645 - DEBUG - interactive is False
-2025-07-15 17:16:53,646 - DEBUG - platform is win32
-2025-07-15 17:16:53,693 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:16:53,699 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 17:16:54,164 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 17:16:55,665 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 17:16:55,690 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 17:16:58,045 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 17:22:11,254 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 17:22:11,270 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:22:11,272 - DEBUG - interactive is False
-2025-07-15 17:22:11,272 - DEBUG - platform is win32
-2025-07-15 17:22:11,312 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:22:11,318 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 17:22:11,710 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 17:22:13,126 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 17:22:13,141 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 17:22:15,452 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 17:26:32,686 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 17:26:32,702 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:26:32,704 - DEBUG - interactive is False
-2025-07-15 17:26:32,705 - DEBUG - platform is win32
-2025-07-15 17:26:32,753 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:26:32,761 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 17:26:33,243 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 17:26:34,787 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 17:26:34,807 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 17:26:37,126 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 17:30:02,670 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 17:30:02,687 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:30:02,689 - DEBUG - interactive is False
-2025-07-15 17:30:02,689 - DEBUG - platform is win32
-2025-07-15 17:30:02,730 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:30:02,736 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 17:30:03,126 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 17:30:04,519 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 17:30:04,535 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 17:30:06,605 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 17:30:27,492 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 17:30:27,509 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:30:27,513 - DEBUG - interactive is False
-2025-07-15 17:30:27,514 - DEBUG - platform is win32
-2025-07-15 17:30:27,556 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 17:30:27,562 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 17:30:27,959 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 17:30:29,312 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 17:30:29,329 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 17:30:31,447 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:02:30,431 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:02:30,448 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:02:30,450 - DEBUG - interactive is False
-2025-07-15 18:02:30,450 - DEBUG - platform is win32
-2025-07-15 18:02:30,491 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:02:30,497 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:02:30,899 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:02:32,326 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:02:32,348 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:02:34,575 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:03:29,535 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:03:29,550 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:03:29,553 - DEBUG - interactive is False
-2025-07-15 18:03:29,553 - DEBUG - platform is win32
-2025-07-15 18:03:29,593 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:03:29,600 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:03:29,978 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:03:31,340 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:03:31,353 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:03:33,478 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:04:36,003 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:04:36,018 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:04:36,021 - DEBUG - interactive is False
-2025-07-15 18:04:36,021 - DEBUG - platform is win32
-2025-07-15 18:04:36,061 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:04:36,067 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:04:36,464 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:04:37,861 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:04:37,878 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:04:40,061 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:05:07,165 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:05:07,183 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:05:07,186 - DEBUG - interactive is False
-2025-07-15 18:05:07,187 - DEBUG - platform is win32
-2025-07-15 18:05:07,228 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:05:07,233 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:05:07,643 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:05:09,075 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:05:09,090 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:05:11,472 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:06:10,374 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:06:10,390 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:06:10,394 - DEBUG - interactive is False
-2025-07-15 18:06:10,394 - DEBUG - platform is win32
-2025-07-15 18:06:10,434 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:06:10,440 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:06:10,862 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:06:12,245 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:06:12,262 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:06:14,311 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:08:42,862 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:08:42,878 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:08:42,880 - DEBUG - interactive is False
-2025-07-15 18:08:42,880 - DEBUG - platform is win32
-2025-07-15 18:08:42,921 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:08:42,927 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:08:43,309 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:08:44,570 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:08:44,583 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:08:46,416 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:08:54,506 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: ALIÞ
-2025-07-15 18:08:54,507 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 41
-2025-07-15 18:08:54,508 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, alis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 18:08:54,508 - DEBUG - Params: []
-2025-07-15 18:08:54,509 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000001CB68A125F0>, <sqlite3.Row object at 0x000001CB68A13580>, <sqlite3.Row object at 0x000001CB68A135B0>, <sqlite3.Row object at 0x000001CB68A135E0>, <sqlite3.Row object at 0x000001CB68A13610>]
-2025-07-15 18:08:54,509 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=117.65, kdv=20.0, stok=5.0
-2025-07-15 18:08:54,509 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=1200.0, kdv=20.0, stok=1.0
-2025-07-15 18:08:54,509 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=800.0, kdv=20.0, stok=1.0
-2025-07-15 18:08:54,509 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=850.0, kdv=20.0, stok=5.0
-2025-07-15 18:08:54,509 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=625.0, kdv=20.0, stok=5.0
-2025-07-15 18:08:54,514 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-15 18:08:54,517 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, alis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 18:08:54,517 - DEBUG - Params: []
-2025-07-15 18:08:54,517 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000001CB68A1D2A0>, <sqlite3.Row object at 0x000001CB68A1D2D0>, <sqlite3.Row object at 0x000001CB68A1D6C0>, <sqlite3.Row object at 0x000001CB68A1D720>, <sqlite3.Row object at 0x000001CB68A1D750>]
-2025-07-15 18:08:54,517 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=117.65, kdv=20.0, stok=5.0
-2025-07-15 18:08:54,518 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=1200.0, kdv=20.0, stok=1.0
-2025-07-15 18:08:54,518 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=800.0, kdv=20.0, stok=1.0
-2025-07-15 18:08:54,518 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=850.0, kdv=20.0, stok=5.0
-2025-07-15 18:08:54,518 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=625.0, kdv=20.0, stok=5.0
-2025-07-15 18:09:00,976 - DEBUG - ALIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 18:09:01,837 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: ALIÞ
-2025-07-15 18:09:01,837 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 41
-2025-07-15 18:09:01,838 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, alis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 18:09:01,838 - DEBUG - Params: []
-2025-07-15 18:09:01,838 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000001CB689D4700>, <sqlite3.Row object at 0x000001CB689D4730>, <sqlite3.Row object at 0x000001CB689D4760>, <sqlite3.Row object at 0x000001CB689D4790>, <sqlite3.Row object at 0x000001CB689D47C0>]
-2025-07-15 18:09:01,838 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=117.65, kdv=20.0, stok=5.0
-2025-07-15 18:09:01,838 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=1200.0, kdv=20.0, stok=1.0
-2025-07-15 18:09:01,838 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=800.0, kdv=20.0, stok=1.0
-2025-07-15 18:09:01,838 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=850.0, kdv=20.0, stok=5.0
-2025-07-15 18:09:01,838 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=625.0, kdv=20.0, stok=5.0
-2025-07-15 18:09:01,841 - DEBUG - FaturaOlusturmaSayfasi - initial_data ile taslak veri yüklendi.
-2025-07-15 18:09:02,921 - DEBUG - ALIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 18:09:44,237 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:09:44,253 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:09:44,255 - DEBUG - interactive is False
-2025-07-15 18:09:44,256 - DEBUG - platform is win32
-2025-07-15 18:09:44,301 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:09:44,306 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:09:44,692 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:09:46,191 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:09:46,206 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:09:48,400 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:09:49,786 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-15 18:09:49,788 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-15 18:09:49,790 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 18:09:49,790 - DEBUG - Params: []
-2025-07-15 18:09:49,790 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000002080CB4F910>, <sqlite3.Row object at 0x000002080CB4F940>, <sqlite3.Row object at 0x000002080CB4F970>, <sqlite3.Row object at 0x000002080CB4F9A0>, <sqlite3.Row object at 0x000002080CB4F9D0>]
-2025-07-15 18:09:49,791 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-15 18:09:49,791 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
-2025-07-15 18:09:49,791 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 18:09:49,791 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 18:09:49,792 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 18:09:49,796 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 18:09:49,800 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-15 18:09:49,800 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 18:09:49,805 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 18:09:49,805 - DEBUG - Params: []
-2025-07-15 18:09:49,806 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000002080CB096C0>, <sqlite3.Row object at 0x000002080CB096F0>, <sqlite3.Row object at 0x000002080CB09AB0>, <sqlite3.Row object at 0x000002080CB09B10>, <sqlite3.Row object at 0x000002080CB09B40>]
-2025-07-15 18:09:49,807 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-15 18:09:49,807 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
-2025-07-15 18:09:49,807 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 18:09:49,807 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 18:09:49,808 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 18:09:51,193 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 18:09:59,005 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:09:59,020 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:09:59,022 - DEBUG - interactive is False
-2025-07-15 18:09:59,023 - DEBUG - platform is win32
-2025-07-15 18:09:59,062 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:09:59,072 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:09:59,465 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:10:00,794 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:10:00,808 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:10:02,914 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:11:52,803 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:11:52,820 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:11:52,823 - DEBUG - interactive is False
-2025-07-15 18:11:52,823 - DEBUG - platform is win32
-2025-07-15 18:11:52,865 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:11:52,870 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:11:53,295 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:11:55,042 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:11:55,056 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:11:57,181 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:45:43,210 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:45:43,238 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:45:43,240 - DEBUG - interactive is False
-2025-07-15 18:45:43,241 - DEBUG - platform is win32
-2025-07-15 18:45:43,307 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:45:43,313 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:45:43,808 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:45:45,563 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:45:45,586 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:45:48,057 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:47:00,694 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:47:00,710 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:47:00,712 - DEBUG - interactive is False
-2025-07-15 18:47:00,712 - DEBUG - platform is win32
-2025-07-15 18:47:00,749 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:47:00,755 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:47:01,142 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:47:02,452 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:47:02,481 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:47:04,298 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:48:17,664 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:48:17,680 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:48:17,682 - DEBUG - interactive is False
-2025-07-15 18:48:17,682 - DEBUG - platform is win32
-2025-07-15 18:48:17,721 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:48:17,726 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:48:18,116 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:48:19,482 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:48:19,514 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:48:21,238 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:49:15,493 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:49:15,513 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:49:15,515 - DEBUG - interactive is False
-2025-07-15 18:49:15,516 - DEBUG - platform is win32
-2025-07-15 18:49:15,561 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:49:15,566 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:49:15,964 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:49:17,439 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:49:17,469 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:49:19,576 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:50:32,995 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:50:33,011 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:50:33,013 - DEBUG - interactive is False
-2025-07-15 18:50:33,014 - DEBUG - platform is win32
-2025-07-15 18:50:33,051 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:50:33,057 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:50:33,443 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:50:34,766 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:50:34,789 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:50:36,475 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:51:13,323 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:51:13,339 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:51:13,341 - DEBUG - interactive is False
-2025-07-15 18:51:13,341 - DEBUG - platform is win32
-2025-07-15 18:51:13,382 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:51:13,388 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:51:13,774 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:51:15,113 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:51:15,129 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:51:16,756 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:52:15,625 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:52:15,641 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:52:15,643 - DEBUG - interactive is False
-2025-07-15 18:52:15,644 - DEBUG - platform is win32
-2025-07-15 18:52:15,684 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:52:15,691 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:52:16,083 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:52:17,428 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:52:17,445 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:52:19,146 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:52:37,492 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:52:37,508 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:52:37,511 - DEBUG - interactive is False
-2025-07-15 18:52:37,511 - DEBUG - platform is win32
-2025-07-15 18:52:37,554 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:52:37,559 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:52:37,961 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:52:39,357 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:52:39,377 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:52:40,938 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:53:32,678 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-15 18:53:32,680 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-15 18:53:32,681 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 18:53:32,681 - DEBUG - Params: []
-2025-07-15 18:53:32,682 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000001564D4904C0>, <sqlite3.Row object at 0x000001564D4904F0>, <sqlite3.Row object at 0x000001564D490520>, <sqlite3.Row object at 0x000001564D490550>, <sqlite3.Row object at 0x000001564D490580>]
-2025-07-15 18:53:32,683 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-15 18:53:32,683 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
-2025-07-15 18:53:32,683 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 18:53:32,683 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 18:53:32,683 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 18:53:32,687 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 18:53:32,688 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-15 18:53:32,688 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 18:53:32,692 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 18:53:32,692 - DEBUG - Params: []
-2025-07-15 18:53:32,692 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000001564D4922C0>, <sqlite3.Row object at 0x000001564D4922F0>, <sqlite3.Row object at 0x000001564D4926B0>, <sqlite3.Row object at 0x000001564D492710>, <sqlite3.Row object at 0x000001564D492740>]
-2025-07-15 18:53:32,692 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-15 18:53:32,692 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
-2025-07-15 18:53:32,693 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 18:53:32,693 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 18:53:32,693 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 18:53:42,424 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=0.0, Ýþlem Tutarý=2100.0, Artýr=True, Yeni Bakiye (Hesaplanan)=2100.0
-2025-07-15 18:53:42,424 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=2100.0
-2025-07-15 18:53:42,424 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:53:43,326 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 18:53:43,351 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 18:53:43,351 - DEBUG - Params: []
-2025-07-15 18:53:43,351 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000001564D4C44F0>, <sqlite3.Row object at 0x000001564D4C4B50>, <sqlite3.Row object at 0x000001564D4C6410>, <sqlite3.Row object at 0x000001564D4C68C0>, <sqlite3.Row object at 0x000001564D447670>]
-2025-07-15 18:53:43,352 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-15 18:53:43,352 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-15 18:53:43,352 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 18:53:43,352 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 18:53:43,352 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 18:53:44,403 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 18:54:29,288 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:54:29,303 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:54:29,306 - DEBUG - interactive is False
-2025-07-15 18:54:29,306 - DEBUG - platform is win32
-2025-07-15 18:54:29,345 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:54:29,350 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:54:29,735 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:54:31,051 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:54:31,068 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:54:32,732 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:55:59,923 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:55:59,940 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:55:59,942 - DEBUG - interactive is False
-2025-07-15 18:55:59,943 - DEBUG - platform is win32
-2025-07-15 18:55:59,985 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:55:59,992 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:56:00,427 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:56:01,929 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:56:01,949 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:56:03,789 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:56:32,036 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:56:32,052 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:56:32,054 - DEBUG - interactive is False
-2025-07-15 18:56:32,054 - DEBUG - platform is win32
-2025-07-15 18:56:32,095 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:56:32,101 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:56:32,491 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:56:33,756 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:56:33,776 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:56:35,709 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:57:04,312 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:57:04,327 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:57:04,329 - DEBUG - interactive is False
-2025-07-15 18:57:04,330 - DEBUG - platform is win32
-2025-07-15 18:57:04,368 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:57:04,373 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:57:04,767 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:57:06,092 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:57:06,108 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:57:07,791 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:57:58,406 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:57:58,422 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:57:58,424 - DEBUG - interactive is False
-2025-07-15 18:57:58,425 - DEBUG - platform is win32
-2025-07-15 18:57:58,463 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:57:58,469 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:57:58,861 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:58:00,121 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:58:00,146 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:58:01,853 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:58:46,493 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 18:58:46,509 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:58:46,511 - DEBUG - interactive is False
-2025-07-15 18:58:46,511 - DEBUG - platform is win32
-2025-07-15 18:58:46,548 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 18:58:46,553 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 18:58:46,955 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 18:58:48,278 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 18:58:48,298 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 18:58:49,979 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 18:59:05,434 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:00:18,094 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:00:18,109 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:00:18,113 - DEBUG - interactive is False
-2025-07-15 19:00:18,113 - DEBUG - platform is win32
-2025-07-15 19:00:18,154 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:00:18,159 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:00:18,638 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:00:19,951 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:00:19,972 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:00:21,734 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:00:51,847 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:00:51,862 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:00:51,865 - DEBUG - interactive is False
-2025-07-15 19:00:51,865 - DEBUG - platform is win32
-2025-07-15 19:00:51,904 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:00:51,910 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:00:52,308 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:00:53,654 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:00:53,670 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:00:55,737 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:01:39,133 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:01:39,149 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:01:39,151 - DEBUG - interactive is False
-2025-07-15 19:01:39,152 - DEBUG - platform is win32
-2025-07-15 19:01:39,192 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:01:39,197 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:01:39,590 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:01:40,912 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:01:40,934 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:01:42,722 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:02:41,035 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:02:41,051 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:02:41,053 - DEBUG - interactive is False
-2025-07-15 19:02:41,053 - DEBUG - platform is win32
-2025-07-15 19:02:41,091 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:02:41,097 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:02:41,504 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:02:42,814 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:02:42,833 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:02:44,565 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:03:25,937 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:03:25,953 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:03:25,956 - DEBUG - interactive is False
-2025-07-15 19:03:25,957 - DEBUG - platform is win32
-2025-07-15 19:03:25,998 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:03:26,004 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:03:26,394 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:03:27,700 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:03:27,729 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:03:29,694 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:04:19,496 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:04:19,512 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:04:19,514 - DEBUG - interactive is False
-2025-07-15 19:04:19,514 - DEBUG - platform is win32
-2025-07-15 19:04:19,552 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:04:19,559 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:04:19,945 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:04:21,272 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:04:21,287 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:04:23,009 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:04:34,822 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:04:44,101 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:07:44,123 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:07:44,138 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:07:44,140 - DEBUG - interactive is False
-2025-07-15 19:07:44,141 - DEBUG - platform is win32
-2025-07-15 19:07:44,179 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:07:44,185 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:07:44,574 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:07:45,906 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:07:45,930 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:07:47,654 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:08:20,813 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:08:20,828 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:08:20,830 - DEBUG - interactive is False
-2025-07-15 19:08:20,830 - DEBUG - platform is win32
-2025-07-15 19:08:20,870 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:08:20,876 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:08:21,267 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:08:22,618 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:08:22,634 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:08:24,315 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:16:03,167 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:16:03,182 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:16:03,184 - DEBUG - interactive is False
-2025-07-15 19:16:03,185 - DEBUG - platform is win32
-2025-07-15 19:16:03,227 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:16:03,233 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:16:03,629 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:16:05,116 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:16:05,133 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:16:07,112 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:16:20,523 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:16:20,539 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:16:20,541 - DEBUG - interactive is False
-2025-07-15 19:16:20,542 - DEBUG - platform is win32
-2025-07-15 19:16:20,583 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:16:20,588 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:16:20,982 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:16:22,265 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:16:22,281 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:16:23,838 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:16:57,891 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:16:57,908 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:16:57,910 - DEBUG - interactive is False
-2025-07-15 19:16:57,910 - DEBUG - platform is win32
-2025-07-15 19:16:57,952 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:16:57,957 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:16:58,355 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:16:59,676 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:16:59,701 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:17:01,317 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:21:15,765 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-15 19:21:15,769 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-15 19:21:15,770 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 19:21:15,770 - DEBUG - Params: []
-2025-07-15 19:21:15,771 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000025360D5B6D0>, <sqlite3.Row object at 0x0000025360D5B700>, <sqlite3.Row object at 0x0000025360D5B730>, <sqlite3.Row object at 0x0000025360D5B760>, <sqlite3.Row object at 0x0000025360D5B790>]
-2025-07-15 19:21:15,771 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-15 19:21:15,771 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-15 19:21:15,772 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 19:21:15,772 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 19:21:15,772 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 19:21:15,776 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 19:21:15,777 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-15 19:21:15,778 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 19:21:15,781 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 19:21:15,781 - DEBUG - Params: []
-2025-07-15 19:21:15,783 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000025360D65540>, <sqlite3.Row object at 0x0000025360D65570>, <sqlite3.Row object at 0x0000025360D65930>, <sqlite3.Row object at 0x0000025360D65990>, <sqlite3.Row object at 0x0000025360D659C0>]
-2025-07-15 19:21:15,784 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-15 19:21:15,784 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-15 19:21:15,784 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 19:21:15,784 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 19:21:15,784 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 19:21:28,677 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=2100.0, Ýþlem Tutarý=176.47, Artýr=True, Yeni Bakiye (Hesaplanan)=2276.47
-2025-07-15 19:21:28,677 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=2276.47
-2025-07-15 19:21:28,677 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:21:31,073 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 19:21:31,118 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 19:21:31,118 - DEBUG - Params: []
-2025-07-15 19:21:31,118 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000025360D92290>, <sqlite3.Row object at 0x0000025360D92260>, <sqlite3.Row object at 0x0000025360D91DB0>, <sqlite3.Row object at 0x0000025360D91D20>, <sqlite3.Row object at 0x0000025360D91DE0>]
-2025-07-15 19:21:31,118 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=4.0
-2025-07-15 19:21:31,118 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-15 19:21:31,118 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 19:21:31,118 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 19:21:31,118 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 19:21:33,119 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 19:21:42,934 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:21:44,751 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-15 19:21:44,754 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-15 19:21:44,755 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 19:21:44,755 - DEBUG - Params: []
-2025-07-15 19:21:44,756 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000025360D93730>, <sqlite3.Row object at 0x0000025360D936A0>, <sqlite3.Row object at 0x0000025360D93640>, <sqlite3.Row object at 0x0000025360D935B0>, <sqlite3.Row object at 0x0000025360D93550>]
-2025-07-15 19:21:44,756 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=4.0
-2025-07-15 19:21:44,756 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-15 19:21:44,756 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 19:21:44,757 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 19:21:44,757 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 19:21:44,760 - DEBUG - FaturaOlusturmaSayfasi - Düzenleme modunda, mevcut fatura yüklendi.
-2025-07-15 19:21:58,905 - INFO - _fatura_hareketlerini_geri_al çaðrýldý. Fatura ID: 29, Tip: SATIÞ, Toplam KDV Dahil: 176.47
-2025-07-15 19:21:58,911 - INFO - Stok geri alýndý: Ürün ID 84, Miktar Deðiþimi 1.0
-2025-07-15 19:21:58,911 - INFO - Kasa/Banka hareketi geri alýnýyor. Kasa/Banka ID: 1, Tutar: 176.47, Fatura Tipi: SATIÞ
-2025-07-15 19:21:58,911 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=2276.47, Ýþlem Tutarý=176.47, Artýr=False, Yeni Bakiye (Hesaplanan)=2100.0
-2025-07-15 19:21:58,911 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=2100.0
-2025-07-15 19:21:58,911 - INFO - Kasa/Banka bakiyesi satýþ faturasý geri alýmý için azaltýldý: 176.47
-2025-07-15 19:21:58,915 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=2100.0, Ýþlem Tutarý=352.94, Artýr=True, Yeni Bakiye (Hesaplanan)=2452.94
-2025-07-15 19:21:58,915 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=2452.94
-2025-07-15 19:21:58,915 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:21:59,753 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:22:02,712 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-15 19:22:02,724 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-15 19:22:02,724 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 19:22:02,725 - DEBUG - Params: []
-2025-07-15 19:22:02,726 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000025360DDFB50>, <sqlite3.Row object at 0x0000025360DDFB80>, <sqlite3.Row object at 0x0000025360DDFBB0>, <sqlite3.Row object at 0x0000025360DDFBE0>, <sqlite3.Row object at 0x0000025360DDFC10>]
-2025-07-15 19:22:02,727 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=3.0
-2025-07-15 19:22:02,727 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-15 19:22:02,727 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 19:22:02,727 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 19:22:02,728 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 19:22:02,731 - DEBUG - FaturaOlusturmaSayfasi - initial_data ile taslak veri yüklendi.
-2025-07-15 19:22:04,228 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 19:47:13,157 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:47:13,175 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:47:13,177 - DEBUG - interactive is False
-2025-07-15 19:47:13,177 - DEBUG - platform is win32
-2025-07-15 19:47:13,220 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:47:13,225 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:47:13,632 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:47:15,063 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:47:15,084 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:47:17,014 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:51:19,711 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:51:19,729 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:51:19,731 - DEBUG - interactive is False
-2025-07-15 19:51:19,731 - DEBUG - platform is win32
-2025-07-15 19:51:19,774 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:51:19,779 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:51:20,178 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:51:21,545 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:51:21,563 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:51:23,527 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:53:26,147 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:53:26,164 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:53:26,165 - DEBUG - interactive is False
-2025-07-15 19:53:26,165 - DEBUG - platform is win32
-2025-07-15 19:53:26,205 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:53:26,211 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:53:26,620 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:53:28,001 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:53:28,023 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:53:30,179 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 19:54:01,047 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:54:01,064 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:54:01,066 - DEBUG - interactive is False
-2025-07-15 19:54:01,066 - DEBUG - platform is win32
-2025-07-15 19:54:01,107 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:54:01,113 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:54:01,523 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:54:02,889 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:54:02,913 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:57:20,569 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 19:57:20,585 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:57:20,588 - DEBUG - interactive is False
-2025-07-15 19:57:20,588 - DEBUG - platform is win32
-2025-07-15 19:57:20,629 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 19:57:20,636 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 19:57:21,042 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 19:57:22,425 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 19:57:22,447 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 19:57:24,225 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 20:01:42,449 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 20:01:42,467 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:01:42,469 - DEBUG - interactive is False
-2025-07-15 20:01:42,469 - DEBUG - platform is win32
-2025-07-15 20:01:42,508 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:01:42,514 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 20:01:42,937 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 20:01:44,422 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 20:01:44,446 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 20:01:46,461 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 20:03:34,345 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 20:03:34,362 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:03:34,364 - DEBUG - interactive is False
-2025-07-15 20:03:34,364 - DEBUG - platform is win32
-2025-07-15 20:03:34,410 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:03:34,416 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 20:03:34,825 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 20:03:36,216 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 20:03:36,241 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 20:03:38,129 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 20:05:30,646 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 20:05:30,661 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:05:30,663 - DEBUG - interactive is False
-2025-07-15 20:05:30,663 - DEBUG - platform is win32
-2025-07-15 20:05:30,704 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:05:30,710 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 20:05:31,113 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 20:05:32,526 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 20:05:32,543 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 20:05:34,444 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 20:07:36,929 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 20:07:36,948 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:07:36,951 - DEBUG - interactive is False
-2025-07-15 20:07:36,951 - DEBUG - platform is win32
-2025-07-15 20:07:36,994 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:07:37,000 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 20:07:37,459 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 20:07:39,020 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 20:07:39,052 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 20:07:40,902 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 20:47:54,536 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 20:47:54,554 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:47:54,556 - DEBUG - interactive is False
-2025-07-15 20:47:54,557 - DEBUG - platform is win32
-2025-07-15 20:47:54,603 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:47:54,610 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 20:47:55,035 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 20:47:56,337 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 20:47:56,355 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 20:52:07,143 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 20:52:07,160 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:52:07,161 - DEBUG - interactive is False
-2025-07-15 20:52:07,162 - DEBUG - platform is win32
-2025-07-15 20:52:07,200 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:52:07,206 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 20:52:07,597 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 20:52:08,959 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 20:52:08,977 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 20:57:37,068 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 20:57:37,085 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:57:37,087 - DEBUG - interactive is False
-2025-07-15 20:57:37,087 - DEBUG - platform is win32
-2025-07-15 20:57:37,128 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 20:57:37,134 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 20:57:37,534 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 20:57:38,921 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 20:57:38,957 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 21:09:38,991 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 21:09:39,008 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:09:39,011 - DEBUG - interactive is False
-2025-07-15 21:09:39,011 - DEBUG - platform is win32
-2025-07-15 21:09:39,055 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:09:39,060 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 21:09:39,478 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 21:09:40,862 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 21:09:40,894 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 21:12:35,484 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 21:12:35,501 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:12:35,503 - DEBUG - interactive is False
-2025-07-15 21:12:35,504 - DEBUG - platform is win32
-2025-07-15 21:12:35,548 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:12:35,555 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 21:12:35,971 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 21:12:37,355 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 21:12:37,375 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 21:14:26,777 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 21:14:26,793 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:14:26,796 - DEBUG - interactive is False
-2025-07-15 21:14:26,796 - DEBUG - platform is win32
-2025-07-15 21:14:26,840 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:14:26,847 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 21:14:27,595 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 21:14:29,003 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 21:14:29,022 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 21:14:31,028 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 21:18:57,573 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 21:18:57,588 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:18:57,590 - DEBUG - interactive is False
-2025-07-15 21:18:57,590 - DEBUG - platform is win32
-2025-07-15 21:18:57,632 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:18:57,638 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 21:18:58,064 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 21:18:59,525 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 21:18:59,558 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 21:19:01,756 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 21:22:36,607 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 21:22:36,625 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:22:36,627 - DEBUG - interactive is False
-2025-07-15 21:22:36,627 - DEBUG - platform is win32
-2025-07-15 21:22:36,670 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:22:36,676 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 21:22:37,073 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 21:22:38,527 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 21:22:38,546 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 21:22:40,408 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 21:22:46,496 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-15 21:22:46,503 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-15 21:22:46,504 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 21:22:46,504 - DEBUG - Params: []
-2025-07-15 21:22:46,505 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000020A64F985E0>, <sqlite3.Row object at 0x0000020A64F98610>, <sqlite3.Row object at 0x0000020A64F98640>, <sqlite3.Row object at 0x0000020A64F98670>, <sqlite3.Row object at 0x0000020A64F986A0>]
-2025-07-15 21:22:46,506 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=3.0
-2025-07-15 21:22:46,506 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-15 21:22:46,506 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 21:22:46,507 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 21:22:46,507 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 21:22:46,511 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 21:22:46,513 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-15 21:22:46,513 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-15 21:22:46,518 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 21:22:46,518 - DEBUG - Params: []
-2025-07-15 21:22:46,519 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000020A64F9A2C0>, <sqlite3.Row object at 0x0000020A64F9A2F0>, <sqlite3.Row object at 0x0000020A64F9A6B0>, <sqlite3.Row object at 0x0000020A64F9A710>, <sqlite3.Row object at 0x0000020A64F9A740>]
-2025-07-15 21:22:46,520 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=3.0
-2025-07-15 21:22:46,520 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-15 21:22:46,520 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-15 21:22:46,521 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-15 21:22:46,521 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-15 21:22:47,972 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 21:22:48,965 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: ALIÞ
-2025-07-15 21:22:48,966 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 41
-2025-07-15 21:22:48,967 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, alis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 21:22:48,967 - DEBUG - Params: []
-2025-07-15 21:22:48,968 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000020A64F51750>, <sqlite3.Row object at 0x0000020A64F51780>, <sqlite3.Row object at 0x0000020A64F517B0>, <sqlite3.Row object at 0x0000020A64F517E0>, <sqlite3.Row object at 0x0000020A64F51810>]
-2025-07-15 21:22:48,969 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=117.65, kdv=20.0, stok=3.0
-2025-07-15 21:22:48,969 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=1200.0, kdv=20.0, stok=0.0
-2025-07-15 21:22:48,970 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=800.0, kdv=20.0, stok=1.0
-2025-07-15 21:22:48,972 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=850.0, kdv=20.0, stok=5.0
-2025-07-15 21:22:48,972 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=625.0, kdv=20.0, stok=5.0
-2025-07-15 21:22:48,978 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-15 21:22:48,983 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, alis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-15 21:22:48,983 - DEBUG - Params: []
-2025-07-15 21:22:48,984 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000020A64F53610>, <sqlite3.Row object at 0x0000020A64F53640>, <sqlite3.Row object at 0x0000020A64F53A60>, <sqlite3.Row object at 0x0000020A64F53AC0>, <sqlite3.Row object at 0x0000020A64F53AF0>]
-2025-07-15 21:22:48,984 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=117.65, kdv=20.0, stok=3.0
-2025-07-15 21:22:48,984 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=1200.0, kdv=20.0, stok=0.0
-2025-07-15 21:22:48,984 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=800.0, kdv=20.0, stok=1.0
-2025-07-15 21:22:48,984 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=850.0, kdv=20.0, stok=5.0
-2025-07-15 21:22:48,984 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=625.0, kdv=20.0, stok=5.0
-2025-07-15 21:22:49,745 - DEBUG - ALIÞ faturasý taslak olarak kaydedildi.
-2025-07-15 21:22:56,725 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 21:22:56,744 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:22:56,746 - DEBUG - interactive is False
-2025-07-15 21:22:56,746 - DEBUG - platform is win32
-2025-07-15 21:22:56,797 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:22:56,804 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 21:22:57,242 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 21:22:58,581 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 21:22:58,606 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 21:23:00,568 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 21:23:11,917 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 21:33:30,102 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 21:33:30,119 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:33:30,121 - DEBUG - interactive is False
-2025-07-15 21:33:30,122 - DEBUG - platform is win32
-2025-07-15 21:33:30,164 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:33:30,169 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 21:33:30,573 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 21:33:32,008 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 21:33:32,028 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 21:33:34,366 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-15 21:37:14,380 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
-2025-07-15 21:37:14,397 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:37:14,400 - DEBUG - interactive is False
-2025-07-15 21:37:14,400 - DEBUG - platform is win32
-2025-07-15 21:37:14,443 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-15 21:37:14,448 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-15 21:37:14,886 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-15 21:37:16,263 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-15 21:37:16,281 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-15 21:37:18,764 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-16 11:51:55,279 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python313\Lib\site-packages\matplotlib\mpl-data
-2025-07-16 11:51:55,306 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-16 11:51:55,309 - DEBUG - interactive is False
-2025-07-16 11:51:55,309 - DEBUG - platform is win32
-2025-07-16 11:51:55,420 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-16 11:51:55,426 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-16 11:51:56,206 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 11:51:57,215 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-16 11:51:57,230 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-16 11:51:59,608 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-16 11:52:01,523 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-16 11:52:01,525 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-16 11:52:01,526 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-16 11:52:01,526 - DEBUG - Params: []
-2025-07-16 11:52:01,527 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000002593EF50340>, <sqlite3.Row object at 0x000002593EF50370>, <sqlite3.Row object at 0x000002593EF503A0>, <sqlite3.Row object at 0x000002593EF503D0>, <sqlite3.Row object at 0x000002593EF50400>]
-2025-07-16 11:52:01,527 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=3.0
-2025-07-16 11:52:01,527 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-16 11:52:01,527 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-16 11:52:01,527 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-16 11:52:01,527 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-16 11:52:01,534 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-16 11:52:01,536 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-16 11:52:01,536 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-16 11:52:01,541 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-16 11:52:01,541 - DEBUG - Params: []
-2025-07-16 11:52:01,542 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x000002593EF51C90>, <sqlite3.Row object at 0x000002593EF52080>, <sqlite3.Row object at 0x000002593EF520B0>, <sqlite3.Row object at 0x000002593EF51EA0>, <sqlite3.Row object at 0x000002593EF51D50>]
-2025-07-16 11:52:01,542 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=3.0
-2025-07-16 11:52:01,542 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-16 11:52:01,542 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-16 11:52:01,542 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-16 11:52:01,542 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-16 11:52:04,069 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
-2025-07-16 11:52:09,881 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-16 11:52:17,469 - DEBUG - matplotlib data path: C:\Users\HP\AppData\Local\Programs\Python\Python313\Lib\site-packages\matplotlib\mpl-data
-2025-07-16 11:52:17,479 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-16 11:52:17,481 - DEBUG - interactive is False
-2025-07-16 11:52:17,481 - DEBUG - platform is win32
-2025-07-16 11:52:17,506 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-16 11:52:17,509 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-16 11:52:17,751 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 11:52:18,613 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-16 11:52:18,622 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-16 11:52:20,166 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-16 12:43:25,169 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
-2025-07-16 12:43:25,182 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-16 12:43:25,183 - DEBUG - interactive is False
-2025-07-16 12:43:25,183 - DEBUG - platform is win32
-2025-07-16 12:43:25,222 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-16 12:43:25,225 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-16 12:43:26,056 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 12:43:27,624 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-16 12:43:27,638 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-16 12:43:29,558 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-16 12:43:30,992 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-16 12:43:30,995 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-16 12:43:30,995 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-16 12:43:30,996 - DEBUG - Params: []
-2025-07-16 12:43:30,996 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000029DB0132C20>, <sqlite3.Row object at 0x0000029DB0132C50>, <sqlite3.Row object at 0x0000029DB0132C80>, <sqlite3.Row object at 0x0000029DB0132CB0>, <sqlite3.Row object at 0x0000029DB0132CE0>]
-2025-07-16 12:43:30,997 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=3.0
-2025-07-16 12:43:30,997 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-16 12:43:30,997 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-16 12:43:30,997 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-16 12:43:30,998 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-16 12:43:31,000 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-16 12:43:31,002 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-16 12:43:31,002 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-16 12:43:31,004 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-16 12:43:31,004 - DEBUG - Params: []
-2025-07-16 12:43:31,005 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x0000029DB0134A30>, <sqlite3.Row object at 0x0000029DB0134A60>, <sqlite3.Row object at 0x0000029DB0134850>, <sqlite3.Row object at 0x0000029DB0134880>, <sqlite3.Row object at 0x0000029DB01345B0>]
-2025-07-16 12:43:31,005 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=3.0
-2025-07-16 12:43:31,005 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=0.0
-2025-07-16 12:43:31,005 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-16 12:43:31,005 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-16 12:43:31,005 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-16 12:43:35,850 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
-2025-07-16 12:43:38,827 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=2452.94, Ýþlem Tutarý=352.94, Artýr=False, Yeni Bakiye (Hesaplanan)=2100.0
-2025-07-16 12:43:38,829 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=2100.0
-2025-07-16 12:43:38,830 - INFO - Fatura silme: Kasa ID 1 bakiyesi, iþlem geri alýndýðý için güncellendi.
-2025-07-16 12:43:40,649 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Mevcut Bakiye=2100.0, Ýþlem Tutarý=2100.0, Artýr=False, Yeni Bakiye (Hesaplanan)=0.0
-2025-07-16 12:43:40,651 - INFO - Kasa/Banka Bakiye Güncelleme: ID=1, Veritabanýndaki Güncel Bakiye=0.0
-2025-07-16 12:43:40,652 - INFO - Fatura silme: Kasa ID 1 bakiyesi, iþlem geri alýndýðý için güncellendi.
-2025-07-16 12:59:04,907 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
-2025-07-16 12:59:04,919 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-16 12:59:04,920 - DEBUG - interactive is False
-2025-07-16 12:59:04,920 - DEBUG - platform is win32
-2025-07-16 12:59:04,949 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-16 12:59:04,953 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-16 12:59:05,498 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 12:59:06,592 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-16 12:59:06,603 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-16 12:59:08,522 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-16 12:59:10,688 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: SATIÞ
-2025-07-16 12:59:10,690 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 329
-2025-07-16 12:59:10,690 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-16 12:59:10,691 - DEBUG - Params: []
-2025-07-16 12:59:10,691 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x00000216031BA8F0>, <sqlite3.Row object at 0x00000216031BA920>, <sqlite3.Row object at 0x00000216031BA950>, <sqlite3.Row object at 0x00000216031BA980>, <sqlite3.Row object at 0x00000216031BA9B0>]
-2025-07-16 12:59:10,691 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-16 12:59:10,692 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
-2025-07-16 12:59:10,692 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-16 12:59:10,692 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-16 12:59:10,692 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-16 12:59:10,695 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-16 12:59:10,696 - DEBUG - FaturaOlusturmaSayfasi - Yeni fatura için form sýfýrlandý.
-2025-07-16 12:59:10,697 - DEBUG - Müþteri adý: Perakende Satýþ Müþterisi, Kodu: PER000
-2025-07-16 12:59:10,699 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, satis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-16 12:59:10,699 - DEBUG - Params: []
-2025-07-16 12:59:10,700 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x00000216031BC2E0>, <sqlite3.Row object at 0x00000216031BC6A0>, <sqlite3.Row object at 0x00000216031BC6D0>, <sqlite3.Row object at 0x00000216031BC4F0>, <sqlite3.Row object at 0x00000216031BC340>]
-2025-07-16 12:59:10,700 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=176.47, kdv=20.0, stok=5.0
-2025-07-16 12:59:10,700 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=2100.0, kdv=20.0, stok=1.0
-2025-07-16 12:59:10,701 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=1450.0, kdv=20.0, stok=1.0
-2025-07-16 12:59:10,701 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=1800.0, kdv=20.0, stok=5.0
-2025-07-16 12:59:10,702 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=880.0, kdv=20.0, stok=5.0
-2025-07-16 12:59:12,387 - DEBUG - SATIÞ faturasý taslak olarak kaydedildi.
-2025-07-16 12:59:19,526 - DEBUG - _carileri_yukle_ve_cachele çaðrýldý. self.islem_tipi: ALIÞ
-2025-07-16 12:59:19,526 - DEBUG - _carileri_yukle_ve_cachele bitiþ. Yüklenen cari sayýsý: 41
-2025-07-16 12:59:19,527 - DEBUG - Query: SELECT id, urun_kodu, urun_adi, alis_fiyati_kdv_dahil, kdv_orani, stok_miktari FROM tbl_stoklar ORDER BY urun_adi ASC
-2025-07-16 12:59:19,527 - DEBUG - Params: []
-2025-07-16 12:59:19,528 - DEBUG - Sorgu sonuçlarý (ilk 5 kayýt): [<sqlite3.Row object at 0x00000216031BF1C0>, <sqlite3.Row object at 0x00000216031BF1F0>, <sqlite3.Row object at 0x00000216031BF220>, <sqlite3.Row object at 0x00000216031BF250>, <sqlite3.Row object at 0x00000216031BF2B0>]
-2025-07-16 12:59:19,528 - DEBUG - Row 0: id=84, kod='123123, ad=123123deneme, fiyat=117.65, kdv=20.0, stok=5.0
-2025-07-16 12:59:19,528 - DEBUG - Row 1: id=5, kod="00001519559, ad=ALBINO GRANIT EVIYE BATARYASI FORMICA, fiyat=1200.0, kdv=20.0, stok=1.0
-2025-07-16 12:59:19,528 - DEBUG - Row 2: id=28, kod="00005785195, ad=AVILA LAVABO BATARYASI FORMICA, fiyat=800.0, kdv=20.0, stok=1.0
-2025-07-16 12:59:19,528 - DEBUG - Row 3: id=15, kod="0000358790, ad=DELTA SIYAH BANYO BATARYASI, fiyat=850.0, kdv=20.0, stok=5.0
-2025-07-16 12:59:19,528 - DEBUG - Row 4: id=23, kod="00004711350, ad=DELTA SIYAH EVIYE BATARYASI, fiyat=625.0, kdv=20.0, stok=5.0
-2025-07-16 12:59:19,533 - DEBUG - FaturaOlusturmaSayfasi - Düzenleme modunda, mevcut fatura yüklendi.
-2025-07-16 13:26:09,169 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
-2025-07-16 13:26:09,186 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-16 13:26:09,189 - DEBUG - interactive is False
-2025-07-16 13:26:09,189 - DEBUG - platform is win32
-2025-07-16 13:26:09,243 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-16 13:26:09,247 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-16 13:26:09,548 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 13:26:11,019 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-16 13:26:11,033 - INFO - Uygulama baþlatýldý. (main.py'den)
-2025-07-16 13:26:13,203 - DEBUG - Müþteri adý: ABO AHMET HAYSAM, Kodu: 10
-2025-07-16 13:49:51,362 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
-2025-07-16 13:49:51,375 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-16 13:49:51,376 - DEBUG - interactive is False
-2025-07-16 13:49:51,377 - DEBUG - platform is win32
-2025-07-16 13:49:51,407 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-16 13:49:51,410 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-16 13:50:43,971 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
-2025-07-16 13:50:43,982 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-16 13:50:43,984 - DEBUG - interactive is False
-2025-07-16 13:50:43,984 - DEBUG - platform is win32
-2025-07-16 13:50:44,014 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-16 13:50:44,018 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-16 13:50:45,121 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 13:51:22,857 - DEBUG - matplotlib data path: C:\Users\HP\OneDrive\Masaüstü\onmuhasebe\venv\Lib\site-packages\matplotlib\mpl-data
-2025-07-16 13:51:22,868 - DEBUG - CONFIGDIR=C:\Users\HP\.matplotlib
-2025-07-16 13:51:22,870 - DEBUG - interactive is False
-2025-07-16 13:51:22,870 - DEBUG - platform is win32
-2025-07-16 13:51:22,902 - DEBUG - CACHEDIR=C:\Users\HP\.matplotlib
-2025-07-16 13:51:22,905 - DEBUG - Using fontManager instance from C:\Users\HP\.matplotlib\fontlist-v390.json
-2025-07-16 13:51:23,274 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 13:53:58,779 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 13:53:59,018 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-16 14:04:51,014 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 14:04:51,355 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-16 14:35:01,273 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 14:35:01,678 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-16 15:10:51,547 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 15:10:51,865 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-16 15:44:49,818 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 15:44:50,136 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-16 16:08:17,237 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 16:08:17,563 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-16 16:08:48,404 - DEBUG - Veritabaný yolu: c:\Users\HP\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-16 16:08:48,620 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
-2025-07-17 15:04:48,127 - DEBUG - Veritabaný yolu: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\data\on_muhasebe.db
-2025-07-17 15:04:48,831 - INFO - Tüm baþlangýç veritabaný ensure iþlemleri baþarýlý.
+2025-07-18 15:23:36,380 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 15:23:36,412 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/kategoriler HTTP/1.1" 200 2
+2025-07-18 15:23:36,417 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 15:23:36,429 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 15:23:36,432 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 15:23:36,442 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/markalar HTTP/1.1" 200 2
+2025-07-18 15:23:36,446 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 15:23:36,455 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 15:23:36,462 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 15:23:36,471 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 15:23:39,792 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 15:23:39,804 - DEBUG - http://127.0.0.1:8000 "GET /musteriler/?skip=0&limit=25 HTTP/1.1" 200 2
+2025-07-18 15:23:43,838 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 15:23:43,851 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 15:23:43,852 - DEBUG - interactive is False
+2025-07-18 15:23:43,852 - DEBUG - platform is win32
+2025-07-18 15:23:43,918 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 15:23:43,920 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 15:27:56,415 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 15:27:56,426 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 15:27:56,427 - DEBUG - interactive is False
+2025-07-18 15:27:56,427 - DEBUG - platform is win32
+2025-07-18 15:27:56,488 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 15:27:56,489 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 17:37:28,472 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 17:37:28,485 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:37:28,486 - DEBUG - interactive is False
+2025-07-18 17:37:28,486 - DEBUG - platform is win32
+2025-07-18 17:37:28,562 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:37:28,564 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 17:39:21,211 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 17:39:21,221 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:39:21,222 - DEBUG - interactive is False
+2025-07-18 17:39:21,222 - DEBUG - platform is win32
+2025-07-18 17:39:21,290 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:39:21,292 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 17:40:17,752 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 17:40:17,762 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:40:17,763 - DEBUG - interactive is False
+2025-07-18 17:40:17,763 - DEBUG - platform is win32
+2025-07-18 17:40:17,826 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:40:17,828 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 17:40:33,135 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 17:40:33,147 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:40:33,148 - DEBUG - interactive is False
+2025-07-18 17:40:33,148 - DEBUG - platform is win32
+2025-07-18 17:40:33,222 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:40:33,225 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 17:44:10,467 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 17:44:10,478 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:44:10,479 - DEBUG - interactive is False
+2025-07-18 17:44:10,479 - DEBUG - platform is win32
+2025-07-18 17:44:10,539 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:44:10,541 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 17:46:13,995 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 17:46:17,652 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 17:47:18,993 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 17:47:19,007 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:47:19,008 - DEBUG - interactive is False
+2025-07-18 17:47:19,009 - DEBUG - platform is win32
+2025-07-18 17:47:19,081 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:47:19,083 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 17:59:57,373 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 17:59:57,383 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:59:57,385 - DEBUG - interactive is False
+2025-07-18 17:59:57,385 - DEBUG - platform is win32
+2025-07-18 17:59:57,442 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 17:59:57,444 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 17:59:59,911 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 17:59:59,971 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=SATI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 18:03:07,084 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 18:03:07,096 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 18:03:07,097 - DEBUG - interactive is False
+2025-07-18 18:03:07,097 - DEBUG - platform is win32
+2025-07-18 18:03:07,157 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 18:03:07,158 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 18:04:59,383 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 18:04:59,397 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 18:04:59,399 - DEBUG - interactive is False
+2025-07-18 18:04:59,399 - DEBUG - platform is win32
+2025-07-18 18:04:59,455 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 18:04:59,457 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 18:05:01,943 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:05:01,988 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=SATI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 18:09:05,693 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 18:09:05,704 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 18:09:05,706 - DEBUG - interactive is False
+2025-07-18 18:09:05,706 - DEBUG - platform is win32
+2025-07-18 18:09:05,775 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 18:09:05,777 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 18:09:55,776 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 18:09:55,794 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 18:09:55,795 - DEBUG - interactive is False
+2025-07-18 18:09:55,795 - DEBUG - platform is win32
+2025-07-18 18:09:55,877 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 18:09:55,881 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 18:19:31,178 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 18:19:31,189 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 18:19:31,191 - DEBUG - interactive is False
+2025-07-18 18:19:31,191 - DEBUG - platform is win32
+2025-07-18 18:19:31,249 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 18:19:31,250 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 18:19:33,437 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:19:33,483 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=SATI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 18:19:33,488 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:19:33,518 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/musteriler HTTP/1.1" 200 2
+2025-07-18 18:19:33,520 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:19:33,533 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=SATI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 18:19:33,548 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:19:33,558 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=ALI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 18:19:33,561 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:19:33,573 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/tedarikciler HTTP/1.1" 200 2
+2025-07-18 18:19:33,576 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:19:33,586 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=ALI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 18:19:44,957 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:19:44,969 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=ALI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 18:19:45,549 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:19:45,560 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=SATI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 18:20:16,903 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:20:16,916 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/kategoriler HTTP/1.1" 200 2
+2025-07-18 18:20:16,919 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:20:16,934 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 18:20:16,937 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:20:16,952 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/markalar HTTP/1.1" 200 2
+2025-07-18 18:20:16,959 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:20:16,970 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 18:20:16,974 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 18:20:16,982 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 20:02:49,875 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 20:02:49,895 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 20:02:49,897 - DEBUG - interactive is False
+2025-07-18 20:02:49,897 - DEBUG - platform is win32
+2025-07-18 20:02:50,000 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 20:02:50,003 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 20:06:49,832 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 20:06:49,866 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 20:06:49,870 - DEBUG - interactive is False
+2025-07-18 20:06:49,870 - DEBUG - platform is win32
+2025-07-18 20:06:50,002 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 20:06:50,005 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 20:06:57,131 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:01,790 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=SATI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 20:07:01,793 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:01,812 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/musteriler HTTP/1.1" 200 2
+2025-07-18 20:07:01,815 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:01,828 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=SATI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 20:07:01,841 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:01,853 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=ALI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 20:07:01,856 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:01,873 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/tedarikciler HTTP/1.1" 200 2
+2025-07-18 20:07:01,875 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:01,887 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=ALI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 20:07:08,730 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:08,756 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/kategoriler HTTP/1.1" 200 2
+2025-07-18 20:07:08,759 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:08,778 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 20:07:08,781 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:08,798 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/markalar HTTP/1.1" 200 2
+2025-07-18 20:07:08,802 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:08,815 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 20:07:08,820 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:08,832 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 20:07:12,072 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:07:12,086 - DEBUG - http://127.0.0.1:8000 "GET /musteriler/?skip=0&limit=25 HTTP/1.1" 200 2
+2025-07-18 20:10:49,655 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 20:10:49,674 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 20:10:49,676 - DEBUG - interactive is False
+2025-07-18 20:10:49,676 - DEBUG - platform is win32
+2025-07-18 20:10:49,776 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 20:10:49,778 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 20:14:28,397 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:14:28,488 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/kategoriler HTTP/1.1" 200 2
+2025-07-18 20:14:28,493 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:14:28,518 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 20:14:28,524 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:14:28,544 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/markalar HTTP/1.1" 200 2
+2025-07-18 20:14:28,550 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:14:28,567 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 20:14:28,573 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:14:28,593 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 20:16:03,412 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-18 20:16:03,434 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 20:16:03,435 - DEBUG - interactive is False
+2025-07-18 20:16:03,436 - DEBUG - platform is win32
+2025-07-18 20:16:03,536 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-18 20:16:03,538 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-18 20:16:07,609 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:16:07,619 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/kategoriler HTTP/1.1" 200 2
+2025-07-18 20:16:07,623 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:16:07,635 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 20:16:07,638 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:16:07,647 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/markalar HTTP/1.1" 200 2
+2025-07-18 20:16:07,650 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:16:07,665 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 20:16:07,669 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:16:07,681 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-18 20:18:39,787 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:18:39,805 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=SATI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 20:18:39,809 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:18:39,830 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/musteriler HTTP/1.1" 200 2
+2025-07-18 20:18:39,834 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:18:39,848 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=SATI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 20:18:39,866 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:18:39,879 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=ALI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 20:18:39,883 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:18:39,901 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/tedarikciler HTTP/1.1" 200 2
+2025-07-18 20:18:39,904 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:18:39,920 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=ALI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 20:18:41,274 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:18:41,288 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=ALI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 20:18:48,866 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:18:48,880 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=ALI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-18 20:18:49,376 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-18 20:18:49,395 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/?tip=ALI%C5%9E&limit=1000 HTTP/1.1" 200 2
+2025-07-19 11:25:03,888 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-19 11:25:03,929 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 11:25:03,932 - DEBUG - interactive is False
+2025-07-19 11:25:03,933 - DEBUG - platform is win32
+2025-07-19 11:25:04,069 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 11:25:04,083 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-19 11:25:13,677 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 11:25:13,838 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/kategoriler HTTP/1.1" 200 2
+2025-07-19 11:25:13,843 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 11:25:13,873 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-19 11:25:13,877 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 11:25:13,892 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/markalar HTTP/1.1" 200 2
+2025-07-19 11:25:13,896 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 11:25:13,904 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-19 11:25:13,905 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 11:25:13,912 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-19 11:36:42,781 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 11:36:42,797 - DEBUG - http://127.0.0.1:8000 "GET /musteriler/?skip=0&limit=25 HTTP/1.1" 200 2
+2025-07-19 14:28:58,277 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-19 14:28:58,322 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:28:58,325 - DEBUG - interactive is False
+2025-07-19 14:28:58,325 - DEBUG - platform is win32
+2025-07-19 14:28:58,518 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:28:58,540 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-19 14:29:41,475 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:41,514 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:29:51,380 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:51,415 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/musteriler HTTP/1.1" 200 2
+2025-07-19 14:29:51,417 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:51,419 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:29:52,108 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:52,110 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:29:52,755 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:52,788 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/tedarikciler HTTP/1.1" 200 2
+2025-07-19 14:29:52,789 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:52,791 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:29:56,171 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:56,174 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:29:57,209 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:57,216 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/musteriler HTTP/1.1" 200 2
+2025-07-19 14:29:57,218 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:57,221 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:29:58,287 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:58,289 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:29:58,710 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:58,718 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/tedarikciler HTTP/1.1" 200 2
+2025-07-19 14:29:58,720 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:29:58,722 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:30:02,880 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:02,889 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/kategoriler HTTP/1.1" 200 2
+2025-07-19 14:30:02,892 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:02,902 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-19 14:30:02,905 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:02,913 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/markalar HTTP/1.1" 200 2
+2025-07-19 14:30:02,915 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:02,926 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-19 14:30:02,929 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:02,938 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-19 14:30:06,304 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:06,313 - DEBUG - http://127.0.0.1:8000 "GET /musteriler/?skip=0&limit=25 HTTP/1.1" 200 2
+2025-07-19 14:30:21,768 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:21,776 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/kategoriler HTTP/1.1" 200 2
+2025-07-19 14:30:21,778 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:21,786 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-19 14:30:21,787 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:21,792 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/markalar HTTP/1.1" 200 2
+2025-07-19 14:30:21,794 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:21,800 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-19 14:30:21,802 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:21,810 - DEBUG - http://127.0.0.1:8000 "GET /stoklar/?limit=25&skip=0 HTTP/1.1" 200 2
+2025-07-19 14:30:23,778 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:23,781 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:30:24,774 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:24,779 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/musteriler HTTP/1.1" 200 2
+2025-07-19 14:30:24,781 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:24,783 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:30:25,123 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:25,125 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:30:25,497 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:25,504 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/tedarikciler HTTP/1.1" 200 2
+2025-07-19 14:30:25,506 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:30:25,509 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:31:53,194 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-19 14:31:53,209 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:31:53,211 - DEBUG - interactive is False
+2025-07-19 14:31:53,211 - DEBUG - platform is win32
+2025-07-19 14:31:53,283 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:31:53,285 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-19 14:33:45,701 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-19 14:33:45,713 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:33:45,714 - DEBUG - interactive is False
+2025-07-19 14:33:45,714 - DEBUG - platform is win32
+2025-07-19 14:33:45,785 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:33:45,788 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-19 14:35:40,612 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-19 14:35:40,624 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:35:40,625 - DEBUG - interactive is False
+2025-07-19 14:35:40,625 - DEBUG - platform is win32
+2025-07-19 14:35:40,693 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:35:40,694 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-19 14:41:50,254 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-19 14:41:50,268 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:41:50,269 - DEBUG - interactive is False
+2025-07-19 14:41:50,269 - DEBUG - platform is win32
+2025-07-19 14:41:50,339 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:41:50,341 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-19 14:42:06,533 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:42:06,546 - DEBUG - http://127.0.0.1:8000 "GET /musteriler/?skip=0&limit=25 HTTP/1.1" 200 2
+2025-07-19 14:42:06,563 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:42:06,573 - DEBUG - http://127.0.0.1:8000 "GET /musteriler/?skip=0&limit=25 HTTP/1.1" 200 2
+2025-07-19 14:42:08,572 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:42:08,576 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:42:09,815 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:42:09,823 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/musteriler HTTP/1.1" 200 2
+2025-07-19 14:42:09,826 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:42:09,829 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:42:10,882 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:42:10,885 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:42:11,458 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:42:11,470 - DEBUG - http://127.0.0.1:8000 "GET /nitelikler/tedarikciler HTTP/1.1" 200 2
+2025-07-19 14:42:11,472 - DEBUG - Starting new HTTP connection (1): 127.0.0.1:8000
+2025-07-19 14:42:11,474 - DEBUG - http://127.0.0.1:8000 "GET /faturalar/count HTTP/1.1" 405 31
+2025-07-19 14:46:19,747 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-19 14:46:19,758 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:46:19,759 - DEBUG - interactive is False
+2025-07-19 14:46:19,759 - DEBUG - platform is win32
+2025-07-19 14:46:19,864 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:46:19,868 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json
+2025-07-19 14:46:34,008 - DEBUG - matplotlib data path: C:\Users\m.r4sid\OneDrive\Masaüstü\onmuhasebe\api_env\Lib\site-packages\matplotlib\mpl-data
+2025-07-19 14:46:34,018 - DEBUG - CONFIGDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:46:34,020 - DEBUG - interactive is False
+2025-07-19 14:46:34,020 - DEBUG - platform is win32
+2025-07-19 14:46:34,080 - DEBUG - CACHEDIR=C:\Users\m.r4sid\.matplotlib
+2025-07-19 14:46:34,082 - DEBUG - Using fontManager instance from C:\Users\m.r4sid\.matplotlib\fontlist-v390.json

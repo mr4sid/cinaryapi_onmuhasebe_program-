@@ -1,4 +1,11 @@
 # pencereler.py dosyasının içeriği 
+from PySide6.QtWidgets import (
+    QDialog, QWidget, QVBoxLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit, 
+    QTextEdit, QPushButton, QMessageBox, QTabWidget, QGroupBox, QComboBox, 
+    QFileDialog, QSizePolicy)
+from PySide6.QtGui import QFont, QPixmap, QImage, QDoubleValidator, QIntValidator
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
+import requests
 from datetime import datetime, date, timedelta
 import os
 import shutil
@@ -12,11 +19,10 @@ from PIL import Image, ImageTk
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill 
 from veritabani import OnMuhasebe
-# Yerel Uygulama Modülleri
-from yardimcilar import (sort_treeview_column, setup_numeric_entry, setup_date_entry,
-                         validate_numeric_input_generic, format_on_focus_out_numeric_generic,
-                         DatePickerDialog, normalize_turkish_chars)
-
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog, simpledialog
+from yardimcilar import DatePickerDialog, normalize_turkish_chars
+from config import API_BASE_URL
 class SiparisPenceresi(tk.Toplevel):
     def __init__(self, parent, db_manager, app_ref, siparis_tipi, siparis_id_duzenle=None, yenile_callback=None, initial_cari_id=None, initial_urunler=None, initial_data=None):
         super().__init__(parent)
@@ -1450,61 +1456,42 @@ class FaturaGuncellemePenceresi(tk.Toplevel):
             self.yenile_callback_liste()
         self.destroy()
 
-class FaturaPenceresi(tk.Toplevel):
-    def __init__(self, parent, db_manager, app_ref, fatura_tipi, duzenleme_id=None, yenile_callback=None, initial_cari_id=None, initial_urunler=None, initial_data=None):
+class FaturaPenceresi(QDialog):
+    def __init__(self, parent, db_manager, app_ref, fatura_tipi, duzenleme_id=None, yenile_callback=None, initial_data=None):
         super().__init__(parent)
-        self.app = app_ref
         self.db = db_manager
-        self.parent = parent
-        self.fatura_tipi = fatura_tipi
-        self.duzenleme_id = duzenleme_id
+        self.app = app_ref
         self.yenile_callback = yenile_callback
-        self.initial_cari_id = initial_cari_id
-        self.initial_urunler = initial_urunler
-        self.initial_data = initial_data
-
-        title = ""
-        if duzenleme_id:
-            fatura_info = self.db.fatura_getir_by_id(duzenleme_id)
-            fatura_no = fatura_info['fatura_no'] if fatura_info else "Bilinmiyor"
-            title = f"Fatura Güncelleme: {fatura_no}"
-        elif initial_data and initial_data.get('iade_modu'):
-            # İade modu aktifse, başlığı iade faturasına göre ayarla
-            original_fatura_no_display = initial_data.get('fatura_no', 'İade')
-            if 'IADE-' in original_fatura_no_display:
-                title = f"İade Faturası Oluştur: {original_fatura_no_display}"
-            else:
-                title = "İade Faturası Oluştur"
-        else:
-            title = "Yeni Satış Faturası" if fatura_tipi == self.db.FATURA_TIP_SATIS else "Yeni Alış Faturası"
-
-        self.title(title)
+        self.duzenleme_id = duzenleme_id
+        self.initial_data = initial_data or {}
+        self.islem_tipi = fatura_tipi
         
-        self.withdraw()
+        self.fatura_kalemleri_ui = []
+        self.urun_map = {}
+        self.cari_map = {}
+        self.kasa_banka_map = {}
+        self.secili_cari_id = None
+        self.secili_cari_adi = ""
+
+        # İade modu kontrolü
+        self.iade_modu_aktif = self.initial_data.get('iade_modu', False)
+        self.original_fatura_id_for_iade = self.initial_data.get('orijinal_fatura_id')
+
+        # İşlem tipini iadeye göre ayarla
+        if self.iade_modu_aktif:
+            if self.islem_tipi == "SATIŞ": self.islem_tipi = "SATIŞ İADE"
+            elif self.islem_tipi == "ALIŞ": self.islem_tipi = "ALIŞ İADE"
+
+        title = self._get_baslik()
+        self.setWindowTitle(title)
+        self.setMinimumSize(1200, 800)
+        self.setModal(True)
+
+        self.main_layout = QVBoxLayout(self)
         
-        self.state('zoomed')
-        self.transient(parent)
-        self.grab_set()
-
-        from arayuz import FaturaOlusturmaSayfasi
-
-        self.fatura_frame = FaturaOlusturmaSayfasi(
-            self,
-            self.db,
-            self.app,
-            self.fatura_tipi,
-            duzenleme_id=self.duzenleme_id,
-            yenile_callback=self._fatura_islemi_tamamlandi_callback,
-            initial_cari_id=self.initial_cari_id,
-            initial_urunler=self.initial_urunler,
-            initial_data=self.initial_data
-        )
-        self.fatura_frame.pack(expand=True, fill=tk.BOTH)
-
-        self.protocol("WM_DELETE_WINDOW", self.on_kapat)
-
-        self.update_idletasks()
-        self.deiconify()
+        self._create_ui()
+        self._connect_signals()
+        self._load_initial_data()
 
     def on_kapat(self):
         if self.duzenleme_id is None and self.fatura_frame:
@@ -2280,183 +2267,72 @@ class SirketBilgileriPenceresi(tk.Toplevel):
         else:
             messagebox.showerror("Hata", message, parent=self)
 
-class StokHareketiPenceresi(tk.Toplevel):
-    def __init__(self, parent_app, db_manager, urun_id, urun_adi, mevcut_stok, hareket_yönü, yenile_stok_listesi_callback, parent_pencere=None):
-        super().__init__(parent_app)
-        self.app = parent_app
-        self.db = db_manager
+class StokHareketiPenceresi(QDialog):
+    def __init__(self, parent, urun_id, urun_adi, mevcut_stok, hareket_yonu, yenile_callback):
+        super().__init__(parent)
         self.urun_id = urun_id
-        self.urun_adi = urun_adi
-        self.mevcut_stok = mevcut_stok
-        self.hareket_yönü = hareket_yönü
-        self.yenile_stok_listesi_callback = yenile_stok_listesi_callback
+        self.yenile_callback = yenile_callback
 
-        self.urun_karti_penceresi_ref = parent_pencere # <-- Bu referans burada saklanıyor
-        print(f"DEBUG: StokHareketiPenceresi __init__ - parent_pencere: {parent_pencere}") # <-- YENİ DEBUG
-        if parent_pencere:
-            print(f"DEBUG: StokHareketiPenceresi __init__ - parent_pencere tipi: {type(parent_pencere)}")
+        title = "Stok Girişi" if hareket_yonu == "EKLE" else "Stok Çıkışı"
+        self.setWindowTitle(f"{title}: {urun_adi}")
+        self.setMinimumWidth(400)
+        self.setModal(True)
 
-        self.urun_karti_penceresi_ref = None
-        if isinstance(self.master, tk.Toplevel) and self.master.winfo_class() == 'Toplevel':
-            self.urun_karti_penceresi_ref = self.master
+        self.main_layout = QVBoxLayout(self)
+        self.form_layout = QGridLayout()
 
-        self.title(f"Stok Hareketi: {self.urun_adi}")
-        self.geometry("400x350")
-        self.resizable(False, False)
-        self.transient(parent_app)
-        self.grab_set()
+        self.main_layout.addWidget(QLabel(f"<b>{title}</b><br>Ürün: {urun_adi}<br>Mevcut Stok: {mevcut_stok:.2f}"), alignment=Qt.AlignCenter)
+        self.main_layout.addLayout(self.form_layout)
 
-        main_frame = ttk.Frame(self, padding="15")
-        main_frame.pack(expand=True, fill=tk.BOTH)
+        self.entries = {}
+        self.form_layout.addWidget(QLabel("İşlem Tipi:"), 0, 0)
+        self.entries['islem_tipi'] = QComboBox()
+        if hareket_yonu == "EKLE": self.entries['islem_tipi'].addItems(["Giriş (Manuel)", "Sayım Fazlası", "İade Girişi"])
+        else: self.entries['islem_tipi'].addItems(["Çıkış (Manuel)", "Sayım Eksiği", "Zayiat"])
+        self.form_layout.addWidget(self.entries['islem_tipi'], 0, 1)
 
-        # Başlığı hareket yönüne göre ayarla
-        baslik_text = ""
-        if self.hareket_yönü == "EKLE":
-            baslik_text = "Stok Girişi İşlemi"
-            islem_tipleri = [self.db.STOK_ISLEM_TIP_GIRIS_MANUEL, self.db.STOK_ISLEM_TIP_SAYIM_FAZLASI, self.db.STOK_ISLEM_TIP_IADE_GIRIS] # <-- Düzeltildi
-        elif self.hareket_yönü == "EKSILT":
-            baslik_text = "Stok Çıkışı İşlemi"
-            islem_tipleri = [self.db.STOK_ISLEM_TIP_CIKIS_MANUEL, self.db.STOK_ISLEM_TIP_SAYIM_EKSIGI, self.db.STOK_ISLEM_TIP_ZAYIAT] # <-- Düzeltildi
-        else:
-            baslik_text = "Stok Hareketi İşlemi" # Varsayılan veya hata durumu
-            islem_tipleri = [self.db.STOK_ISLEM_TIP_GIRIS_MANUEL, self.db.STOK_ISLEM_TIP_CIKIS_MANUEL, # <-- Düzeltildi
-                             self.db.STOK_ISLEM_TIP_SAYIM_FAZLASI, self.db.STOK_ISLEM_TIP_SAYIM_EKSIGI, # <-- Düzeltildi
-                             self.db.STOK_ISLEM_TIP_ZAYIAT, self.db.STOK_ISLEM_TIP_IADE_GIRIS] # <-- Düzeltildi
+        self.form_layout.addWidget(QLabel("Miktar:"), 1, 0)
+        self.entries['miktar'] = QLineEdit("0,00"); self.entries['miktar'].setValidator(QDoubleValidator(0.01, 999999.0, 2))
+        self.form_layout.addWidget(self.entries['miktar'], 1, 1)
 
-        ttk.Label(main_frame, text=f"{baslik_text}\nÜrün: {self.urun_adi}", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
-        ttk.Label(main_frame, text=f"Mevcut Stok: {self.mevcut_stok:.2f}", font=("Segoe UI", 10)).grid(row=1, column=0, columnspan=2, pady=(0, 15), sticky=tk.W)
+        self.form_layout.addWidget(QLabel("Tarih:"), 2, 0)
+        self.entries['tarih'] = QLineEdit(datetime.now().strftime('%Y-%m-%d'))
+        self.form_layout.addWidget(self.entries['tarih'], 2, 1)
 
-        # İşlem Tipi (dinamik olarak ayarlanmış)
-        ttk.Label(main_frame, text="İşlem Tipi:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
-        self.islem_tipi_combo = ttk.Combobox(main_frame, values=islem_tipleri, state="readonly", width=25)
-        self.islem_tipi_combo.grid(row=2, column=1, padx=5, pady=5, sticky=tk.EW)
-        self.islem_tipi_combo.set(islem_tipleri[0]) # Varsayılan olarak ilk seçeneği belirle
+        self.form_layout.addWidget(QLabel("Açıklama:"), 3, 0, alignment=Qt.AlignTop)
+        self.entries['aciklama'] = QTextEdit()
+        self.form_layout.addWidget(self.entries['aciklama'], 3, 1)
 
-        # Miktar
-        ttk.Label(main_frame, text="Miktar:").grid(row=3, column=0, padx=5, pady=5, sticky=tk.W)
-        self.miktar_entry = ttk.Entry(main_frame, width=25)
-        self.miktar_entry.grid(row=3, column=1, padx=5, pady=5, sticky=tk.EW)
-        setup_numeric_entry(self.app, self.miktar_entry, allow_negative=False, decimal_places=2)
-        self.miktar_entry.insert(0, "0,00")
+        button_layout = QHBoxLayout(); button_layout.addStretch()
+        kaydet_button = QPushButton("Kaydet"); kaydet_button.clicked.connect(self.kaydet)
+        iptal_button = QPushButton("İptal"); iptal_button.clicked.connect(self.reject)
+        button_layout.addWidget(kaydet_button); button_layout.addWidget(iptal_button)
+        self.main_layout.addLayout(button_layout)
 
-        # Tarih
-        ttk.Label(main_frame, text="Tarih:").grid(row=4, column=0, padx=5, pady=5, sticky=tk.W)
-        self.tarih_entry = ttk.Entry(main_frame, width=20)
-        self.tarih_entry.grid(row=4, column=1, padx=5, pady=5, sticky=tk.EW)
-        self.tarih_entry.insert(0, datetime.now().strftime('%Y-%m-%d'))
-        setup_date_entry(self.app, self.tarih_entry)
-        ttk.Button(main_frame, text="🗓️", command=lambda: DatePickerDialog(self.app, self.tarih_entry), width=3).grid(row=4, column=2, padx=2, pady=5, sticky=tk.W)
-
-        # Açıklama
-        ttk.Label(main_frame, text="Açıklama:").grid(row=5, column=0, padx=5, pady=5, sticky=tk.NW)
-        self.aciklama_text = tk.Text(main_frame, height=3, width=25, font=('Segoe UI', 9))
-        self.aciklama_text.grid(row=5, column=1, padx=5, pady=5, sticky=tk.EW)
-
-        main_frame.columnconfigure(1, weight=1) # Miktar ve Açıklama Entry'sinin genişlemesi için
-
-        # Butonlar
-        button_frame = ttk.Frame(self, padding="10")
-        button_frame.pack(fill=tk.X, side=tk.BOTTOM)
-        ttk.Button(button_frame, text="Kaydet", command=self._kaydet_stok_hareketi, style="Accent.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="İptal", command=self.destroy).pack(side=tk.RIGHT, padx=5)
-        
-    def _kaydet_stok_hareketi(self):
-        islem_tipi = self.islem_tipi_combo.get()
-        miktar_str = self.miktar_entry.get().strip()
-        tarih_str = self.tarih_entry.get().strip()
-        aciklama = self.aciklama_text.get("1.0", tk.END).strip()
-
-        if not miktar_str or not tarih_str:
-            messagebox.showerror("Eksik Bilgi", "Miktar ve Tarih alanları boş bırakılamaz.", parent=self)
-            return
-
+    def kaydet(self):
         try:
-            miktar = float(miktar_str.replace(',', '.'))
-            if miktar <= 0:
-                messagebox.showerror("Geçersiz Miktar", "Miktar pozitif bir sayı olmalıdır.", parent=self)
-                return
-            datetime.strptime(tarih_str, '%Y-%m-%d')
-        except ValueError:
-            messagebox.showerror("Geçersiz Giriş", "Miktar sayısal, Tarih YYYY-AA-GG formatında olmalıdır.", parent=self)
-            return
+            miktar = float(self.entries['miktar'].text().replace(',', '.'))
+            if miktar <= 0: raise ValueError("Miktar pozitif bir değer olmalıdır.")
+        except (ValueError, TypeError):
+            QMessageBox.warning(self, "Geçersiz Değer", "Lütfen miktar alanına geçerli bir sayı girin."); return
 
-        success, message = self.db.stok_hareketi_ekle(
-            self.urun_id,
-            islem_tipi,
-            miktar,
-            tarih_str,
-            aciklama
-        )
-
-        if success:
-            messagebox.showinfo("Başarılı", message, parent=self)
-            
-            self.yenile_stok_listesi_callback() # Ana stok listesini yenile
-
-            print("DEBUG: _kaydet_stok_hareketi - self.urun_karti_penceresi_ref kontrol ediliyor.") # <-- YENİ DEBUG
-            if self.urun_karti_penceresi_ref and hasattr(self.urun_karti_penceresi_ref, 'refresh_data_and_ui'):
-                print("DEBUG: _kaydet_stok_hareketi - self.urun_karti_penceresi_ref var ve refresh_data_and_ui metodu var. Çağrılıyor.") # <-- YENİ DEBUG
-                try:
-                    self.urun_karti_penceresi_ref.refresh_data_and_ui() # <-- Bu çağrı doğru olmalı
-                    self.urun_karti_penceresi_ref.update_idletasks() # UI güncellemesini zorla
-                    self.urun_karti_penceresi_ref.update() # UI güncellemesini daha da zorla
-                    if hasattr(self.urun_karti_penceresi_ref, 'entry_stok') and self.urun_karti_penceresi_ref.entry_stok:
-                        self.urun_karti_penceresi_ref.entry_stok.focus_set()
-                        self.urun_karti_penceresi_ref.entry_stok.selection_range(0, tk.END)
-                except Exception as e_update_card:
-                    print(f"UYARI: Ürün Kartı penceresi güncellenirken hata oluştu: {e_update_card}")
-                    traceback.print_exc() # Detaylı hata çıktısı
-            else:
-                print("DEBUG: _kaydet_stok_hareketi - self.urun_karti_penceresi_ref yok veya refresh_data_and_ui metodu yok.") # <-- YENİ DEBUG
-            
-            self.after(50, self.destroy)
-    def _load_stok_hareketleri(self, event=None):
-        for i in self.stok_hareket_tree.get_children():
-            self.stok_hareket_tree.delete(i)
-
-        if not self.urun_id:
-            self.stok_hareket_tree.insert("", tk.END, values=("", "", "Ürün Seçili Değil", "", "", "", "", ""))
-            return
-
-        islem_tipi_filtre = self.stok_hareket_tip_filter_cb.get()
-        bas_tarih_str = self.stok_hareket_bas_tarih_entry.get()
-        bit_tarih_str = self.stok_hareket_bit_tarih_entry.get()
-
-        hareketler = self.db.stok_hareketleri_listele(
-            self.urun_id,
-            islem_tipi=islem_tipi_filtre if islem_tipi_filtre != "TÜMÜ" else None,
-            baslangic_tarih=bas_tarih_str if bas_tarih_str else None,
-            bitis_tarih=bit_tarih_str if bit_tarih_str else None
-        )
-
-        if not hareketler:
-            self.stok_hareket_tree.insert("", tk.END, values=("", "", "Hareket Bulunamadı", "", "", "", "", ""))
-            return
-
-        for hareket in hareketler:
-            # ### HATA DÜZELTMESİ BURADA ###
-            # hareket[2] zaten bir tarih nesnesi olduğu için strptime kullanmıyoruz.
-            tarih_obj = hareket[2]
-            if isinstance(tarih_obj, (datetime, date)):
-                tarih_formatted = tarih_obj.strftime('%d.%m.%Y')
-            else:
-                tarih_formatted = str(tarih_obj) # Beklenmedik bir durum olursa diye
-                
-            miktar_formatted = f"{hareket[4]:.2f}".rstrip('0').rstrip('.')
-            onceki_stok_formatted = f"{hareket[5]:.2f}".rstrip('0').rstrip('.')
-            sonraki_stok_formatted = f"{hareket[6]:.2f}".rstrip('0').rstrip('.')
-            
-            self.stok_hareket_tree.insert("", tk.END, values=(
-                hareket[0],
-                tarih_formatted,
-                hareket[3],
-                miktar_formatted,
-                onceki_stok_formatted,
-                sonraki_stok_formatted,
-                hareket[7] if hareket[7] else "-",
-                hareket[8] if hareket[8] else "-"
-            ))
-        self.app.set_status(f"Ürün '{self.urun_adi}' için {len(hareketler)} stok hareketi listelendi.")
+        data = {
+            "islem_tipi": self.entries['islem_tipi'].currentText(),
+            "miktar": miktar, "tarih": self.entries['tarih'].text(),
+            "aciklama": self.entries['aciklama'].toPlainText().strip()
+        }
+        try:
+            api_url = f"{API_BASE_URL}/stoklar/{self.urun_id}/hareket"
+            response = requests.post(api_url, json=data); response.raise_for_status()
+            QMessageBox.information(self, "Başarılı", "Stok hareketi başarıyla kaydedildi.")
+            if self.yenile_callback: self.yenile_callback()
+            self.accept()
+        except requests.exceptions.RequestException as e:
+            error_detail = str(e)
+            if e.response is not None:
+                try: error_detail = e.response.json().get('detail', str(e.response.content))
+                except ValueError: pass
+            QMessageBox.critical(self, "API Hatası", f"Stok hareketi kaydedilirken bir hata oluştu:\n{error_detail}")
 
 class IlgiliFaturalarDetayPenceresi(tk.Toplevel):
     def __init__(self, parent_app, db_manager, urun_id, urun_adi):
@@ -3213,2059 +3089,715 @@ class UrunNitelikYonetimiPenceresi(tk.Toplevel):
         else:
             self.combo_mense.set("Seçim Yok")
 
-class UrunKartiPenceresi(tk.Toplevel):
-    def __init__(self, parent, db_manager, yenile_callback, urun_duzenle=None, app_ref=None, on_update_reopen_callback=None):
+class UrunKartiPenceresi(QDialog):
+    def __init__(self, parent, db_manager, yenile_callback, urun_duzenle=None, app_ref=None):
         super().__init__(parent)
         self.db = db_manager
-        self.yenile_callback = yenile_callback
-        self.urun_duzenle = urun_duzenle
         self.app = app_ref
-        self.title("Ürün Kartı" if urun_duzenle is None else "Ürün Düzenle")
-        self.geometry("950x750")
-        self.transient(parent)
-        self.grab_set()
-        self.resizable(True, True)
+        self.yenile_callback = yenile_callback
+        self.urun_duzenle_data = urun_duzenle
+        self.urun_id = self.urun_duzenle_data.get('id') if self.urun_duzenle_data else None
 
-        self.grid_rowconfigure(0, weight=0)
-        self.grid_rowconfigure(1, weight=1)
-        self.grid_rowconfigure(2, weight=0)
-        self.grid_columnconfigure(0, weight=1)
+        title = "Yeni Ürün Kartı" if not self.urun_id else f"Ürün Düzenle: {self.urun_duzenle_data.get('urun_adi', '')}"
+        self.setWindowTitle(title)
+        self.setMinimumSize(950, 750)
+        self.setModal(True)
 
-        self.sv_kod = tk.StringVar(self)
-        self.sv_ad = tk.StringVar(self)
-        self.sv_kdv = tk.StringVar(self)
-        self.sv_alis_haric = tk.StringVar(self)
-        self.sv_alis_dahil = tk.StringVar(self)
-        self.sv_satis_haric = tk.StringVar(self)
-        self.sv_satis_dahil = tk.StringVar(self)
-        self.sv_stok = tk.StringVar(self)
-        self.sv_min_stok = tk.StringVar(self)
-
-        self.entry_kod = None
-        self.entry_ad = None
-        self.entry_urun_detayi = None
-        self.entry_kdv = None
-        self.entry_alis_haric = None
-        self.entry_alis_dahil = None
-        self.entry_satis_haric = None
-        self.entry_satis_dahil = None
-        self.label_kar_orani = None
-        self.fiyat_degisiklik_tarihi_label = None
+        # Arayüz elemanları için sözlükler
+        self.entries = {}
+        self.combos = {}
+        self.combo_maps = {'kategori': {}, 'marka': {}, 'urun_grubu': {}, 'urun_birimi': {}, 'mense': {}}
+        self.label_kar_orani = QLabel("% 0,00")
+        self.urun_resmi_label = QLabel("Resim Yok")
+        self.original_pixmap = None
         self.urun_resmi_path = ""
-        self.original_image = None
-        self.tk_image = None
-        self._last_resized_size = (0, 0)
-        self.urun_resmi_label = None
-        self.image_container_frame = None
-
-        self.entry_stok = None
-        self.entry_min_stok = None
-        self.combo_kategori = None
-        self.combo_marka = None
-        self.combo_urun_grubu = None
-        self.combo_urun_birimi = None
-        self.combo_mense = None
-
-        self.kategoriler_map = {"Seçim Yok": None}
-        self.markalar_map = {"Seçim Yok": None}
-        self.urun_gruplari_map = {"Seçim Yok": None}
-        self.urun_birimleri_map = {"Seçim Yok": None}
-        self.ulkeler_map = {"Seçim Yok": None}
-
-        ttk.Label(self, text=self.title(), font=("Segoe UI", 16, "bold")).grid(row=0, column=0, pady=5, sticky="ew")
-
-        self.main_notebook = ttk.Notebook(self)
-        self.main_notebook.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
-
-        self.genel_bilgiler_sekmesi_frame = ttk.Frame(self.main_notebook, padding="5")
-        self.main_notebook.add(self.genel_bilgiler_sekmesi_frame, text="Genel Bilgiler")
-
-        self.urun_gorsel_ve_operasyon_frame = ttk.Frame(self.genel_bilgiler_sekmesi_frame)
-        self.urun_gorsel_ve_operasyon_frame.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
-
-        self._setup_genel_bilgiler_tab(self.genel_bilgiler_sekmesi_frame)
-
-        self.urun_id = self.urun_duzenle[0] if self.urun_duzenle else None
-        self.urun_adi_initial = self.urun_duzenle[2] if self.urun_duzenle else "Yeni Ürün"
-
-        # DÜZELTME BAŞLANGICI: StokHareketleriSekmesi'ne 'parent_pencere=self' gönderiyoruz.
-        # arayuz.py dosyasından doğru sınıfları import ettiğinizden emin olun.
-        from arayuz import StokHareketleriSekmesi, IlgiliFaturalarSekmesi, KategoriMarkaYonetimiSekmesi
-        self.stok_hareketleri_sekmesi_frame = StokHareketleriSekmesi(
-            self.main_notebook, # parent_notebook
-            self.db,
-            self.app,
-            self.urun_id,
-            self.urun_adi_initial,
-            parent_pencere=self # <-- Burası kritik düzeltme! UrunKartiPenceresi'nin kendisini gönderiyoruz.
-        )
-        self.main_notebook.add(self.stok_hareketleri_sekmesi_frame, text="Stok Hareketleri")
-        # DÜZELTME BİTİŞİ
-
-        self.ilgili_faturalar_sekmesi_frame = IlgiliFaturalarSekmesi(self.main_notebook, self.db, self.app, self.urun_id, self.urun_adi_initial)
-        self.main_notebook.add(self.ilgili_faturalar_sekmesi_frame, text="İlgili Faturalar")
-
-        self.kategori_marka_yonetimi_sekmesi_frame = KategoriMarkaYonetimiSekmesi(self.main_notebook, self.db, self.app)
-        self.main_notebook.add(self.kategori_marka_yonetimi_sekmesi_frame, text="Kategori & Marka Yönetimi")
-
-        self.main_notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_change)
-
-        bottom_main_buttons_frame = ttk.Frame(self, padding="5")
-        bottom_main_buttons_frame.grid(row=2, column=0, sticky="ew", pady=(0, 5), padx=5)
-
-        self.btn_kaydet = ttk.Button(bottom_main_buttons_frame, text="Kaydet", command=self.kaydet, style="Accent.TButton")
-        self.btn_kaydet.pack(side=tk.LEFT, padx=2)
-
-        self.btn_sil = ttk.Button(bottom_main_buttons_frame, text="Sil", command=self._urun_sil_butonu)
-        self.btn_sil.pack(side=tk.LEFT, padx=2)
-
-        ttk.Button(bottom_main_buttons_frame, text="Kapat", command=self.destroy).pack(side=tk.RIGHT, padx=2)
-
-        if self.urun_duzenle:
-            self.urun_detaylari = self.urun_duzenle
-            self._load_genel_bilgiler()
-            self.btn_sil.config(state=tk.NORMAL)
-        else:
-            self.urun_detaylari = None
-            self.sv_kod.set(self.db.get_next_stok_kodu())
-            self.sv_ad.set("")
-            self.entry_urun_detayi.delete("1.0", tk.END)
-            self.sv_kdv.set("20")
-            self.sv_alis_haric.set("0,00")
-            self.sv_alis_dahil.set("0,00")
-            self.sv_satis_haric.set("0,00")
-            self.sv_satis_dahil.set("0,00")
-            self.sv_stok.set("0,00")
-            self.sv_min_stok.set("0,00")
-            self._yukle_kategori_marka_comboboxlari()
-            self._yukle_urun_grubu_birimi_ulke_comboboxlari()
-            self.urun_resmi_path = ""
-            if self.urun_resmi_label:
-                self.urun_resmi_label.config(text="Resim Yok", image='')
-            self.original_image = None
-            self.tk_image = None
-            self._last_resized_size = (0,0)
-            self.btn_sil.config(state=tk.DISABLED)
-        self._bind_keyboard_navigation() 
-        self.after(100, self.entry_ad.focus_set)
-
-    def _bind_keyboard_navigation(self):
-        # form_entries_order listesini istenen sıraya göre yeniden tanımlıyoruz.
-        self.form_entries_order = [
-            self.entry_ad,              # 1. Odak: Ürün Adı
-            self.entry_min_stok,        # 2. Odak: Min. Stok Seviyesi
-            self.entry_alis_dahil,      # 3. Odak: Alış Fiyatı (KDV Dahil)
-            self.entry_satis_dahil,     # 4. Odak: Satış Fiyatı (KDV Dahil)
-            self.btn_kaydet             # 5. Odak: Kaydet butonu (tetiklenecek)
-        ]
-
-        for i, entry_widget in enumerate(self.form_entries_order):
-            if i < len(self.form_entries_order) - 1:
-                next_widget = self.form_entries_order[i + 1]
-                entry_widget.bind("<Return>", lambda e, next_w=next_widget: next_w.focus_set())
-            else:
-                # Son element (self.btn_kaydet) için Enter'a basıldığında kaydet metodunu çağır.
-                entry_widget.bind("<Return>", lambda e: self.kaydet()) # Kaydet metodunu çağırıyoruz
-                # Alternatif olarak: entry_widget.bind("<Return>", lambda e: self.btn_kaydet.invoke())
-
-    def refresh_data_and_ui(self):
-        """
-        Ürüne ait en güncel verileri veritabanından çeker ve tüm arayüzü yeniler.
-        Bu metot, alt pencerelerden (Stok Hareketi gibi) gelen sinyaller üzerine çağrılır.
-        """
-        print("DEBUG: UrunKartiPenceresi.refresh_data_and_ui çağrıldı.")
-        if not self.urun_id: # ürün ID'si yoksa işlem yapma
-            return
-
-        # Veritabanından en güncel ürün verisini çek
-        latest_product_data = self.db.stok_getir_by_id(self.urun_id)
-
-        if latest_product_data:
-            self.urun_duzenle = latest_product_data # Pencerenin ana veri kaynağını güncelle
-            self._load_genel_bilgiler() # Arayüzü bu yeni veriyle doldur
-
-            # UI'ın kendini hemen yenilemesini sağlamak için
-            self.update_idletasks()
-            # Alternatif olarak: self.update() de kullanılabilir.
-            print("DEBUG: Ürün kartı arayüzü en güncel verilerle yenilendi.")
-        else:
-            print("UYARI: Ürün kartı yenilenirken ürün veritabanından bulunamadı.")
-            messagebox.showwarning("Veri Kayıp", "Ürün verileri bulunamadığı için kart yenilenemedi.", parent=self)
-
-    def _setup_urun_nitelik_yonetim_tab(self, parent_frame):
-        parent_frame.columnconfigure(0, weight=1)
-        parent_frame.columnconfigure(1, weight=1)
-        parent_frame.rowconfigure(0, weight=1)
-
-        urun_grubu_frame = ttk.LabelFrame(parent_frame, text="Ürün Grubu Yönetimi", padding="10")
-        urun_grubu_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
-        urun_grubu_frame.columnconfigure(1, weight=1)
-        urun_grubu_frame.grid_rowconfigure(1, weight=1)
-
-        ttk.Label(urun_grubu_frame, text="Grup Adı:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.urun_grubu_entry = ttk.Entry(urun_grubu_frame, width=30)
-        self.urun_grubu_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
-        ttk.Button(urun_grubu_frame, text="Ekle", command=self._urun_grubu_ekle_ui).grid(row=0, column=2, padx=5, pady=5)
-        ttk.Button(urun_grubu_frame, text="Güncelle", command=self._urun_grubu_guncelle_ui).grid(row=0, column=3, padx=5, pady=5)
-        ttk.Button(urun_grubu_frame, text="Sil", command=self._urun_grubu_sil_ui).grid(row=0, column=4, padx=5, pady=5)
-
-        self.urun_grubu_tree = ttk.Treeview(urun_grubu_frame, columns=("ID", "Grup Adı"), show='headings', selectmode="browse")
-        self.urun_grubu_tree.heading("ID", text="ID"); self.urun_grubu_tree.column("ID", width=50, stretch=tk.NO)
-        self.urun_grubu_tree.heading("Grup Adı", text="Grup Adı"); self.urun_grubu_tree.column("Grup Adı", width=200, stretch=tk.YES)
-        self.urun_grubu_tree.grid(row=1, column=0, columnspan=5, padx=5, pady=10, sticky="nsew")
-        self.urun_grubu_tree.bind("<<TreeviewSelect>>", self._on_urun_grubu_select)
-        self._urun_grubu_listesini_yukle()
-
-        urun_birimi_frame = ttk.LabelFrame(parent_frame, text="Ürün Birimi Yönetimi", padding="10")
-        urun_birimi_frame.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
-        urun_birimi_frame.columnconfigure(1, weight=1)
-        urun_birimi_frame.grid_rowconfigure(1, weight=1)
-
-        ttk.Label(urun_birimi_frame, text="Birim Adı:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.urun_birimi_entry = ttk.Entry(urun_birimi_frame, width=30)
-        self.urun_birimi_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
-        ttk.Button(urun_birimi_frame, text="Ekle", command=self._urun_birimi_ekle_ui).grid(row=0, column=2, padx=5, pady=5)
-        ttk.Button(urun_birimi_frame, text="Güncelle", command=self._urun_birimi_guncelle_ui).grid(row=0, column=3, padx=5, pady=5)
-        ttk.Button(urun_birimi_frame, text="Sil", command=self._urun_birimi_sil_ui).grid(row=0, column=4, padx=5, pady=5)
-
-        self.urun_birimi_tree = ttk.Treeview(urun_birimi_frame, columns=("ID", "Birim Adı"), show='headings', selectmode="browse")
-        self.urun_birimi_tree.heading("ID", text="ID"); self.urun_birimi_tree.column("ID", width=50, stretch=tk.NO)
-        self.urun_birimi_tree.heading("Birim Adı", text="Birim Adı"); self.urun_birimi_tree.column("Birim Adı", width=200, stretch=tk.YES)
-        self.urun_birimi_tree.grid(row=1, column=0, columnspan=5, padx=5, pady=10, sticky="nsew")
-        self.urun_birimi_tree.bind("<<TreeviewSelect>>", self._on_urun_birimi_select)
-        self._urun_birimi_listesini_yukle()
-
-        ulke_frame = ttk.LabelFrame(parent_frame, text="Menşe Ülke Yönetimi", padding="10")
-        ulke_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
-        ulke_frame.columnconfigure(1, weight=1)
-        ulke_frame.grid_rowconfigure(1, weight=1)
-
-        ttk.Label(ulke_frame, text="Ülke Adı:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.ulke_entry = ttk.Entry(ulke_frame, width=30)
-        self.ulke_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
-        ttk.Button(ulke_frame, text="Ekle", command=self._ulke_ekle_ui).grid(row=0, column=2, padx=5, pady=5)
-        ttk.Button(ulke_frame, text="Güncelle", command=self._ulke_guncelle_ui).grid(row=0, column=3, padx=5, pady=5)
-        ttk.Button(ulke_frame, text="Sil", command=self._ulke_sil_ui).grid(row=0, column=4, padx=5, pady=5)
-
-        self.ulke_tree = ttk.Treeview(ulke_frame, columns=("ID", "Ülke Adı"), show='headings', selectmode="browse")
-        self.ulke_tree.heading("ID", text="ID"); self.ulke_tree.column("ID", width=50, stretch=tk.NO)
-        self.ulke_tree.heading("Ülke Adı", text="Ülke Adı"); self.ulke_tree.column("Ülke Adı", width=200, stretch=tk.YES)
-        self.ulke_tree.grid(row=1, column=0, columnspan=5, padx=5, pady=10, sticky="nsew")
-        self.ulke_tree.bind("<<TreeviewSelect>>", self._on_ulke_select)
-        self._ulke_listesini_yukle()
-
-    def _urun_grubu_listesini_yukle(self):
-        for i in self.urun_grubu_tree.get_children(): self.urun_grubu_tree.delete(i)
-        urun_gruplari = self.db.urun_grubu_listele()
-        for grup in urun_gruplari: self.urun_grubu_tree.insert("", tk.END, values=grup, iid=grup[0])
-        self._yukle_urun_grubu_birimi_ulke_comboboxlari() # Bağlantılı combobox'ı da yenile
-
-    def _setup_tabs(self):
-        self.notebook = ttk.Notebook(self.main_frame)
-        self.notebook.pack(expand=True, fill=tk.BOTH, padx=10, pady=(0, 10))
-
-        # Genel Bilgiler Sekmesi
-        self._setup_genel_bilgiler_tab()
-
-        # Stok Hareketleri Sekmesi
-        # StokHareketleriSekmesi'ne, kendi sahibi olan pencereyi (self) parametre olarak veriyoruz.
-        from arayuz import StokHareketleriSekmesi # Yerel içe aktarma
-        self.stok_hareketleri_frame = StokHareketleriSekmesi(
-            self.notebook, 
-            self.db, 
-            self.app, 
-            self.urun_id, 
-            self.urun_duzenle['urun_adi'] if self.urun_duzenle else "Yeni Ürün",
-            parent_pencere=self 
-        )
-        self.notebook.add(self.stok_hareketleri_frame, text="Stok Hareketleri")
-
-        self.notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_change)
-
-    def _on_urun_grubu_select(self, event):
-        selected_item = self.urun_grubu_tree.focus()
-        if selected_item:
-            values = self.urun_grubu_tree.item(selected_item, 'values')
-            self.urun_grubu_entry.delete(0, tk.END)
-            self.urun_grubu_entry.insert(0, values[1])
-        else:
-            self.urun_grubu_entry.delete(0, tk.END)
-
-    def _urun_grubu_ekle_ui(self):
-        grup_adi = self.urun_grubu_entry.get().strip()
-        if not grup_adi:
-            messagebox.showwarning("Uyarı", "Ürün grubu adı boş olamaz.", parent=self)
-            return
-        success, message = self.db.urun_grubu_ekle(grup_adi)
-        if success:
-            messagebox.showinfo("Başarılı", f"'{grup_adi}' ürün grubu başarıyla eklendi.", parent=self)
-            self.urun_grubu_entry.delete(0, tk.END)
-            self._urun_grubu_listesini_yukle()
-        else:
-            messagebox.showerror("Hata", f"Ürün grubu eklenirken hata: {message}", parent=self)
-
-    def _urun_grubu_guncelle_ui(self):
-        selected_item = self.urun_grubu_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Uyarı", "Lütfen güncellemek için bir ürün grubu seçin.", parent=self)
-            return
-        grup_id = self.urun_grubu_tree.item(selected_item)['values'][0]
-        yeni_grup_adi = self.urun_grubu_entry.get().strip()
-        if not yeni_grup_adi:
-            messagebox.showwarning("Uyarı", "Ürün grubu adı boş olamaz.", parent=self)
-            return
-        success, message = self.db.urun_grubu_guncelle(grup_id, yeni_grup_adi)
-        if success:
-            messagebox.showinfo("Başarılı", f"'{yeni_grup_adi}' ürün grubu başarıyla güncellendi.", parent=self)
-            self.urun_grubu_entry.delete(0, tk.END)
-            self._urun_grubu_listesini_yukle()
-        else:
-            messagebox.showerror("Hata", f"Ürün grubu güncellenirken hata: {message}", parent=self)
-
-    def _urun_grubu_sil_ui(self):
-        selected_item = self.urun_grubu_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Uyarı", "Lütfen silmek için bir ürün grubu seçin.", parent=self)
-            return
-        grup_id = self.urun_grubu_tree.item(selected_item)['values'][0]
-        grup_adi = self.urun_grubu_tree.item(selected_item)['values'][1]
-        if messagebox.askyesno("Onay", f"'{grup_adi}' ürün grubunu silmek istediğinizden emin misiniz?", parent=self):
-            success, message = self.db.urun_grubu_sil(grup_id)
-            if success:
-                messagebox.showinfo("Başarılı", f"'{grup_adi}' ürün grubu başarıyla silindi.", parent=self)
-                self.urun_grubu_entry.delete(0, tk.END)
-                self._urun_grubu_listesini_yukle()
-            else:
-                messagebox.showerror("Hata", f"Ürün grubu silinirken hata: {message}\nBu gruba bağlı ürünler olabilir.", parent=self)
-
-    def _on_urun_birimi_select(self, event):
-        selected_item = self.urun_birimi_tree.focus()
-        if selected_item:
-            values = self.urun_birimi_tree.item(selected_item, 'values')
-            self.urun_birimi_entry.delete(0, tk.END)
-            self.urun_birimi_entry.insert(0, values[1])
-        else:
-            self.urun_birimi_entry.delete(0, tk.END)
-
-    def _urun_birimi_ekle_ui(self):
-        birim_adi = self.urun_birimi_entry.get().strip()
-        if not birim_adi:
-            messagebox.showwarning("Uyarı", "Ürün birimi adı boş olamaz.", parent=self)
-            return
-        success, message = self.db.urun_birimi_ekle(birim_adi)
-        if success:
-            messagebox.showinfo("Başarılı", f"'{birim_adi}' ürün birimi başarıyla eklendi.", parent=self)
-            self.urun_birimi_entry.delete(0, tk.END)
-            self._urun_birimi_listesini_yukle()
-        else:
-            messagebox.showerror("Hata", f"Ürün birimi eklenirken hata: {message}", parent=self)            
-
-    def _urun_birimi_guncelle_ui(self):
-        selected_item = self.urun_birimi_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Uyarı", "Lütfen güncellemek için bir ürün birimi seçin.", parent=self)
-            return
-        birim_id = self.urun_birimi_tree.item(selected_item)['values'][0]
-        yeni_birim_adi = self.urun_birimi_entry.get().strip()
-        if not yeni_birim_adi:
-            messagebox.showwarning("Uyarı", "Ürün birimi adı boş olamaz.", parent=self)
-            return
-        success, message = self.db.urun_birimi_guncelle(birim_id, yeni_birim_adi)
-        if success:
-            messagebox.showinfo("Başarılı", f"'{yeni_birim_adi}' ürün birimi başarıyla güncellendi.", parent=self)
-            self.urun_birimi_entry.delete(0, tk.END)
-            self._urun_birimi_listesini_yukle()
-        else:
-            messagebox.showerror("Hata", f"Ürün birimi güncellenirken hata: {message}", parent=self)
-
-    def _urun_birimi_sil_ui(self):
-        selected_item = self.urun_birimi_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Uyarı", "Lütfen silmek için bir ürün birimi seçin.", parent=self)
-            return
-        birim_id = self.urun_birimi_tree.item(selected_item)['values'][0]
-        birim_adi = self.urun_birimi_tree.item(selected_item)['values'][1]
-        if messagebox.askyesno("Onay", f"'{birim_adi}' ürün birimini silmek istediğinizden emin misiniz?", parent=self):
-            success, message = self.db.urun_birimi_sil(birim_id)
-            if success:
-                messagebox.showinfo("Başarılı", f"'{birim_adi}' ürün birimi başarıyla silindi.", parent=self)
-                self.urun_birimi_entry.delete(0, tk.END)
-                self._urun_birimi_listesini_yukle()
-            else:
-                messagebox.showerror("Hata", f"Ürün birimi silinirken hata: {message}\nBu birime bağlı ürünler olabilir.", parent=self)
-
-    # Ülke (Menşe) Yönetimi Metotları (UrunKartiPenceresi içinde)
-    def _ulke_listesini_yukle(self):
-        for i in self.ulke_tree.get_children(): self.ulke_tree.delete(i)
-        ulkeler = self.db.ulke_listele()
-        for ulke in ulkeler: self.ulke_tree.insert("", tk.END, values=ulke, iid=ulke[0])
-        self._yukle_urun_grubu_birimi_ulke_comboboxlari() # Bağlantılı combobox'ı da yenile
-
-    def _on_ulke_select(self, event):
-        selected_item = self.ulke_tree.focus()
-        if selected_item:
-            values = self.ulke_tree.item(selected_item, 'values')
-            self.ulke_entry.delete(0, tk.END)
-            self.ulke_entry.insert(0, values[1])
-        else:
-            self.ulke_entry.delete(0, tk.END)
-
-    def _ulke_ekle_ui(self):
-        ulke_adi = self.ulke_entry.get().strip()
-        if not ulke_adi:
-            messagebox.showwarning("Uyarı", "Ülke adı boş olamaz.", parent=self)
-            return
-        success, message = self.db.ulke_ekle(ulke_adi)
-        if success:
-            messagebox.showinfo("Başarılı", f"'{ulke_adi}' ülkesi başarıyla eklendi.", parent=self)
-            self.ulke_entry.delete(0, tk.END)
-            self._ulke_listesini_yukle()
-        else:
-            messagebox.showerror("Hata", f"Ülke eklenirken hata: {message}", parent=self)
-
-    def _ulke_guncelle_ui(self):
-        selected_item = self.ulke_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Uyarı", "Lütfen güncellemek için bir ülke seçin.", parent=self)
-            return
-        ulke_id = self.ulke_tree.item(selected_item)['values'][0]
-        yeni_ulke_adi = self.ulke_entry.get().strip()
-        if not yeni_ulke_adi:
-            messagebox.showwarning("Uyarı", "Ülke adı boş olamaz.", parent=self)
-            return
-        success, message = self.db.ulke_guncelle(ulke_id, yeni_ulke_adi)
-        if success:
-            messagebox.showinfo("Başarılı", f"'{yeni_ulke_adi}' ülkesi başarıyla güncellendi.", parent=self)
-            self.ulke_entry.delete(0, tk.END)
-            self._ulke_listesini_yukle()
-        else:
-            messagebox.showerror("Hata", f"Ülke güncellenirken hata: {message}", parent=self)
-
-    def _ulke_sil_ui(self):
-        selected_item = self.ulke_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Uyarı", "Lütfen silmek için bir ülke seçin.", parent=self)
-            return
-        ulke_id = self.ulke_tree.item(selected_item)['values'][0]
-        ulke_adi = self.ulke_tree.item(selected_item)['values'][1]
-        if messagebox.askyesno("Onay", f"'{ulke_adi}' ülkesini silmek istediğinizden emin misiniz?", parent=self):
-            success, message = self.db.ulke_sil(ulke_id)
-            if success:
-                messagebox.showinfo("Başarılı", f"'{ulke_adi}' ülkesi başarıyla silindi.", parent=self)
-                self.ulke_entry.delete(0, tk.END)
-                self._ulke_listesini_yukle()
-            else:
-                messagebox.showerror("Hata", f"Ülke silinirken hata: {message}\nBu ülkeye bağlı ürünler olabilir.", parent=self)
-
-
-    def _urun_birimi_listesini_yukle(self):
-        for i in self.urun_birimi_tree.get_children(): self.urun_birimi_tree.delete(i)
-        urun_birimleri = self.db.urun_birimi_listele()
-        for birim in urun_birimleri: self.urun_birimi_tree.insert("", tk.END, values=birim, iid=birim[0])
-        self._yukle_urun_grubu_birimi_ulke_comboboxlari() # Bağlantılı combobox'ı da yenile
-
-    def _urun_sil_butonu(self):
-        """Ürün Kartından doğrudan ürün silme işlemini çağırır."""
-        if self.urun_id:
-            urun_adi = self.entry_ad.get()
-            if messagebox.askyesno("Ürün Silme Onayı", f"'{urun_adi}' adlı ürünü silmek istediğinizden emin misiniz?\nBu işlem geri alınamaz.", parent=self.app):
-                success, message = self.db.stok_sil(self.urun_id) 
-                if success:
-                    messagebox.showinfo("Başarılı", message, parent=self.app)
-                    self.yenile_callback()
-                    self.destroy()
-                    self.app.set_status(f"'{urun_adi}' ürünü silindi.")
-                else:
-                    messagebox.showerror("Hata", message, parent=self.app)
-        else:
-            messagebox.showwarning("Uyarı", "Bu işlem sadece mevcut bir ürünü düzenlerken kullanılabilir.", parent=self)
-
-    def _yukle_urun_grubu_birimi_ulke_comboboxlari(self):
-        # Verileri DB'den al
-        urun_gruplari_map = self.db.get_urun_gruplari_for_combobox()
-        urun_birimleri_map = self.db.get_urun_birimleri_for_combobox()
-        ulkeler_map = self.db.get_ulkeler_for_combobox()
-
-        # Combobox'ları doldurma
-        self.urun_gruplari_map = {"Seçim Yok": None, **urun_gruplari_map}
-        self.combo_urun_grubu['values'] = ["Seçim Yok"] + sorted(urun_gruplari_map.keys())
-
-        self.urun_birimleri_map = {"Seçim Yok": None, **urun_birimleri_map}
-        self.combo_urun_birimi['values'] = ["Seçim Yok"] + sorted(urun_birimleri_map.keys())
-
-        self.ulkeler_map = {"Seçim Yok": None, **ulkeler_map}
-        self.combo_mense['values'] = ["Seçim Yok"] + sorted(ulkeler_map.keys())
-
-        # Seçili değerleri ayarla (eğer ürün düzenleniyorsa)
-        if self.urun_duzenle:
-            urun_grubu_adi = self.urun_duzenle[19] # Ürün Grubu Adı
-            urun_birimi_adi = self.urun_duzenle[20] # Ürün Birimi Adı
-            ulke_adi = self.urun_duzenle[21] # Ülke Adı
-            self.combo_urun_grubu.set(urun_grubu_adi if urun_grubu_adi in self.urun_gruplari_map else "Seçim Yok")
-            self.combo_urun_birimi.set(urun_birimi_adi if urun_birimi_adi in self.urun_birimleri_map else "Seçim Yok")
-            self.combo_mense.set(ulke_adi if ulke_adi in self.ulkeler_map else "Seçim Yok")
-        else:
-            self.combo_urun_grubu.set("Seçim Yok")
-            self.combo_urun_birimi.set("Seçim Yok")
-            self.combo_mense.set("Seçim Yok")
-
-    def _load_stok_hareketleri(self, event=None):
-        """Stok hareketleri Treeview'ini ürün ID'sine göre doldurur."""
-        for i in self.stok_hareket_tree.get_children():
-            self.stok_hareket_tree.delete(i)
-
-        if not self.urun_id:
-            self.stok_hareket_tree.insert("", tk.END, values=("", "", "Ürün Seçili Değil", "", "", "", "", ""))
-            return
-
-        islem_tipi_filtre = self.stok_hareket_tip_filter_cb.get()
-        bas_tarih_str = self.stok_hareket_bas_tarih_entry.get()
-        bit_tarih_str = self.stok_hareket_bit_tarih_entry.get()
-
-        # Veritabanından stok hareketlerini çek
-        # db.stok_hareketleri_listele metodu bu filtreleri almalı
-        hareketler = self.db.stok_hareketleri_listele(
-            self.urun_id,
-            islem_tipi=islem_tipi_filtre if islem_tipi_filtre != "TÜMÜ" else None,
-            baslangic_tarih=bas_tarih_str if bas_tarih_str else None,
-            bitis_tarih=bit_tarih_str if bit_tarih_str else None
-        )
-
-        if not hareketler:
-            self.stok_hareket_tree.insert("", tk.END, values=("", "", "Hareket Bulunamadı", "", "", "", "", ""))
-            return
-
-        for hareket in hareketler:
-            # hareket: (id, urun_id, tarih, islem_tipi, miktar, onceki_stok, sonraki_stok, aciklama, kaynak)
-            tarih_formatted = datetime.strptime(hareket[2], '%Y-%m-%d').strftime('%d.%m.%Y')
-            miktar_formatted = f"{hareket[4]:.2f}".rstrip('0').rstrip('.')
-            onceki_stok_formatted = f"{hareket[5]:.2f}".rstrip('0').rstrip('.')
-            sonraki_stok_formatted = f"{hareket[6]:.2f}".rstrip('0').rstrip('.')
-            
-            self.stok_hareket_tree.insert("", tk.END, values=(
-                hareket[0], # ID
-                tarih_formatted, # Tarih
-                hareket[3], # İşlem Tipi
-                miktar_formatted, # Miktar
-                onceki_stok_formatted, # Önceki Stok
-                sonraki_stok_formatted, # Sonraki Stok
-                hareket[7] if hareket[7] else "-", # Açıklama
-                hareket[8] if hareket[8] else "-" # Kaynak
-            ))
-        self.app.set_status(f"Ürün '{self.urun_adi_initial}' için {len(hareketler)} stok hareketi listelendi.")
-
-
-    def _stok_ekle_penceresi_ac(self):
-        """Stok ekleme penceresini 'EKLE' yönüyle açar."""
-        if not self.urun_id:
-            messagebox.showwarning("Uyarı", "Lütfen işlem yapmak için bir ürün seçin.", parent=self)
-            return
-
-        urun_guncel_bilgi = self.db.stok_getir_by_id(self.urun_id)
-        if urun_guncel_bilgi:
-            mevcut_stok = urun_guncel_bilgi[3]
-
-            stok_hareketi_popup = StokHareketiPenceresi(
-                self.app, # parent_app
-                self.db,
-                self.urun_id,
-                self.urun_detaylari[2], # urun_adi
-                mevcut_stok, # mevcut_stok
-                "EKLE", # hareket_yönü
-                self._stok_hareketi_tamamlandi_callback, # yenile_stok_listesi_callback
-                parent_pencere=self # <-- BU PARAMETRENİN DOĞRU GEÇİLDİĞİNDEN EMİN OLUN
-            )
-            # YENİ EKLENDİ: Pop-up kapanınca tetiklenecek ek callback
-            stok_hareketi_popup.protocol("WM_DELETE_WINDOW", lambda: self._stok_hareketi_popup_kapandi(stok_hareketi_popup))
-            stok_hareketi_popup.after(100, stok_hareketi_popup.grab_set)
-
-            self.app.set_status("Stok giriş penceresi açıldı.")
-        else:
-            messagebox.showerror("Hata", "Ürün bilgileri alınamadı.", parent=self)
-
-    def _stok_eksilt_penceresi_ac(self):
-        """Stok eksiltme penceresini 'EKSILT' yönüyle açar."""
-        if not self.urun_id:
-            messagebox.showwarning("Uyarı", "Lütfen işlem yapmak için bir ürün seçin.", parent=self)
-            return
-
-        urun_guncel_bilgi = self.db.stok_getir_by_id(self.urun_id)
-        if urun_guncel_bilgi:
-            mevcut_stok = urun_guncel_bilgi[3]
-
-            stok_hareketi_popup = StokHareketiPenceresi(
-                self.app, # parent_app
-                self.db,
-                self.urun_id,
-                self.urun_detaylari[2], # urun_adi
-                mevcut_stok, # mevcut_stok
-                "EKSILT", # hareket_yönü
-                self._stok_hareketi_tamamlandi_callback, # yenile_stok_listesi_callback
-                parent_pencere=self # <-- BU PARAMETRENİN DOĞRU GEÇİLDİĞİNDEN EMİN OLUN
-            )
-            # YENİ EKLENDİ: Pop-up kapanınca tetiklenecek ek callback
-            stok_hareketi_popup.protocol("WM_DELETE_WINDOW", lambda: self._stok_hareketi_popup_kapandi(stok_hareketi_popup))
-            stok_hareketi_popup.after(100, stok_hareketi_popup.grab_set)
-
-            self.app.set_status("Stok çıkış penceresi açıldı.")
-        else:
-            messagebox.showerror("Hata", "Ürün bilgileri alınamadı.", parent=self)
-
-    def _stok_hareketi_popup_kapandi(self, popup_instance):
-        """
-        Stok Hareketi pop-up penceresi (StokHareketiPenceresi) kapatıldığında tetiklenir.
-        Ürün kartının stok miktarını anlık olarak günceller.
-        """
-        print(f"DEBUG: _stok_hareketi_popup_kapandi çağrıldı. Popup kapandı.")
-
-        if popup_instance.winfo_exists():
-            popup_instance.destroy()
-
-        self._load_genel_bilgiler()
-        self.yenile_callback() # Ana stok listesini de güncelle
-
-        self.update_idletasks()
-        self.update()
-
-        if self.entry_stok:
-            self.entry_stok.focus_set()
-            self.entry_stok.selection_range(0, tk.END)
-
-        print(f"DEBUG: Ürün kartı anlık olarak güncellendi. Güncel Stok: {self.sv_stok.get()}")
-
-    def _guncel_stogu_ui_a_yansit(self, guncel_stok_miktari):
-        """
-        Ürün kartındaki stok miktarını UI'da anlık olarak günceller.
-        """
-        # Stok miktarını StringVar'a formatlı şekilde set et
-        self.sv_stok.set(f"{guncel_stok_miktari:.2f}".rstrip('0').rstrip('.'))
-        # UI'ın kendini yenilemesini tetiklemek için update_idletasks() veya update() kullanabiliriz.
-        # Genellikle bu set işlemi yeterli olur, ancak bazen görsel gecikmeleri önlemek için faydalıdır.
-        self.update_idletasks() 
-
-    def _stok_hareketi_tamamlandi_callback(self):
-        """
-        Stok hareketi tamamlandığında (kaydetme başarılı olduğunda) tetiklenir.
-        Bu metod artık hem ana stok listesini hem de açık olan ürün kartını günceller.
-        """
-        print(f"DEBUG: _stok_hareketi_tamamlandi_callback çağrıldı.")
-
-        if self.urun_id:
-            guncel_urun_verisi = self.db.stok_getir_by_id(self.urun_id)
-            if guncel_urun_verisi:
-                self.urun_duzenle = guncel_urun_verisi
-                self._load_genel_bilgiler()
-                self.update_idletasks()
-
-        self.yenile_callback()
-
-        guncel_urun_stok = self.db.stok_getir_by_id(self.urun_id)
-        guncel_stok_miktari_display = f"{guncel_urun_stok[3]:.2f}".rstrip('0').rstrip('.') if guncel_urun_stok else "Bilinmiyor"
-
-        self.app.set_status(f"Stok hareketi başarıyla kaydedildi. Ürün: {self.urun_adi_initial}. Güncel Stok: {guncel_stok_miktari_display}")
-
-    def _load_urun_grubu_birimi_ulke_fields(self):
-        if self.urun_detaylari:
-            # `urun_detaylari` tuple'ının indeksleri (db.stok_getir_by_id sorgusundan)
-            # ug.grup_adi (19), ub.birim_adi (20), ul.ulke_adi (21)
-
-            urun_grubu_adi = self.urun_detaylari[19] if len(self.urun_detaylari) > 19 and self.urun_detaylari[19] is not None else "Seçim Yok"
-            urun_birimi_adi = self.urun_detaylari[20] if len(self.urun_detaylari) > 20 and self.urun_detaylari[20] is not None else "Seçim Yok"
-            ulke_adi = self.urun_detaylari[21] if len(self.urun_detaylari) > 21 and self.urun_detaylari[21] is not None else "Seçim Yok"
-
-            # self.combo_urun_grubu'na değerleri atama
-            if urun_grubu_adi != "Seçim Yok" and urun_grubu_adi in self.urun_gruplari_map:
-                self.combo_urun_grubu.set(urun_grubu_adi)
-            else:
-                self.combo_urun_grubu.set("Seçim Yok")
-
-            # self.combo_urun_birimi'ye değerleri atama
-            if urun_birimi_adi != "Seçim Yok" and urun_birimi_adi in self.urun_birimleri_map:
-                self.combo_urun_birimi.set(urun_birimi_adi)
-            else:
-                self.combo_urun_birimi.set("Seçim Yok")
-
-            # self.combo_mense'ye değerleri atama
-            if ulke_adi != "Seçim Yok" and ulke_adi in self.ulkeler_map:
-                self.combo_mense.set(ulke_adi)
-            else:
-                self.combo_mense.set("Seçim Yok")
-
-    def _resim_sec(self):
-        file_path = filedialog.askopenfilename(
-            title="Ürün Resmi Seç",
-            filetypes=[("Resim Dosyaları", "*.png;*.jpg;*.jpeg;*.gif;*.bmp"), ("Tüm Dosyalar", "*.*")],
-            parent=self
-        )
-        if file_path:
-            try:
-                resim_klasoru = os.path.join(self.db.data_dir, "urun_resimleri")
-                os.makedirs(resim_klasoru, exist_ok=True)
-
-                file_name = os.path.basename(file_path)
-                destination_path = os.path.join(resim_klasoru, file_name)
-
-                shutil.copy2(file_path, destination_path)
-
-                self.urun_resmi_path = destination_path
-                self._load_urun_resmi() # Resmi yükle ve göster
-                self.app.set_status(f"Resim '{file_name}' başarıyla yüklendi ve kaydedildi.")
-            except Exception as e:
-                messagebox.showerror("Resim Yükleme Hatası", f"Resim kopyalanırken bir hata oluştu: {e}", parent=self)
-                print(f"Resim kopyalanırken hata: {e}")
-
-    def _resim_sil(self):
-        if messagebox.askyesno("Resmi Sil", "Ürün resmini silmek istediğinizden emin misiniz?", parent=self):
-            self.urun_resmi_path = ""
-            self.urun_resmi_label.config(image='', text="Resim Yok")
-            self.original_image = None
-            self.tk_image = None
-            messagebox.showinfo("Resim Silindi", "Ürün resmi başarıyla silindi.", parent=self)
-
-    def _load_urun_resmi(self):
-        """
-        Ürün resmi yolunu kontrol eder ve resmi ayrı bir thread'de yükleme ve boyutlandırma işlemini başlatır.
-        Bu sayede UI'ın donması engellenir.
-        """
-        self.original_image = None
-        self.tk_image = None
-        self._last_resized_size = (0, 0)
-        self.urun_resmi_label.config(image='', text="Resim Yükleniyor...")
-
-        if self.urun_resmi_path and os.path.exists(self.urun_resmi_path):
-            threading.Thread(target=self._perform_image_loading_and_resizing).start()
-        else:
-            self.urun_resmi_label.config(image='', text="Resim Yok")
-            self.original_image = None
-            self.tk_image = None
-            self._last_resized_size = (0, 0)
-
-    def _perform_image_loading_and_resizing(self):
-        """
-        Resmi yükler ve boyutlandırır (PIL Image objesi olarak). Bu metot ayrı bir thread'de çalışır.
-        Tamamlandığında, UI'a hazır PIL Image referansını ve boyut bilgilerini gönderir.
-        """
-        try:
-            original_img = Image.open(self.urun_resmi_path)
-            self.after_idle(lambda: self._update_image_on_ui_thread(original_img))
-        except Exception as e:
-            self.after_idle(lambda: self.urun_resmi_label.config(image='', text=f"Resim Hatası: {e}"))
-            self.after_idle(lambda: setattr(self, 'original_image', None))
-            self.after_idle(lambda: setattr(self, 'tk_image', None))
-            self.after_idle(lambda: setattr(self, '_last_resized_size', (0, 0)))
-            print(f"Arka plan resim yükleme hatası: {e}\n{traceback.format_exc()}")
-
-
-    def _update_image_on_ui_thread(self, original_img_from_thread):
-        """
-        Arka plan thread'inden gelen orijinal PIL Image objesini UI'da saklar ve
-        boyutlandırma işlemini tetikler. Bu metot sadece ana UI thread'inde çağrılmalıdır.
-        """
-        try:
-            self.original_image = original_img_from_thread
-            self._resize_image() # Resim yüklendikten sonra boyutlandırmayı tetikle
-        except Exception as e:
-            print(f"UI thread resim güncelleme hatası: {e}\n{traceback.format_exc()}")
-            self.urun_resmi_label.config(image='', text="Resim Gösterme Hatası")
-            self.tk_image = None
-            self.original_image = None
-            self._last_resized_size = (0, 0)
-
-
-    def _resize_image(self, event=None):
-        """
-        Label'ı içeren konteyner boyutu değiştiğinde resmi uygun şekilde yeniden boyutlandırır.
-        """
-        if not self.original_image:
-            self.urun_resmi_label.config(image='', text="Resim Yok")
-            self.tk_image = None
-            self._last_resized_size = (0, 0)
-            return
-
-        container_width = self.image_container_frame.winfo_width()
-        container_height = self.image_container_frame.winfo_height()
-
-        if container_width <= 1 or container_height <= 1:
-            return
-
-        if self._last_resized_size == (container_width, container_height) and self.tk_image:
-            return
-
-        img_width, img_height = self.original_image.size
-
-        ratio_w = container_width / img_width
-        ratio_h = container_height / img_height
-        ratio = min(ratio_w, ratio_h)
-
-        new_width = int(img_width * ratio)
-        new_height = int(img_height * ratio)
-
-        if new_width <= 0: new_width = 1
-        if new_height <= 0: new_height = 1
-
-        if self._last_resized_size != (new_width, new_height):
-            self._last_resized_size = (new_width, new_height)
-
-            try:
-                resized_image = self.original_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                self.tk_image = ImageTk.PhotoImage(resized_image)
-                self.urun_resmi_label.config(image=self.tk_image, text="")
-            except Exception as e_resize:
-                print(f"Resim yeniden boyutlandırılırken hata: {e_resize}\n{traceback.format_exc()}")
-                self.urun_resmi_label.config(image='', text="Resim Boyutlandırma Hatası")
-                self.tk_image = None
-                self._last_resized_size = (0, 0)
-            else:
-                # Boyut değişmediyse ve zaten bir resim gösteriliyorsa, ek bir işlem yapma.
-                pass
-
-    def _setup_price_change_date_label(self, parent_frame):
-        self.fiyat_degisiklik_tarihi_label = ttk.Label(parent_frame, text="Fiyat Değişiklik Tarihi: Yükleniyor...", font=("Segoe UI", 9, "italic"))
-        self.fiyat_degisiklik_tarihi_label.grid(row=10, column=2, columnspan=2, padx=5, pady=(5, 0), sticky=tk.SE)
-
-    def _on_tab_change(self, event):
-        selected_tab_id = self.notebook.select()
-        selected_tab_text = self.notebook.tab(selected_tab_id, "text")
-
-        if selected_tab_text == "Stok Hareketleri":
-            if self.urun_id: # Sadece ürün ID'si varsa yükle
-                self._load_stok_hareketleri()
-        elif selected_tab_text == "İlgili Faturalar":
-            if self.urun_id: # Sadece ürün ID'si varsa yükle
-                self._load_ilgili_faturalar()
-        elif selected_tab_text == "Kategori & Marka Yönetimi": 
-            # Bu sekmeye geçildiğinde combobox'lar zaten _yukle_kategori_marka_comboboxlari
-            # ve _yukle_urun_grubu_birimi_ulke_comboboxlari tarafından doldurulmuş olmalı.
-            # Treeview'ları yenilemek isteyebiliriz:
-            self._kategori_listesini_yukle()
-            self._marka_listesini_yukle()
-
-
-    def _setup_genel_bilgiler_tab(self, parent_frame):
-        # parent_frame (genel_bilgiler_sekmesi_frame) içindeki grid yapısı
-        parent_frame.columnconfigure(0, weight=3) # Sol taraf daha çok genişlesin
-        parent_frame.columnconfigure(1, weight=1) # Sağ taraf daha az genişlesin
-        parent_frame.rowconfigure(0, weight=1) # Ana satır (dikeyde genişleyebilir)
-
-        # SOL TARAFTAKİ BİLGİLERİ İÇERECEK ANA CONTAINER FRAME
-        left_info_container_frame = ttk.Frame(parent_frame)
-        left_info_container_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
-        left_info_container_frame.columnconfigure(0, weight=1)
-
-        # --- 1. TEMEL ÜRÜN BİLGİLERİ GRUBU ---
-        basic_info_frame = ttk.LabelFrame(left_info_container_frame, text="Temel Ürün Bilgileri", padding="10")
-        basic_info_frame.pack(fill=tk.X, padx=2, pady=2, ipady=5)
-        basic_info_frame.columnconfigure(1, weight=1)
-        basic_info_frame.columnconfigure(3, weight=1)
-
-        row_in_basic = 0
-        ttk.Label(basic_info_frame, text="Ürün Kodu:").grid(row=row_in_basic, column=0, padx=5, pady=2, sticky=tk.W)
-        self.entry_kod = ttk.Entry(basic_info_frame, textvariable=self.sv_kod)
-        self.entry_kod.grid(row=row_in_basic, column=1, padx=5, pady=2, sticky=tk.EW)
-
-        ttk.Label(basic_info_frame, text="Ürün Adı:").grid(row=row_in_basic, column=2, padx=5, pady=2, sticky=tk.W)
-        self.entry_ad = ttk.Entry(basic_info_frame, textvariable=self.sv_ad)
-        self.entry_ad.grid(row=row_in_basic, column=3, padx=5, pady=2, sticky=tk.EW)
-        row_in_basic += 1
-
-        ttk.Label(basic_info_frame, text="Ürün Detayı:").grid(row=row_in_basic, column=0, padx=5, pady=2, sticky=tk.NW)
-        self.entry_urun_detayi = tk.Text(basic_info_frame, height=3, wrap=tk.WORD, font=('Segoe UI', 9))
-        self.entry_urun_detayi.grid(row=row_in_basic, column=1, columnspan=3, padx=5, pady=2, sticky=tk.EW)
-        urun_detayi_vsb = ttk.Scrollbar(basic_info_frame, orient="vertical", command=self.entry_urun_detayi.yview)
-        urun_detayi_vsb.grid(row=row_in_basic, column=4, sticky="ns")
-        self.entry_urun_detayi.config(yscrollcommand=urun_detayi_vsb.set)
-        basic_info_frame.columnconfigure(4, weight=0)
-        basic_info_frame.rowconfigure(row_in_basic, weight=1)
-
-        # --- 2. STOK DURUMU GRUBU ---
-        stock_info_frame = ttk.LabelFrame(left_info_container_frame, text="Stok Durumu", padding="10")
-        stock_info_frame.pack(fill=tk.X, padx=2, pady=5, ipady=5)
-        stock_info_frame.columnconfigure(1, weight=1)
-        stock_info_frame.columnconfigure(3, weight=1)
-
-        row_in_stock = 0
-        ttk.Label(stock_info_frame, text="Mevcut Stok:").grid(row=row_in_stock, column=0, padx=5, pady=2, sticky=tk.W)
-        self.entry_stok = ttk.Entry(stock_info_frame, textvariable=self.sv_stok)
-        self.entry_stok.grid(row=row_in_stock, column=1, padx=5, pady=2, sticky=tk.EW)
-        setup_numeric_entry(self.app, self.entry_stok, decimal_places=2)
-        self.entry_stok.bind("<FocusOut>", lambda e: self._format_stok_entry(sv_variable=self.sv_stok, decimal_places=2, focus_out=True))
-
-
-        ttk.Label(stock_info_frame, text="Min. Stok Seviyesi:").grid(row=row_in_stock, column=2, padx=5, pady=2, sticky=tk.W)
-        self.entry_min_stok = ttk.Entry(stock_info_frame, textvariable=self.sv_min_stok)
-        self.entry_min_stok.grid(row=row_in_stock, column=3, padx=5, pady=2, sticky=tk.EW)
-        setup_numeric_entry(self.app, self.entry_min_stok, decimal_places=2)
-        self.entry_min_stok.bind("<FocusOut>", lambda e: self._format_stok_entry(sv_variable=self.sv_min_stok, decimal_places=2, focus_out=True))
-
-        # --- 3. FİYATLANDIRMA BİLGİLERİ GRUBU ---
-        price_info_frame = ttk.LabelFrame(left_info_container_frame, text="Fiyatlandırma Bilgileri", padding="10")
-        price_info_frame.pack(fill=tk.X, padx=2, pady=5, ipady=5)
         
-        # Sütunları daha hassas ayarlayalım:
-        # Col 0: Sol Etiket (örn: Alış Fiyatı (KDV Hariç):) - fixed width
-        # Col 1: Sol Entry (örn: Alış Fiyatı (KDV Hariç) entry'si) - stretches
-        # Col 2: Sağ Etiket (örn: Alış Fiyatı (KDV Dahil):) - fixed width
-        # Col 3: Sağ Entry (örn: Alış Fiyatı (KDV Dahil) entry'si) - stretches
-        price_info_frame.columnconfigure(0, weight=0) # Sol etiket sütunu
-        price_info_frame.columnconfigure(1, weight=1) # Sol entry sütunu
-        price_info_frame.columnconfigure(2, weight=0) # Sağ etiket sütunu
-        price_info_frame.columnconfigure(3, weight=1) # Sağ entry sütunu
+        self.main_layout = QVBoxLayout(self)
+        self.notebook = QTabWidget()
+        self.main_layout.addWidget(self.notebook)
 
-        row_in_price = 0
+        self._create_genel_bilgiler_tab()
+        self._create_placeholder_tabs()
+        self._add_bottom_buttons()
         
-        # 1. Satır: Alış Fiyatları
-        ttk.Label(price_info_frame, text="Alış Fiyatı (KDV Hariç):", foreground="red").grid(row=row_in_price, column=0, padx=2, pady=2, sticky=tk.W) 
-        self.entry_alis_haric = ttk.Entry(price_info_frame, textvariable=self.sv_alis_haric)
-        self.entry_alis_haric.grid(row=row_in_price, column=1, padx=2, pady=2, sticky=tk.EW)
-        setup_numeric_entry(self.app, self.entry_alis_haric, decimal_places=2)
-        self.entry_alis_haric.bind("<KeyRelease>", lambda e: self.otomatik_fiyat_doldur(e, source_type='haric', price_type='alis'))
-        self.entry_alis_haric.bind("<FocusOut>", lambda e: self.otomatik_fiyat_doldur(e, source_type='haric', price_type='alis', focus_out=True))
+        self._verileri_yukle()
+        self.entries['urun_adi'].setFocus()
 
-        ttk.Label(price_info_frame, text="Alış Fiyatı (KDV Dahil):", foreground="green").grid(row=row_in_price, column=2, padx=5, pady=2, sticky=tk.W)
-        self.entry_alis_dahil = ttk.Entry(price_info_frame, textvariable=self.sv_alis_dahil)
-        self.entry_alis_dahil.grid(row=row_in_price, column=3, padx=2, pady=2, sticky=tk.EW)
-        setup_numeric_entry(self.app, self.entry_alis_dahil, decimal_places=2)
-        self.entry_alis_dahil.bind("<KeyRelease>", lambda e: self.otomatik_fiyat_doldur(e, source_type='dahil', price_type='alis'))
-        self.entry_alis_dahil.bind("<FocusOut>", lambda e: self.otomatik_fiyat_doldur(e, source_type='dahil', price_type='alis', focus_out=True))
-        row_in_price += 1
+    def _create_genel_bilgiler_tab(self):
+        tab_genel = QWidget()
+        layout_genel = QGridLayout(tab_genel)
+        self.notebook.addTab(tab_genel, "Genel Bilgiler")
 
-        # 2. Satır: Satış Fiyatları
-        ttk.Label(price_info_frame, text="Satış Fiyatı (KDV Hariç):", foreground="red").grid(row=row_in_price, column=0, padx=2, pady=2, sticky=tk.W)
-        self.entry_satis_haric = ttk.Entry(price_info_frame, textvariable=self.sv_satis_haric)
-        self.entry_satis_haric.grid(row=row_in_price, column=1, padx=2, pady=2, sticky=tk.EW)
-        setup_numeric_entry(self.app, self.entry_satis_haric, decimal_places=2)
-        self.entry_satis_haric.bind("<KeyRelease>", lambda e: self.otomatik_fiyat_doldur(e, source_type='haric', price_type='satis'))
-        self.entry_satis_haric.bind("<FocusOut>", lambda e: self.otomatik_fiyat_doldur(e, source_type='haric', price_type='satis', focus_out=True))
+        left_panel_vbox = QVBoxLayout()
+        right_panel_vbox = QVBoxLayout()
+        layout_genel.addLayout(left_panel_vbox, 0, 0)
+        layout_genel.addLayout(right_panel_vbox, 0, 1)
+        layout_genel.setColumnStretch(0, 3)
+        layout_genel.setColumnStretch(1, 1)
+
+        gbox_temel = QGroupBox("Temel Ürün Bilgileri")
+        ltemel = QGridLayout(gbox_temel)
+        self.entries['urun_kodu'] = QLineEdit(); self.entries['urun_kodu'].setReadOnly(True)
+        self.entries['urun_adi'] = QLineEdit()
+        self.entries['urun_detayi'] = QTextEdit(); self.entries['urun_detayi'].setFixedHeight(60)
+        ltemel.addWidget(QLabel("Ürün Kodu:"), 0, 0); ltemel.addWidget(self.entries['urun_kodu'], 0, 1)
+        ltemel.addWidget(QLabel("Ürün Adı (*):"), 0, 2); ltemel.addWidget(self.entries['urun_adi'], 0, 3)
+        ltemel.addWidget(QLabel("Ürün Detayı:"), 1, 0, alignment=Qt.AlignTop); ltemel.addWidget(self.entries['urun_detayi'], 1, 1, 1, 3)
+        left_panel_vbox.addWidget(gbox_temel)
+
+        gbox_fiyat = QGroupBox("Fiyatlandırma Bilgileri")
+        lfiyat = QGridLayout(gbox_fiyat)
+        self.entries['alis_fiyati_kdv_haric'] = QLineEdit("0,00"); self.entries['alis_fiyati_kdv_dahil'] = QLineEdit("0,00")
+        self.entries['satis_fiyati_kdv_haric'] = QLineEdit("0,00"); self.entries['satis_fiyati_kdv_dahil'] = QLineEdit("0,00")
+        self.entries['kdv_orani'] = QLineEdit("20"); self.label_kar_orani.setFont(QFont("Segoe UI", 9, QFont.Bold))
+        lfiyat.addWidget(QLabel("Alış Fiyatı (KDV Hariç):"), 0, 0); lfiyat.addWidget(self.entries['alis_fiyati_kdv_haric'], 0, 1)
+        lfiyat.addWidget(QLabel("Alış Fiyatı (KDV Dahil):"), 0, 2); lfiyat.addWidget(self.entries['alis_fiyati_kdv_dahil'], 0, 3)
+        lfiyat.addWidget(QLabel("Satış Fiyatı (KDV Hariç):"), 1, 0); lfiyat.addWidget(self.entries['satis_fiyati_kdv_haric'], 1, 1)
+        lfiyat.addWidget(QLabel("Satış Fiyatı (KDV Dahil):"), 1, 2); lfiyat.addWidget(self.entries['satis_fiyati_kdv_dahil'], 1, 3)
+        lfiyat.addWidget(QLabel("KDV Oranı (%):"), 2, 0); lfiyat.addWidget(self.entries['kdv_orani'], 2, 1)
+        lfiyat.addWidget(QLabel("Kar Oranı:"), 2, 2); lfiyat.addWidget(self.label_kar_orani, 2, 3)
+        left_panel_vbox.addWidget(gbox_fiyat)
+
+        gbox_nitelik = QGroupBox("Ek Nitelikler"); lnitelik = QGridLayout(gbox_nitelik)
+        self.combos['kategori'] = QComboBox(); self.combos['marka'] = QComboBox()
+        self.combos['urun_grubu'] = QComboBox(); self.combos['urun_birimi'] = QComboBox(); self.combos['mense'] = QComboBox()
+        lnitelik.addWidget(QLabel("Kategori:"), 0, 0); lnitelik.addWidget(self.combos['kategori'], 0, 1)
+        lnitelik.addWidget(QLabel("Marka:"), 0, 2); lnitelik.addWidget(self.combos['marka'], 0, 3)
+        lnitelik.addWidget(QLabel("Ürün Grubu:"), 1, 0); lnitelik.addWidget(self.combos['urun_grubu'], 1, 1)
+        lnitelik.addWidget(QLabel("Ürün Birimi:"), 1, 2); lnitelik.addWidget(self.combos['urun_birimi'], 1, 3)
+        lnitelik.addWidget(QLabel("Menşe:"), 2, 0); lnitelik.addWidget(self.combos['mense'], 2, 1)
+        left_panel_vbox.addWidget(gbox_nitelik); left_panel_vbox.addStretch()
+
+        gbox_stok_sag = QGroupBox("Stok Durumu"); layout_stok_sag = QGridLayout(gbox_stok_sag)
+        self.entries['stok_miktari'] = QLineEdit("0,00"); self.entries['stok_miktari'].setReadOnly(True)
+        self.entries['min_stok_seviyesi'] = QLineEdit("0,00")
+        layout_stok_sag.addWidget(QLabel("Mevcut Stok:"), 0, 0); layout_stok_sag.addWidget(self.entries['stok_miktari'], 0, 1)
+        layout_stok_sag.addWidget(QLabel("Min. Stok Seviyesi:"), 1, 0); layout_stok_sag.addWidget(self.entries['min_stok_seviyesi'], 1, 1)
+        right_panel_vbox.addWidget(gbox_stok_sag)
+
+        gbox_gorsel = QGroupBox("Ürün Görseli"); layout_gorsel = QVBoxLayout(gbox_gorsel)
+        self.urun_resmi_label.setAlignment(Qt.AlignCenter); self.urun_resmi_label.setMinimumSize(200, 200)
+        self.urun_resmi_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored); self.urun_resmi_label.setStyleSheet("border: 1px solid grey;")
+        layout_gorsel.addWidget(self.urun_resmi_label)
+        btn_gorsel_layout = QHBoxLayout(); btn_resim_sec = QPushButton("Resim Seç"); btn_resim_sec.clicked.connect(self._resim_sec)
+        btn_resim_sil = QPushButton("Resmi Sil"); btn_resim_sil.clicked.connect(self._resim_sil)
+        btn_gorsel_layout.addWidget(btn_resim_sec); btn_gorsel_layout.addWidget(btn_resim_sil)
+        layout_gorsel.addLayout(btn_gorsel_layout)
+        right_panel_vbox.addWidget(gbox_gorsel)
         
-        ttk.Label(price_info_frame, text="Satış Fiyatı (KDV Dahil):", foreground="green").grid(row=row_in_price, column=2, padx=5, pady=2, sticky=tk.W)
-        self.entry_satis_dahil = ttk.Entry(price_info_frame, textvariable=self.sv_satis_dahil)
-        self.entry_satis_dahil.grid(row=row_in_price, column=3, padx=2, pady=2, sticky=tk.EW)
-        setup_numeric_entry(self.app, self.entry_satis_dahil, decimal_places=2)
-        self.entry_satis_dahil.bind("<KeyRelease>", lambda e: self.otomatik_fiyat_doldur(e, source_type='dahil', price_type='satis'))
-        self.entry_satis_dahil.bind("<FocusOut>", lambda e: self.otomatik_fiyat_doldur(e, source_type='dahil', price_type='satis', focus_out=True))
-        row_in_price += 1
+        gbox_operasyon = QGroupBox("Operasyonlar"); layout_operasyon = QVBoxLayout(gbox_operasyon)
+        btn_stok_ekle = QPushButton("Stok Ekle"); btn_stok_ekle.clicked.connect(self._stok_ekle_penceresi_ac)
+        btn_stok_eksilt = QPushButton("Stok Eksilt"); btn_stok_eksilt.clicked.connect(self._stok_eksilt_penceresi_ac)
+        layout_operasyon.addWidget(btn_stok_ekle); layout_operasyon.addWidget(btn_stok_eksilt)
+        right_panel_vbox.addWidget(gbox_operasyon)
+        right_panel_vbox.addStretch()
 
-        # 3. Satır: KDV Oranı ve Kar Oranı
-        ttk.Label(price_info_frame, text="KDV Oranı (%):").grid(row=row_in_price, column=0, padx=2, pady=2, sticky=tk.W)
-        self.entry_kdv = ttk.Entry(price_info_frame, textvariable=self.sv_kdv)
-        self.entry_kdv.grid(row=row_in_price, column=1, padx=2, pady=2, sticky=tk.EW)
-        setup_numeric_entry(self.app, self.entry_kdv, decimal_places=0, max_value=100)
-        self.entry_kdv.bind("<KeyRelease>", self.otomatik_fiyat_doldur)
-        self.entry_kdv.bind("<FocusOut>", lambda e: self.otomatik_fiyat_doldur(e, source_type='kdv_focout', price_type='all', focus_out=True))
+        self._set_validators_and_signals()
         
-        self.label_kar_orani = ttk.Label(price_info_frame, text="0.00 %", font=("Segoe UI", 9, "bold"))
-        self.label_kar_orani.grid(row=row_in_price, column=2, padx=5, pady=2, sticky=tk.W) 
-        row_in_price += 1 # Kar oranından sonra satırı artır
+    def _create_placeholder_tabs(self):
+        self.notebook.addTab(QLabel("Bu sekmenin içeriği, arayuz.py'deki ilgili sınıfın PySide6'ya dönüştürülmesinden sonra eklenecektir."), "Stok Hareketleri")
+        self.notebook.addTab(QLabel("Bu sekmenin içeriği, arayuz.py'deki ilgili sınıfın PySide6'ya dönüştürülmesinden sonra eklenecektir."), "İlgili Faturalar")
+        self.notebook.addTab(QLabel("Bu sekmenin içeriği, arayuz.py'deki ilgili sınıfın PySide6'ya dönüştürülmesinden sonra eklenecektir."), "Nitelik Yönetimi")
 
-        # 4. Satır: Fiyat Değişiklik Tarihi (Artık ayrı bir satırda ve tüm sütunları kapsıyor)
-        # Bu etiket _load_genel_bilgiler metodunda güncellenecek, burada sadece oluşturuyoruz.
-        self.fiyat_degisiklik_tarihi_label = ttk.Label(price_info_frame, text="Fiyat Değişiklik Tarihi: Yükleniyor...", font=("Segoe UI", 9, "italic"))
-        self.fiyat_degisiklik_tarihi_label.grid(row=row_in_price, column=0, columnspan=4, padx=5, pady=2, sticky=tk.W) # Tüm sütunlara yayıldı
+    def _add_bottom_buttons(self):
+        button_layout = QHBoxLayout()
+        self.btn_sil = QPushButton("Ürünü Sil"); self.btn_sil.clicked.connect(self._urun_sil); self.btn_sil.setVisible(bool(self.urun_id))
+        button_layout.addWidget(self.btn_sil, alignment=Qt.AlignLeft)
+        button_layout.addStretch()
+        self.kaydet_button = QPushButton("Kaydet"); self.kaydet_button.clicked.connect(self.kaydet)
+        button_layout.addWidget(self.kaydet_button)
+        iptal_button = QPushButton("İptal"); iptal_button.clicked.connect(self.reject)
+        button_layout.addWidget(iptal_button)
+        self.main_layout.addLayout(button_layout)
 
-        # --- 4. EK NİTELİKLER GRUBU ---
-        attributes_info_frame = ttk.LabelFrame(left_info_container_frame, text="Ek Nitelikler", padding="10")
-        attributes_info_frame.pack(fill=tk.X, padx=2, pady=5, ipady=5)
-        attributes_info_frame.columnconfigure(1, weight=1)
-        attributes_info_frame.columnconfigure(3, weight=1)
-
-        row_in_attr = 0
-        ttk.Label(attributes_info_frame, text="Kategori:").grid(row=row_in_attr, column=0, padx=5, pady=2, sticky=tk.W)
-        self.combo_kategori = ttk.Combobox(attributes_info_frame, state="readonly")
-        self.combo_kategori.grid(row=row_in_attr, column=1, padx=5, pady=2, sticky=tk.EW)
-
-        ttk.Label(attributes_info_frame, text="Marka:").grid(row=row_in_attr, column=2, padx=5, pady=2, sticky=tk.W)
-        self.combo_marka = ttk.Combobox(attributes_info_frame, state="readonly")
-        self.combo_marka.grid(row=row_in_attr, column=3, padx=5, pady=2, sticky=tk.EW)
-        row_in_attr += 1
-
-        ttk.Label(attributes_info_frame, text="Ürün Grubu:").grid(row=row_in_attr, column=0, padx=5, pady=2, sticky=tk.W)
-        self.combo_urun_grubu = ttk.Combobox(attributes_info_frame, state="readonly")
-        self.combo_urun_grubu.grid(row=row_in_attr, column=1, padx=5, pady=2, sticky=tk.EW)
-
-        ttk.Label(attributes_info_frame, text="Ürün Birimi:").grid(row=row_in_attr, column=2, padx=5, pady=2, sticky=tk.W)
-        self.combo_urun_birimi = ttk.Combobox(attributes_info_frame, state="readonly")
-        self.combo_urun_birimi.grid(row=row_in_attr, column=3, padx=5, pady=2, sticky=tk.EW)
-        row_in_attr += 1
-
-        ttk.Label(attributes_info_frame, text="Menşe:").grid(row=row_in_attr, column=0, padx=5, pady=2, sticky=tk.W)
-        self.combo_mense = ttk.Combobox(attributes_info_frame, state="readonly")
-        self.combo_mense.grid(row=row_in_attr, column=1, padx=5, pady=2, sticky=tk.EW)
-
-        from pencereler import UrunNitelikYonetimiPenceresi
-        ttk.Button(attributes_info_frame, text="Nitelik Yönetimi", command=lambda: UrunNitelikYonetimiPenceresi(self.app, self.db, self._yukle_urun_grubu_birimi_ulke_comboboxlari)).grid(row=row_in_attr, column=2, columnspan=2, padx=5, pady=(10,5), sticky=tk.EW)
-        row_in_attr += 1
-
-        # SAĞ TARAFTAKİ "ÜRÜN GÖRSELİ" VE "OPERASYONLAR" ÇERÇEVESİ
-        self.urun_gorsel_ve_operasyon_frame.columnconfigure(0, weight=1)
-        self.urun_gorsel_ve_operasyon_frame.rowconfigure(0, weight=1)
-        self.urun_gorsel_ve_operasyon_frame.rowconfigure(1, weight=1)
-
-        self.urun_gorsel_frame = ttk.LabelFrame(self.urun_gorsel_ve_operasyon_frame, text="Ürün Görseli", padding="5")
-        self.urun_gorsel_frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
-        self.urun_gorsel_frame.columnconfigure(0, weight=1)
-        self.urun_gorsel_frame.rowconfigure(0, weight=1)
-
-        self.image_container_frame = ttk.Frame(self.urun_gorsel_frame, relief="solid", borderwidth=1)
-        self.image_container_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        self.image_container_frame.grid_propagate(False)
-
-        self.urun_resmi_label = ttk.Label(self.image_container_frame, text="Resim Yok", anchor=tk.CENTER)
-        self.urun_resmi_label.pack(expand=True, fill=tk.BOTH)
-
-        self.image_container_frame.bind("<Configure>", self._resize_image)
-
-        button_frame_gorsel = ttk.Frame(self.urun_gorsel_frame)
-        button_frame_gorsel.grid(row=1, column=0, sticky="ew", padx=2, pady=2)
-        button_frame_gorsel.columnconfigure(0, weight=1)
-        button_frame_gorsel.columnconfigure(1, weight=1)
-
-        ttk.Button(button_frame_gorsel, text="Resim Seç", command=self._resim_sec, style="Accent.TButton").grid(row=0, column=0, padx=1, pady=1, sticky="ew")
-        ttk.Button(button_frame_gorsel, text="Resmi Sil", command=self._resim_sil).grid(row=0, column=1, padx=1, pady=1, sticky="ew")
-
-        self.operation_buttons_frame = ttk.LabelFrame(self.urun_gorsel_ve_operasyon_frame, text="Operasyonlar", padding="5")
-        self.operation_buttons_frame.grid(row=1, column=0, sticky="nsew", padx=2, pady=(5,0))
-        self.operation_buttons_frame.columnconfigure(0, weight=1)
-
-        button_row_idx = 0
-        ttk.Button(self.operation_buttons_frame, text="Stok Ekle", command=self._stok_ekle_penceresi_ac, style="Accent.TButton").grid(row=button_row_idx, column=0, sticky="ew", padx=1, pady=1)
-        button_row_idx += 1
-        ttk.Button(self.operation_buttons_frame, text="Stok Eksilt", command=self._stok_eksilt_penceresi_ac).grid(row=button_row_idx, column=0, sticky="ew", padx=1, pady=1)
-        button_row_idx += 1
-        ttk.Button(self.operation_buttons_frame, text="Ürüne ait iadeler (Geliştirilecek)", state=tk.DISABLED).grid(row=button_row_idx, column=0, sticky="ew", padx=1, pady=1)
-        button_row_idx += 1
-        ttk.Button(self.operation_buttons_frame, text="Ürün üret/tüket (Geliştirilecek)", state=tk.DISABLED).grid(row=button_row_idx, column=0, sticky="ew", padx=1, pady=1)
-        button_row_idx += 1
-
-        self.fiyat_degisiklik_tarihi_label.grid(row=button_row_idx, column=0, sticky="w", padx=5, pady=(5,0))
-
-    def _yukle_kategori_marka_comboboxlari(self):
-        # Kategori ve marka verilerini DB'den al
-        kategoriler_map = self.db.get_kategoriler_for_combobox()
-        markalar_map = self.db.get_markalar_for_combobox()
-
-        # Combobox'ları doldurma
-        self.kategoriler_map = {"Seçim Yok": None, **kategoriler_map}
-        self.combo_kategori['values'] = ["Seçim Yok"] + sorted(kategoriler_map.keys())
-
-        self.markalar_map = {"Seçim Yok": None, **markalar_map}
-        self.combo_marka['values'] = ["Seçim Yok"] + sorted(markalar_map.keys())
-
-        # Seçili değerleri ayarla (eğer ürün düzenleniyorsa)
-        if self.urun_duzenle:
-            kategori_adi = self.urun_duzenle[14] # Kategori Adı
-            marka_adi = self.urun_duzenle[15] # Marka Adı
-            self.combo_kategori.set(kategori_adi if kategori_adi in self.kategoriler_map else "Seçim Yok")
-            self.combo_marka.set(marka_adi if marka_adi in self.markalar_map else "Seçim Yok")
-        else:
-            self.combo_kategori.set("Seçim Yok")
-            self.combo_marka.set("Seçim Yok")
-
-    def _load_kategori_marka_fields(self):
-        if self.urun_duzenle:
-            # `urun_duzenle` tuple'ının indeksleri (db.stok_getir_by_id sorgusundan)
-            # uk.kategori_adi (14), um.marka_adi (15)
-
-            kategori_adi = self.urun_duzenle[14] if len(self.urun_duzenle) > 14 and self.urun_duzenle[14] is not None else "Seçim Yok"
-            marka_adi = self.urun_duzenle[15] if len(self.urun_duzenle) > 15 and self.urun_duzenle[15] is not None else "Seçim Yok"
-
-            # self.combo_kategori'ye değerleri atama
-            # Sadece eğer kategori_adi "Seçim Yok" değilse ve haritada varsa set et
-            if kategori_adi != "Seçim Yok" and kategori_adi in self.kategoriler_map: 
-                self.combo_kategori.set(kategori_adi)
-            else:
-                self.combo_kategori.set("Seçim Yok") # Yoksa varsayılan
-
-            # self.combo_marka'ya değerleri atama
-            # Sadece eğer marka_adi "Seçim Yok" değilse ve haritada varsa set et
-            if marka_adi != "Seçim Yok" and marka_adi in self.markalar_map: 
-                self.combo_marka.set(marka_adi)
-            else:
-                self.combo_marka.set("Seçim Yok") # Yoksa varsayılan
-
-
-    def _setup_kategori_marka_tab(self, parent_frame):
-        # Parent frame'in grid yapılandırması (bu sekmenin içindeki düzen)
-        parent_frame.columnconfigure(0, weight=1) # Kategori Frame için
-        parent_frame.columnconfigure(1, weight=1) # Marka Frame için
-        parent_frame.rowconfigure(0, weight=1) # Kategori/Marka Frame'ler için
-
-        # Sol taraf: Kategori Yönetimi
-        kategori_frame = ttk.LabelFrame(parent_frame, text="Kategori Yönetimi", padding="10")
-        kategori_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew") # Grid kullanıldı
-        kategori_frame.columnconfigure(1, weight=1) # Entry'nin genişlemesi için
-        kategori_frame.grid_rowconfigure(1, weight=1) # Treeview'in genişlemesi için
-
-
-        ttk.Label(kategori_frame, text="Kategori Adı:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.kategori_entry = ttk.Entry(kategori_frame, width=30)
-        self.kategori_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
-        ttk.Button(kategori_frame, text="Ekle", command=self._kategori_ekle_ui).grid(row=0, column=2, padx=5, pady=5)
-        ttk.Button(kategori_frame, text="Güncelle", command=self._kategori_guncelle_ui).grid(row=0, column=3, padx=5, pady=5)
-        ttk.Button(kategori_frame, text="Sil", command=self._kategori_sil_ui).grid(row=0, column=4, padx=5, pady=5)
-
-        self.kategori_tree = ttk.Treeview(kategori_frame, columns=("ID", "Kategori Adı"), show='headings', selectmode="browse")
-        self.kategori_tree.heading("ID", text="ID"); self.kategori_tree.column("ID", width=50, stretch=tk.NO)
-        self.kategori_tree.heading("Kategori Adı", text="Kategori Adı"); self.kategori_tree.column("Kategori Adı", width=200, stretch=tk.YES)
-        self.kategori_tree.grid(row=1, column=0, columnspan=5, padx=5, pady=10, sticky="nsew")
+    def _set_validators_and_signals(self):
+        # Sayısal alanlar için validator'lar
+        locale_obj = self.app.locale() if hasattr(self.app, 'locale') else None
+        double_validator = QDoubleValidator(-9999999.0, 9999999.0, 2)
+        if locale_obj: double_validator.setLocale(locale_obj); double_validator.setNotation(QDoubleValidator.StandardNotation)
+        int_validator = QIntValidator(0, 100)
         
-        self.kategori_tree.bind("<<TreeviewSelect>>", self._on_kategori_select)
+        for key in ['alis_fiyati_kdv_haric', 'alis_fiyati_kdv_dahil', 'satis_fiyati_kdv_haric', 'satis_fiyati_kdv_dahil', 'min_stok_seviyesi', 'stok_miktari']: self.entries[key].setValidator(double_validator)
+        self.entries['kdv_orani'].setValidator(int_validator)
 
+        # Otomatik fiyat hesaplama için sinyal-slot bağlantıları
+        self.entries['alis_fiyati_kdv_haric'].textChanged.connect(lambda: self._otomatik_fiyat_doldur('haric', 'alis'))
+        self.entries['alis_fiyati_kdv_dahil'].textChanged.connect(lambda: self._otomatik_fiyat_doldur('dahil', 'alis'))
+        self.entries['satis_fiyati_kdv_haric'].textChanged.connect(lambda: self._otomatik_fiyat_doldur('haric', 'satis'))
+        self.entries['satis_fiyati_kdv_dahil'].textChanged.connect(lambda: self._otomatik_fiyat_doldur('dahil', 'satis'))
+        self.entries['kdv_orani'].textChanged.connect(self._update_all_prices_on_kdv_change)
 
-        # Sağ taraf: Marka Yönetimi
-        marka_frame = ttk.LabelFrame(parent_frame, text="Marka Yönetimi", padding="10")
-        marka_frame.grid(row=0, column=1, padx=5, pady=5, sticky="nsew") # Grid kullanıldı
-        marka_frame.columnconfigure(1, weight=1) # Entry'nin genişlemesi için
-        marka_frame.grid_rowconfigure(1, weight=1) # Treeview'in genişlemesi için
-
-
-        ttk.Label(marka_frame, text="Marka Adı:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.marka_entry = ttk.Entry(marka_frame, width=30)
-        self.marka_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
-        ttk.Button(marka_frame, text="Ekle", command=self._marka_ekle_ui).grid(row=0, column=2, padx=5, pady=5)
-        ttk.Button(marka_frame, text="Güncelle", command=self._marka_guncelle_ui).grid(row=0, column=3, padx=5, pady=5)
-        ttk.Button(marka_frame, text="Sil", command=self._marka_sil_ui).grid(row=0, column=4, padx=5, pady=5)
-
-        self.marka_tree = ttk.Treeview(marka_frame, columns=("ID", "Marka Adı"), show='headings', selectmode="browse")
-        self.marka_tree.heading("ID", text="ID"); self.marka_tree.column("ID", width=50, stretch=tk.NO)
-        self.marka_tree.heading("Marka Adı", text="Marka Adı"); self.marka_tree.column("Marka Adı", width=200, stretch=tk.YES)
-        self.marka_tree.grid(row=1, column=0, columnspan=5, padx=5, pady=10, sticky="nsew")
+        # Klavye navigasyonu (Enter tuşu ile odak değiştirme)
+        self.entries['urun_adi'].returnPressed.connect(self.entries['min_stok_seviyesi'].setFocus)
+        self.entries['min_stok_seviyesi'].returnPressed.connect(self.entries['alis_fiyati_kdv_dahil'].setFocus)
+        self.entries['alis_fiyati_kdv_dahil'].returnPressed.connect(self.entries['satis_fiyati_kdv_dahil'].setFocus)
+        self.entries['satis_fiyati_kdv_dahil'].returnPressed.connect(self.kaydet_button.setFocus)
         
-        self.marka_tree.bind("<<TreeviewSelect>>", self._on_marka_select)
-
-
-    def _setup_stok_hareketleri_tab(self, parent_frame):
-        ttk.Label(parent_frame, text="Ürün Stok Hareketleri", font=("Segoe UI", 12, "bold")).pack(pady=5, anchor=tk.W)
-
-        # Filtreleme seçenekleri
-        filter_frame = ttk.Frame(parent_frame, padding="5")
-        filter_frame.pack(fill=tk.X, padx=0, pady=5)
-
-        ttk.Label(filter_frame, text="İşlem Tipi:").pack(side=tk.LEFT, padx=(0,2))
-        self.stok_hareket_tip_filter_cb = ttk.Combobox(filter_frame, width=18, values=["TÜMÜ", "Giriş (Manuel)", "Çıkış (Manuel)", "Sayım Fazlası", "Sayım Eksiği", "Zayiat", "İade Girişi", "Fatura Alış", "Fatura Satış"], state="readonly")
-        self.stok_hareket_tip_filter_cb.pack(side=tk.LEFT, padx=(0,10))
-        self.stok_hareket_tip_filter_cb.set("TÜMÜ")
-        self.stok_hareket_tip_filter_cb.bind("<<ComboboxSelected>>", self._load_stok_hareketleri)
-
-        ttk.Label(filter_frame, text="Başlangıç Tarihi:").pack(side=tk.LEFT, padx=(0,2))
-        self.stok_hareket_bas_tarih_entry = ttk.Entry(filter_frame, width=12)
-        self.stok_hareket_bas_tarih_entry.pack(side=tk.LEFT, padx=(0,5))
-        self.stok_hareket_bas_tarih_entry.insert(0, (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
-        setup_date_entry(self.app, self.stok_hareket_bas_tarih_entry)
-        ttk.Button(filter_frame, text="🗓️", command=lambda: DatePickerDialog(self.app, self.stok_hareket_bas_tarih_entry), width=3).pack(side=tk.LEFT, padx=2)
-
-        ttk.Label(filter_frame, text="Bitiş Tarihi:").pack(side=tk.LEFT, padx=(0,2))
-        self.stok_hareket_bit_tarih_entry = ttk.Entry(filter_frame, width=12)
-        self.stok_hareket_bit_tarih_entry.pack(side=tk.LEFT, padx=(0,10))
-        self.stok_hareket_bit_tarih_entry.insert(0, datetime.now().strftime('%Y-%m-%d'))
-        setup_date_entry(self.app, self.stok_hareket_bit_tarih_entry)
-        ttk.Button(filter_frame, text="🗓️", command=lambda: DatePickerDialog(self.app, self.stok_hareket_bit_tarih_entry), width=3).pack(side=tk.LEFT, padx=2)
-
-        ttk.Button(filter_frame, text="Yenile", command=self._load_stok_hareketleri, style="Accent.TButton").pack(side=tk.LEFT)
-
-
-        # Stok Hareketleri Treeview
-        cols_stok_hareket = ("ID", "Tarih", "İşlem Tipi", "Miktar", "Önceki Stok", "Sonraki Stok", "Açıklama", "Kaynak")
-        self.stok_hareket_tree = ttk.Treeview(parent_frame, columns=cols_stok_hareket, show='headings', selectmode="browse")
-
-        col_defs_stok_hareket = [
-            ("ID", 40, tk.E, tk.NO),
-            ("Tarih", 80, tk.CENTER, tk.NO),
-            ("İşlem Tipi", 100, tk.W, tk.NO),
-            ("Miktar", 70, tk.E, tk.NO),
-            ("Önceki Stok", 80, tk.E, tk.NO),
-            ("Sonraki Stok", 80, tk.E, tk.NO),
-            ("Açıklama", 250, tk.W, tk.YES),
-            ("Kaynak", 80, tk.W, tk.NO)
-        ]
-        for cn, w, a, s in col_defs_stok_hareket:
-            self.stok_hareket_tree.column(cn, width=w, anchor=a, stretch=s)
-            self.stok_hareket_tree.heading(cn, text=cn, command=lambda c=cn: sort_treeview_column(self.stok_hareket_tree, c, False))
-        
-        vsb_stok_hareket = ttk.Scrollbar(parent_frame, orient="vertical", command=self.stok_hareket_tree.yview)
-        hsb_stok_hareket = ttk.Scrollbar(parent_frame, orient="horizontal", command=self.stok_hareket_tree.xview)
-        self.stok_hareket_tree.configure(yscrollcommand=vsb_stok_hareket.set, xscrollcommand=hsb_stok_hareket.set)
-        vsb_stok_hareket.pack(side=tk.RIGHT, fill=tk.Y)
-        hsb_stok_hareket.pack(side=tk.BOTTOM, fill=tk.X)
-        self.stok_hareket_tree.pack(expand=True, fill=tk.BOTH)
-
-    def _kategori_listesini_yukle(self):
-        for i in self.kategori_tree.get_children(): self.kategori_tree.delete(i)
-        kategoriler = self.db.kategori_listele()
-        for kat in kategoriler: self.kategori_tree.insert("", tk.END, values=kat, iid=kat[0])
-        self._yukle_kategori_marka_comboboxlari()
-
-    def _on_kategori_select(self, event):
-        selected_item = self.kategori_tree.focus()
-        if selected_item:
-            values = self.kategori_tree.item(selected_item, 'values')
-            self.kategori_entry.delete(0, tk.END)
-            self.kategori_entry.insert(0, values[1])
+    def _verileri_yukle(self):
+        self._yukle_combobox_verileri()
+        if self.urun_duzenle_data:
+            self.entries['urun_kodu'].setText(self.urun_duzenle_data.get('urun_kodu', ''))
+            self.entries['urun_adi'].setText(self.urun_duzenle_data.get('urun_adi', ''))
+            self.entries['urun_detayi'].setPlainText(self.urun_duzenle_data.get('urun_detayi', ''))
+            self.entries['alis_fiyati_kdv_dahil'].setText(f"{self.urun_duzenle_data.get('alis_fiyati_kdv_dahil', 0.0):.2f}")
+            self.entries['satis_fiyati_kdv_dahil'].setText(f"{self.urun_duzenle_data.get('satis_fiyati_kdv_dahil', 0.0):.2f}")
+            self.entries['kdv_orani'].setText(f"{self.urun_duzenle_data.get('kdv_orani', 20):.0f}")
+            self.entries['stok_miktari'].setText(f"{self.urun_duzenle_data.get('stok_miktari', 0.0):.2f}")
+            self.entries['min_stok_seviyesi'].setText(f"{self.urun_duzenle_data.get('min_stok_seviyesi', 0.0):.2f}")
+            self.urun_resmi_path = self.urun_duzenle_data.get('urun_resmi_yolu')
+            self._load_urun_resmi()
+            QTimer.singleShot(150, self._set_combobox_defaults)
         else:
-            self.kategori_entry.delete(0, tk.END)
-
-    def _kategori_ekle_ui(self):
-        kategori_adi = self.kategori_entry.get().strip()
-        success, message = self.db.kategori_ekle(kategori_adi)
-        if success:
-            messagebox.showinfo("Başarılı", message, parent=self)
-            self._kategori_listesini_yukle()
-            if hasattr(self.app, 'stok_yonetimi_sayfasi') and hasattr(self.app.stok_yonetimi_sayfasi, '_yukle_filtre_comboboxlari_stok_yonetimi'):
-                self.app.stok_yonetimi_sayfasi._yukle_filtre_comboboxlari_stok_yonetimi()
-            # UrunKartiPenceresi'nde aktif olan combobox'ları da güncelleme callback'i
-            if self.refresh_callback:
-                self.refresh_callback()
-
-    def _kategori_guncelle_ui(self):
-        selected_item = self.kategori_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Uyarı", "Lütfen güncellemek için bir kategori seçin.", parent=self)
-            return
-        kategori_id = self.kategori_tree.item(selected_item)['values'][0]
-        yeni_kategori_adi = self.kategori_entry.get().strip()
-
-        success, message = self.db.kategori_guncelle(kategori_id, yeni_kategori_adi)
-        if success:
-            messagebox.showinfo("Başarılı", message, parent=self)
-            self.kategori_entry.delete(0, tk.END)
-            self._kategori_listesini_yukle()
-            self.app.set_status(f"Kategori '{yeni_kategori_adi}' güncellendi.") 
-        else:
-            messagebox.showerror("Hata", message, parent=self)
-
-    def _kategori_sil_ui(self):
-        selected_item = self.kategori_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Uyarı", "Lütfen silmek için bir kategori seçin.", parent=self)
-            return
-        kategori_id = self.kategori_tree.item(selected_item)['values'][0]
-        kategori_adi = self.kategori_tree.item(selected_item)['values'][1] # Silinecek kategorinin adını al
-
-        if messagebox.askyesno("Onay", f"'{kategori_adi}' kategorisini silmek istediğinizden emin misiniz?", parent=self):
-            success, message = self.db.kategori_sil(kategori_id)
-            if success:
-                messagebox.showinfo("Başarılı", message, parent=self)
-                self.kategori_entry.delete(0, tk.END)
-                self._kategori_listesini_yukle()
-                self.app.set_status(f"Kategori '{kategori_adi}' silindi.") 
-            else:
-                messagebox.showerror("Hata", message, parent=self)
-
-    def _marka_listesini_yukle(self):
-        for i in self.marka_tree.get_children(): self.marka_tree.delete(i)
-        markalar = self.db.marka_listele()
-        for mar in markalar: self.marka_tree.insert("", tk.END, values=mar, iid=mar[0])
-        self._yukle_kategori_marka_comboboxlari()
-
-    def _on_marka_select(self, event):
-        selected_item = self.marka_tree.focus()
-        if selected_item:
-            values = self.marka_tree.item(selected_item, 'values')
-            self.marka_entry.delete(0, tk.END)
-            self.marka_entry.insert(0, values[1])
-        else:
-            self.marka_entry.delete(0, tk.END)
-
-    def _marka_ekle_ui(self):
-        marka_adi = self.marka_entry.get().strip()
-        success, message = self.db.marka_ekle(marka_adi)
-        if success:
-            messagebox.showinfo("Başarılı", message, parent=self)
-            self.marka_entry.delete(0, tk.END)
-            self._marka_listesini_yukle()
-            self.app.set_status(f"Marka '{marka_adi}' eklendi.")
-        else:
-            messagebox.showerror("Hata", message, parent=self)
-
-    def _marka_guncelle_ui(self):
-        selected_item = self.marka_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Uyarı", "Lütfen güncellemek için bir marka seçin.", parent=self)
-            return
-        marka_id = self.marka_tree.item(selected_item)['values'][0]
-        yeni_marka_adi = self.marka_entry.get().strip()
-
-        success, message = self.db.marka_guncelle(marka_id, yeni_marka_adi)
-        if success:
-            messagebox.showinfo("Başarılı", message, parent=self)
-            self.marka_entry.delete(0, tk.END)
-            self._marka_listesini_yukle()
-            self.app.set_status(f"Marka '{yeni_marka_adi}' güncellendi.")
-        else:
-            messagebox.showerror("Hata", message, parent=self)
-
-    def _marka_sil_ui(self):
-        selected_item = self.marka_tree.focus()
-        if not selected_item:
-            messagebox.showwarning("Uyarı", "Lütfen silmek için bir marka seçin.", parent=self)
-            return
-        marka_id = self.marka_tree.item(selected_item)['values'][0]
-        marka_adi = self.marka_tree.item(selected_item)['values'][1] # Silinecek markanın adını al
-
-        if messagebox.askyesno("Onay", f"'{marka_adi}' markasını silmek istediğinizden emin misiniz?", parent=self):
-            success, message = self.db.marka_sil(marka_id)
-            if success:
-                messagebox.showinfo("Başarılı", message, parent=self)
-                self.marka_entry.delete(0, tk.END)
-                self._marka_listesini_yukle()
-                self.app.set_status(f"Marka '{marka_adi}' silindi.") 
-            else:
-                messagebox.showerror("Hata", message, parent=self)
-
-    def _load_genel_bilgiler(self):
-        if self.urun_duzenle: # Sadece düzenleme modunda veri yükle
-
-            print(f"{datetime.now()}: DEBUG: _load_genel_bilgiler çağrıldı.")
-            # self.urun_duzenle'nin bir sqlite3.Row objesi olduğunu varsayarak isimlerle erişim
-            print(f"{datetime.now()}: DEBUG: Yüklenen ürün detayları: {dict(self.urun_duzenle)}") # dict() ile içeriğini yazdırabiliriz
-
-            # Ürün Kodu
-            urun_kodu_val = self.urun_duzenle['urun_kodu'] if self.urun_duzenle['urun_kodu'] is not None else ""
-            self.sv_kod.set(urun_kodu_val)
-            print(f"{datetime.now()}: DEBUG: Ürün Kodu yüklendi: '{self.sv_kod.get()}'")
-
-            # Ürün Adı
-            urun_adi_val = self.urun_duzenle['urun_adi'] if self.urun_duzenle['urun_adi'] is not None else ""
-            self.sv_ad.set(urun_adi_val)
-            print(f"{datetime.now()}: DEBUG: Ürün Adı yüklendi: '{self.sv_ad.get()}'")
-
-            # Ürün Detayı (tk.Text widget'ı)
-            urun_detayi_db = self.urun_duzenle['urun_detayi'] if self.urun_duzenle['urun_detayi'] is not None else ""
-            self.entry_urun_detayi.delete("1.0", tk.END)
-            self.entry_urun_detayi.insert("1.0", urun_detayi_db)
-            print(f"{datetime.now()}: DEBUG: Ürün Detayı yüklendi.")
-
-            # KDV Oranı
-            kdv_val = self.urun_duzenle['kdv_orani'] if self.urun_duzenle['kdv_orani'] is not None else 0.0
-            self.sv_kdv.set(f"{kdv_val:.0f}".replace('.',','))
-            print(f"{datetime.now()}: DEBUG: KDV Oranı yüklendi: {self.sv_kdv.get()}")
-
-            # Alış Fiyatı (KDV Hariç)
-            alis_haric_val = self.urun_duzenle['alis_fiyati_kdv_haric'] if self.urun_duzenle['alis_fiyati_kdv_haric'] is not None else 0.0
-            self.sv_alis_haric.set(f"{alis_haric_val:.2f}".replace('.',','))
-            print(f"{datetime.now()}: DEBUG: Alış Fiyatı (Hariç) yüklendi: {self.sv_alis_haric.get()}")
-
-            # Alış Fiyatı (KDV Dahil)
-            alis_dahil_val = self.urun_duzenle['alis_fiyati_kdv_dahil'] if self.urun_duzenle['alis_fiyati_kdv_dahil'] is not None else 0.0
-            self.sv_alis_dahil.set(f"{alis_dahil_val:.2f}".replace('.',','))
-            print(f"{datetime.now()}: DEBUG: Alış Fiyatı (Dahil) yüklendi: {self.sv_alis_dahil.get()}")
-
-            # Satış Fiyatı (KDV Hariç)
-            satis_haric_val = self.urun_duzenle['satis_fiyati_kdv_haric'] if self.urun_duzenle['satis_fiyati_kdv_haric'] is not None else 0.0
-            self.sv_satis_haric.set(f"{satis_haric_val:.2f}".replace('.',','))
-            print(f"{datetime.now()}: DEBUG: Satış Fiyatı (Hariç) yüklendi: {self.sv_satis_haric.get()}")
-
-            # Satış Fiyatı (KDV Dahil)
-            satis_dahil_val = self.urun_duzenle['satis_fiyati_kdv_dahil'] if self.urun_duzenle['satis_fiyati_kdv_dahil'] is not None else 0.0
-            self.sv_satis_dahil.set(f"{satis_dahil_val:.2f}".replace('.',','))
-            print(f"{datetime.now()}: DEBUG: Satış Fiyatı (Dahil) yüklendi: {self.sv_satis_dahil.get()}")
-
-            self._calculate_kar_orani()
-            print(f"{datetime.now()}: DEBUG: Kar oranı hesaplandı.")
-
-            # Fiyat Değişiklik Tarihi (Label)
-            fiyat_deg_tarihi = self.urun_duzenle['fiyat_degisiklik_tarihi'] if self.urun_duzenle['fiyat_degisiklik_tarihi'] is not None else "-"
-            self.fiyat_degisiklik_tarihi_label.config(text=f"Fiyat Değişiklik Tarihi: {fiyat_deg_tarihi}")
-            print(f"{datetime.now()}: DEBUG: Fiyat Değişiklik Tarihi yüklendi: {fiyat_deg_tarihi}")
-
-            # Ürün Resmi Yolu
-            self.urun_resmi_path = self.urun_duzenle['urun_resmi_yolu'] if self.urun_duzenle['urun_resmi_yolu'] is not None else ""
-            self._load_urun_resmi() # Resim yükleme metodunu çağır
-            print(f"{datetime.now()}: DEBUG: Ürün resmi yolu yüklendi: {self.urun_resmi_path}")
-
-            stok_val = self.urun_duzenle['stok_miktari'] if self.urun_duzenle['stok_miktari'] is not None else 0.0
-            self.sv_stok.set(f"{stok_val:.2f}".rstrip('0').rstrip('.'))
-            print(f"{datetime.now()}: DEBUG: Stok Miktarı yüklendi: {self.sv_stok.get()}")
-
-            # Min. Stok Seviyesi
-            min_stok_val = self.urun_duzenle['min_stok_seviyesi'] if self.urun_duzenle['min_stok_seviyesi'] is not None else 0.0
-            self.sv_min_stok.set(f"{min_stok_val:.2f}".rstrip('0').rstrip('.'))
-            print(f"{datetime.now()}: DEBUG: Min. Stok Seviyesi yüklendi: {self.sv_min_stok.get()}")
-
-
-            # Nitelik Combobox'larının değer listelerini yükle ve sonra seçili değerleri ata.
-            self._yukle_kategori_marka_comboboxlari()
-            self._yukle_urun_grubu_birimi_ulke_comboboxlari()
-            self._load_kategori_marka_fields() # Kategori ve Marka combobox'ları set et
-            self._load_urun_grubu_birimi_ulke_fields() # Ürün Grubu, Birimi, Menşe combobox'ları set et
-
-            print(f"{datetime.now()}: DEBUG: Nitelik combobox alanları yüklendi ve atandı.")
-        else:
-            print(f"{datetime.now()}: UYARI: _load_genel_bilgiler - self.urun_duzenle boş (Yeni Ürün). Varsayılan değerler __init__ içinde set edildi.")
-            # Yeni ürün durumu için entry_urun_detayi'yi temizle
-            if self.entry_urun_detayi:
-                self.entry_urun_detayi.delete("1.0", tk.END)
-            # Yeni ürün durumu için resim etiketini sıfırla
-            if self.urun_resmi_label:
-                self.urun_resmi_label.config(text="Resim Yok", image='')
-
-    def _calculate_and_set_price(self, price_type, source_type, kdv_orani, input_value_str, target_sv): # target_entry yerine target_sv
-        """Yardımcı fonksiyon: Fiyatı hesaplar ve ilgili StringVar'a yazar."""
-        try:
-            if not input_value_str.strip():
-                target_sv.set(f"0{','.join(['0'] * 2)}" if 2 > 0 else "0") # Varsayılan 2 ondalık
-                return
-
-            value = float(input_value_str.replace(',', '.'))
-
-            if source_type == 'haric':
-                calculated_target = value * (1 + kdv_orani / 100)
-            elif source_type == 'dahil':
-                if (1 + kdv_orani / 100) == 0: 
-                    calculated_target = 0.0
-                else:
-                    calculated_target = value / (1 + kdv_orani / 100)
+            self.entries['urun_kodu'].setText(self.db.get_next_stok_kodu())
     
-            target_sv.set(f"{calculated_target:.2f}".replace('.',','))
-        except ValueError:
-            target_sv.set(f"0{','.join(['0'] * 2)}" if 2 > 0 else "0")
-        except Exception as e:
-            print(f"Otomatik fiyat doldurma hatası: {e}")
-            
-    def otomatik_fiyat_doldur(self, event=None, source_type=None, price_type=None, focus_out=False):
-        try:
-            kdv_orani_str = self.sv_kdv.get().strip().replace(',', '.')
-            kdv_orani = float(kdv_orani_str) if kdv_orani_str else 0.0
-
-            if not (0 <= kdv_orani <= 100):
-                if focus_out:
-                    messagebox.showwarning("Geçersiz KDV", "KDV Oranı 0 ile 100 arasında olmalıdır.", parent=self)
-                self.sv_kdv.set("0")
-                kdv_orani = 0.0
-
-            if event is not None and event.keysym != "Tab" and not focus_out: 
-                self.fiyat_degisiklik_tarihi_label.config(text=f"Fiyat Değişiklik Tarihi: {datetime.now().strftime('%d/%m/%Y')}")
-
-            if source_type == 'kdv_focout' or price_type == 'all':
-                self._calculate_and_set_price('alis', 'haric', kdv_orani, self.sv_alis_haric.get().strip(), self.sv_alis_dahil)
-                self._calculate_and_set_price('alis', 'dahil', kdv_orani, self.sv_alis_dahil.get().strip(), self.sv_alis_haric)
-                self._calculate_and_set_price('satis', 'haric', kdv_orani, self.sv_satis_haric.get().strip(), self.sv_satis_dahil)
-                self._calculate_and_set_price('satis', 'dahil', kdv_orani, self.sv_satis_dahil.get().strip(), self.sv_satis_haric)
-            elif price_type == 'alis':
-                if source_type == 'haric':
-                    self._calculate_and_set_price('alis', 'haric', kdv_orani, self.sv_alis_haric.get().strip(), self.sv_alis_dahil)
-                elif source_type == 'dahil':
-                    self._calculate_and_set_price('alis', 'dahil', kdv_orani, self.sv_alis_dahil.get().strip(), self.sv_alis_haric)
-            elif price_type == 'satis':
-                if source_type == 'haric':
-                    self._calculate_and_set_price('satis', 'haric', kdv_orani, self.sv_satis_haric.get().strip(), self.sv_satis_dahil)
-                elif source_type == 'dahil':
-                    self._calculate_and_set_price('satis', 'dahil', kdv_orani, self.sv_satis_dahil.get().strip(), self.sv_satis_haric)
+    def _set_combobox_defaults(self):
+        if not self.urun_duzenle_data: return
+        for nitelik in self.combos.keys():
+            combo = self.combos[nitelik]
+            target_id = self.urun_duzenle_data.get(f"{nitelik}_id")
+            if target_id is not None:
+                index = combo.findData(target_id)
+                if index != -1: combo.setCurrentIndex(index)
     
-            self._calculate_kar_orani()
-
-        except ValueError:
-            if focus_out:
-                self.sv_alis_haric.set("0,00")
-                self.sv_alis_dahil.set("0,00")
-                self.sv_satis_haric.set("0,00")
-                self.sv_satis_dahil.set("0,00")
-                self.label_kar_orani.config(text="0.00 %")
-            pass
-        except Exception as e:
-            print(f"Otomatik fiyat doldurma hatası: {e}")
-            
-    def _format_stok_entry(self, event=None, sv_variable=None, decimal_places=2, focus_out=False):
-        """
-        Stok ve minimum stok giriş alanlarındaki değeri formatlar.
-        FocusOut olayına özel olarak tasarlanmıştır.
-        """
-        if sv_variable is None:
-            return
-
-        current_value_str = sv_variable.get().strip()
-
-        if not current_value_str or current_value_str == '-' or current_value_str == ',':
-            sv_variable.set(f"0,{str('0' * decimal_places)}" if decimal_places > 0 else "0")
-            return
-
-        try:
-            # Virgülü noktaya çevirerek float'a dönüştür
-            value_float = float(current_value_str.replace(',', '.'))
-            # İstenen ondalık basamak sayısına göre formatla
-            formatted_value_str = f"{{:.{decimal_places}f}}".format(value_float)
-            # Noktayı tekrar virgüle çevir
-            final_display_value = formatted_value_str.replace('.', ',').rstrip('0').rstrip(',')
-            if final_display_value == "": # Eğer sadece . veya , kalırsa sıfıra çek
-                 final_display_value = "0" if decimal_places == 0 else "0,00"
-            if final_display_value == "-":
-                 final_display_value = "0" if decimal_places == 0 else "0,00"
-
-
-            sv_variable.set(final_display_value)
-        except ValueError:
-            # Geçersiz bir değer girildiyse sıfırla
-            sv_variable.set(f"0,{str('0' * decimal_places)}" if decimal_places > 0 else "0")
-        except Exception as e:
-            print(f"Hata: _format_stok_entry - {e}")
-            sv_variable.set(f"0,{str('0' * decimal_places)}" if decimal_places > 0 else "0")
-
-
-    def _on_notebook_tab_change(self, event):
-        selected_tab_id = self.main_notebook.select()
-        selected_tab_widget = self.main_notebook.nametowidget(selected_tab_id)
-        selected_tab_text = self.main_notebook.tab(selected_tab_id, "text")
-        
-        if selected_tab_text == "Stok Hareketleri":
-            if self.urun_id:
-                selected_tab_widget.urun_id = self.urun_id
-                selected_tab_widget.urun_adi = self.urun_adi_initial
-                selected_tab_widget._load_stok_hareketleri()
-        elif selected_tab_text == "İlgili Faturalar":
-            if self.urun_id:
-                selected_tab_widget.urun_id = self.urun_id
-                selected_tab_widget.urun_adi = self.urun_adi_initial
-                selected_tab_widget._load_ilgili_faturalar()
-        elif selected_tab_text == "Kategori & Marka Yönetimi": 
-            if hasattr(selected_tab_widget, '_kategori_listesini_yukle'):
-                selected_tab_widget._kategori_listesini_yukle()
-            if hasattr(selected_tab_widget, '_marka_listesini_yukle'):
-                selected_tab_widget._marka_listesini_yukle()
-        elif selected_tab_text == "Ürün Nitelik Yönetimi":
-            if hasattr(selected_tab_widget, '_urun_grubu_listesini_yukle'):
-                selected_tab_widget._urun_grubu_listesini_yukle()
-                selected_tab_widget._urun_birimi_listesini_yukle()
-                selected_tab_widget._ulke_listesini_yukle()
-
-    def kaydet(self):
-        kod = self.sv_kod.get().strip()
-        ad = self.sv_ad.get().strip()
-        urun_detayi = self.entry_urun_detayi.get("1.0", tk.END).strip()
-        stok_str = self.sv_stok.get().strip()
-        kdv_str = self.sv_kdv.get().strip()
-        min_stok_str = self.sv_min_stok.get().strip()
-
-        alis_haric_str = self.sv_alis_haric.get().strip()
-        alis_dahil_str = self.sv_alis_dahil.get().strip()
-        satis_haric_str = self.sv_satis_haric.get().strip()
-        satis_dahil_str = self.sv_satis_dahil.get().strip()
-
-        # DÜZELTME: Combobox'lardan değerleri alırken "Seçim Yok" kontrolü
-        urun_grubu_id = self.urun_gruplari_map.get(self.combo_urun_grubu.get(), None)
-        if self.combo_urun_grubu.get() == "Seçim Yok": urun_grubu_id = None
-
-        urun_birimi_id = self.urun_birimleri_map.get(self.combo_urun_birimi.get(), None)
-        if self.combo_urun_birimi.get() == "Seçim Yok": urun_birimi_id = None
-
-        ulke_id = self.ulkeler_map.get(self.combo_mense.get(), None)
-        if self.combo_mense.get() == "Seçim Yok": ulke_id = None
-
-        fiyat_degisiklik_tarihi_str = self.fiyat_degisiklik_tarihi_label.cget("text").strip()
-        if fiyat_degisiklik_tarihi_str == "Fiyat Değişiklik Tarihi: Yükleniyor..." or \
-           fiyat_degisiklik_tarihi_str == "Fiyat Değişiklik Tarihi: Hata" or \
-           fiyat_degisiklik_tarihi_str == "Fiyat Değişiklik Tarihi: -" or \
-           not fiyat_degisiklik_tarihi_str:
-            fiyat_degisiklik_tarihi_str = datetime.now().strftime('%Y-%m-%d')
-        else:
+    def _yukle_combobox_verileri(self):
+        nitelikler = {'kategori': 'kategoriler', 'marka': 'markalar', 'urun_grubu': 'urun_gruplari', 'urun_birimi': 'urun_birimleri', 'mense': 'ulkeler'}
+        for nitelik, path in nitelikler.items():
+            combo = self.combos[nitelik]; combo.clear(); combo.addItem("Seçim Yok", None)
             try:
-                # 'Fiyat Değişiklik Tarihi: ' önekini kaldırarak formatlama yapın
-                fiyat_degisiklik_tarihi_str = datetime.strptime(fiyat_degisiklik_tarihi_str.replace('Fiyat Değişiklik Tarihi: ', ''), '%d.%m.%Y').strftime('%Y-%m-%d')
-            except ValueError:
-                fiyat_degisiklik_tarihi_str = datetime.now().strftime('%Y-%m-%d')
-
-
-        if not (kod and ad):
-            messagebox.showerror("Eksik Bilgi", "Ürün Kodu ve Adı boş bırakılamaz.", parent=self)
-            return
+                response = requests.get(f"{API_BASE_URL}/nitelikler/{path}")
+                response.raise_for_status()
+                for item in response.json():
+                    ad_key = next((key for key in item if key.endswith('_adi')), None)
+                    if ad_key: combo.addItem(item[ad_key], item['id'])
+            except requests.exceptions.RequestException as e: print(f"Hata: {nitelik} verileri çekilemedi - {e}")
+            
+    def _otomatik_fiyat_doldur(self, source, price_type):
+        active_widget = QApplication.focusWidget()
+        if source == 'haric' and price_type == 'alis' and active_widget != self.entries['alis_fiyati_kdv_haric']: return
+        if source == 'dahil' and price_type == 'alis' and active_widget != self.entries['alis_fiyati_kdv_dahil']: return
+        if source == 'haric' and price_type == 'satis' and active_widget != self.entries['satis_fiyati_kdv_haric']: return
+        if source == 'dahil' and price_type == 'satis' and active_widget != self.entries['satis_fiyati_kdv_dahil']: return
 
         try:
-            stok = float(stok_str.replace(',', '.')) if stok_str else 0.0
-            kdv = float(kdv_str.replace(',', '.')) if kdv_str else 0.0
-            min_stok = float(min_stok_str.replace(',', '.')) if min_stok_str else 0.0
+            kdv_str = self.entries['kdv_orani'].text().replace(',', '.'); kdv = float(kdv_str) if kdv_str else 0.0
+            kdv_carpan = 1 + kdv / 100
+            
+            widgets = {'alis': (self.entries['alis_fiyati_kdv_haric'], self.entries['alis_fiyati_kdv_dahil']), 'satis': (self.entries['satis_fiyati_kdv_haric'], self.entries['satis_fiyati_kdv_dahil'])}
+            haric_widget, dahil_widget = widgets[price_type]
 
-            alis_haric = float(alis_haric_str.replace(',', '.')) if alis_haric_str else 0.0
-            alis_dahil = float(alis_dahil_str.replace(',', '.')) if alis_dahil_str else 0.0
-            satis_haric = float(satis_haric_str.replace(',', '.')) if satis_haric_str else 0.0
-            satis_dahil = float(satis_dahil_str.replace(',', '.')) if satis_dahil_str else 0.0
+            if source == 'haric':
+                haric_val_str = haric_widget.text().replace(',', '.'); haric_val = float(haric_val_str) if haric_val_str else 0.0
+                dahil_val = haric_val * kdv_carpan
+                dahil_widget.blockSignals(True); dahil_widget.setText(f"{dahil_val:.2f}"); dahil_widget.blockSignals(False)
+            elif source == 'dahil':
+                dahil_val_str = dahil_widget.text().replace(',', '.'); dahil_val = float(dahil_val_str) if dahil_val_str else 0.0
+                haric_val = dahil_val / kdv_carpan if kdv_carpan != 0 else 0.0
+                haric_widget.blockSignals(True); haric_widget.setText(f"{haric_val:.2f}"); haric_widget.blockSignals(False)
+            self._calculate_kar_orani()
+        except (ValueError, ZeroDivisionError): pass
 
-            if not (0 <= kdv <= 100):
-                 messagebox.showerror("Geçersiz Değer", "KDV Oranı 0 ile 100 arasında olmalıdır.", parent=self)
-                 return
-
-        except ValueError:
-            messagebox.showerror("Giriş Hatası","Sayısal alanlar doğru formatta olmalıdır.", parent=self)
-            return False
-
-        selected_kategori_name = self.combo_kategori.get()
-        kategori_id_to_save = self.kategoriler_map.get(selected_kategori_name, None)
-        if selected_kategori_name == "Seçim Yok" or kategori_id_to_save is None:
-            kategori_id_to_save = None
-
-        selected_marka_name = self.combo_marka.get()
-        marka_id_to_save = self.markalar_map.get(selected_marka_name, None)
-        if selected_marka_name == "Seçim Yok" or marka_id_to_save is None:
-            marka_id_to_save = None
-
-        urun_detayi_to_save = urun_detayi if urun_detayi else None
-        urun_resmi_yolu_to_save = self.urun_resmi_path if self.urun_resmi_path else None
-
-        if self.urun_id:
-            success, message = self.db.stok_guncelle(self.urun_id, kod, ad, stok, alis_haric, satis_haric, kdv, min_stok,
-                                     alis_dahil, satis_dahil, kategori_id_to_save, marka_id_to_save,
-                                     urun_detayi_to_save, urun_resmi_yolu_to_save, fiyat_degisiklik_tarihi_str,
-                                     urun_grubu_id, urun_birimi_id, ulke_id)
-            if success:
-                messagebox.showinfo("Başarılı", message, parent=self) # db'den gelen mesajı kullan
-                if self.app: self.app.set_status(message) # Durum çubuğunu güncelle
-                self.yenile_callback()
-                try: self.grab_release()
-                except tk.TclError: pass
-                self.destroy()
-            else:
-                messagebox.showerror("Hata", message, parent=self) # db'den gelen hata mesajını göster
-        else:
-            result_tuple = self.db.stok_ekle(kod, ad, stok, alis_haric, satis_haric, kdv, min_stok,
-                                        alis_dahil, satis_dahil, kategori_id_to_save, marka_id_to_save,
-                                        urun_detayi_to_save, urun_resmi_yolu_to_save, fiyat_degisiklik_tarihi_str,
-                                        urun_grubu_id, urun_birimi_id, ulke_id)
-            success, message_or_id = result_tuple
-            if success:
-                yeni_id = message_or_id
-                messagebox.showinfo("Başarılı", f"'{ad}' ürünü eklendi.", parent=self)
-                if self.app: self.app.set_status(f"Yeni ürün '{ad}' eklendi (ID: {yeni_id}).")
-                self.yenile_callback()
-                try: self.grab_release()
-                except tk.TclError: pass
-                self.destroy()
-            else:
-                messagebox.showerror("Hata", message_or_id, parent=self)
-
+    def _update_all_prices_on_kdv_change(self):
+        self._otomatik_fiyat_doldur('dahil', 'alis'); self._otomatik_fiyat_doldur('dahil', 'satis')
+        
     def _calculate_kar_orani(self):
         try:
-            alis_fiyati_dahil_str = self.sv_alis_dahil.get().strip().replace(',', '.')
-            satis_fiyati_dahil_str = self.sv_satis_dahil.get().strip().replace(',', '.')
+            alis_fiyati_str = self.entries['alis_fiyati_kdv_dahil'].text().replace(',', '.'); alis_fiyati = float(alis_fiyati_str) if alis_fiyati_str else 0.0
+            satis_fiyati_str = self.entries['satis_fiyati_kdv_dahil'].text().replace(',', '.'); satis_fiyati = float(satis_fiyati_str) if satis_fiyati_str else 0.0
+            kar_orani = ((satis_fiyati - alis_fiyati) / alis_fiyati) * 100 if alis_fiyati > 0 else 0.0
+            self.label_kar_orani.setText(f"% {kar_orani:,.2f}")
+        except (ValueError, ZeroDivisionError): self.label_kar_orani.setText("Hesaplanamadı")
 
-            alis_fiyati = float(alis_fiyati_dahil_str) if alis_fiyati_dahil_str else 0.0
-            satis_fiyati = float(satis_fiyati_dahil_str) if satis_fiyati_dahil_str else 0.0
-    
-            if alis_fiyati > 0:
-                kar_orani = ((satis_fiyati - alis_fiyati) / alis_fiyati) * 100
-                self.label_kar_orani.config(text=f"{kar_orani:,.2f} %")
+    def kaydet(self):
+        if not self.entries['urun_adi'].text().strip(): QMessageBox.warning(self, "Eksik Bilgi", "Ürün Adı alanı boş bırakılamaz."); return
+        
+        data = {}
+        try:
+            for key, widget in self.entries.items():
+                text_value = widget.text() if isinstance(widget, QLineEdit) else widget.toPlainText()
+                if any(substr in key for substr in ['fiyat', 'stok', 'seviye', 'kdv']): 
+                    data[key] = float(text_value.replace(',', '.') if text_value else 0.0)
+                else: data[key] = text_value.strip()
+            for key, combo in self.combos.items(): data[f"{key}_id"] = combo.currentData()
+        except ValueError: QMessageBox.critical(self, "Geçersiz Değer", "Lütfen sayısal alanları doğru formatta girin."); return
+        
+        if not self.urun_id: data.pop('stok_miktari', None) 
+        data['urun_resmi_yolu'] = self.urun_resmi_path
+
+        try:
+            if self.urun_id:
+                api_url = f"{API_BASE_URL}/stoklar/{self.urun_id}"; response = requests.put(api_url, json=data)
             else:
-                self.label_kar_orani.config(text="0.00 %")
-        except ValueError:
-            self.label_kar_orani.config(text="Hesaplanamıyor")
-        except Exception as e:
-            print(f"Kar oranı hesaplanırken hata: {e}")
-            self.label_kar_orani.config(text="Hata")
+                api_url = f"{API_BASE_URL}/stoklar/"; response = requests.post(api_url, json=data)
+            response.raise_for_status()
+            QMessageBox.information(self, "Başarılı", "Ürün bilgileri başarıyla kaydedildi.")
+            if self.yenile_callback: self.yenile_callback()
+            self.accept()
+        except requests.exceptions.RequestException as e:
+            error_detail = str(e)
+            if e.response is not None:
+                try: error_detail = e.response.json().get('detail', str(e.response.content))
+                except ValueError: pass
+            QMessageBox.critical(self, "API Hatası", f"Ürün kaydedilirken bir hata oluştu:\n{error_detail}")
 
-    def _setup_ilgili_faturalar_tab(self, parent_frame):
-        ttk.Label(parent_frame, text="Ürünün Yer Aldığı Faturalar", font=("Segoe UI", 12, "bold")).pack(pady=5, anchor=tk.W)
-
-        filter_frame = ttk.Frame(parent_frame, padding="5")
-        filter_frame.pack(fill=tk.X, padx=0, pady=5)
-
-        ttk.Label(filter_frame, text="Fatura Tipi:").pack(side=tk.LEFT, padx=(0,2))
-        self.fatura_tipi_filter_cb = ttk.Combobox(filter_frame, width=15, values=["TÜMÜ", "ALIŞ", "SATIŞ"], state="readonly")
-        self.fatura_tipi_filter_cb.pack(side=tk.LEFT, padx=(0,10))
-        self.fatura_tipi_filter_cb.set("TÜMÜ")
-        self.fatura_tipi_filter_cb.bind("<<ComboboxSelected>>", self._load_ilgili_faturalar)
-
-        ttk.Button(filter_frame, text="Filtrele", command=self._load_ilgili_faturalar, style="Accent.TButton").pack(side=tk.LEFT)
-
-
-        cols_fatura = ("ID", "Fatura No", "Tarih", "Tip", "Cari/Misafir", "KDV Hariç Top.", "KDV Dahil Top.")
-        self.ilgili_faturalar_tree = ttk.Treeview(parent_frame, columns=cols_fatura, show='headings', selectmode="browse")
-
-        col_defs_fatura = [
-            ("ID", 40, tk.E, tk.NO),
-            ("Fatura No", 120, tk.W, tk.YES),
-            ("Tarih", 85, tk.CENTER, tk.NO),
-            ("Tip", 70, tk.CENTER, tk.NO),
-            ("Cari/Misafir", 200, tk.W, tk.YES),
-            ("KDV Hariç Top.", 120, tk.E, tk.NO),
-            ("KDV Dahil Top.", 120, tk.E, tk.NO)
-        ]
-        for col_name, width, anchor, stretch_opt in col_defs_fatura:
-            self.ilgili_faturalar_tree.column(col_name, width=width, anchor=anchor, stretch=stretch_opt)
-            self.ilgili_faturalar_tree.heading(col_name, text=col_name, command=lambda c=col_name: sort_treeview_column(self.ilgili_faturalar_tree, c, False))
-
-        vsb_fatura = ttk.Scrollbar(parent_frame, orient="vertical", command=self.ilgili_faturalar_tree.yview)
-        hsb_fatura = ttk.Scrollbar(parent_frame, orient="horizontal", command=self.ilgili_faturalar_tree.xview)
-        self.ilgili_faturalar_tree.configure(yscrollcommand=vsb_fatura.set, xscrollcommand=hsb_fatura.set)
-        vsb_fatura.pack(side=tk.RIGHT, fill=tk.Y)
-        hsb_fatura.pack(side=tk.BOTTOM, fill=tk.X)
-        self.ilgili_faturalar_tree.pack(expand=True, fill=tk.BOTH)
-
-        self.ilgili_faturalar_tree.bind("<Double-1>", self._on_fatura_double_click)
-
-    def _load_ilgili_faturalar(self, event=None):
-        for i in self.ilgili_faturalar_tree.get_children():
-            self.ilgili_faturalar_tree.delete(i)
-
-        if not self.urun_id:
-            self.ilgili_faturalar_tree.insert("", tk.END, values=("", "", "", "", "Ürün seçili değil.", "", ""))
-            return
-
-        fatura_tipi_filtre = self.fatura_tipi_filter_cb.get()
-        
-        faturalar = self.db.get_faturalar_by_urun_id(self.urun_id, fatura_tipi=fatura_tipi_filtre)
-
-        if not faturalar:
-            self.ilgili_faturalar_tree.insert("", tk.END, values=("", "", "", "", "Bu ürüne ait fatura bulunamadı.", "", ""))
-            return
-
-        for fatura_item in faturalar:
-            fatura_id = fatura_item[0]
-            fatura_no = fatura_item[1]
-            tarih_str = fatura_item[2]
-            fatura_tip = fatura_item[3]
-            cari_adi = fatura_item[4]
-            toplam_kdv_haric = fatura_item[5]
-            toplam_kdv_dahil = fatura_item[6]
-
+    def _urun_sil(self):
+        if not self.urun_id: return
+        reply = QMessageBox.question(self, "Onay", f"'{self.entries['urun_adi'].text()}' ürününü silmek istediğinizden emin misiniz?", QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
             try:
-                formatted_tarih = datetime.strptime(tarih_str, '%Y-%m-%d').strftime('%d.%m.%Y')
-            except ValueError:
-                formatted_tarih = tarih_str
+                api_url = f"{API_BASE_URL}/stoklar/{self.urun_id}"; response = requests.delete(api_url); response.raise_for_status()
+                QMessageBox.information(self, "Başarılı", "Ürün başarıyla silindi.")
+                if self.yenile_callback: self.yenile_callback()
+                self.accept()
+            except requests.exceptions.RequestException as e: QMessageBox.critical(self, "API Hatası", f"Ürün silinirken bir hata oluştu: {e}")
 
-            self.ilgili_faturalar_tree.insert("", tk.END, iid=fatura_id, values=(
-                fatura_id,
-                fatura_no,
-                formatted_tarih,
-                fatura_tip,
-                cari_adi,
-                self.db._format_currency(toplam_kdv_haric),
-                self.db._format_currency(toplam_kdv_dahil)
-            ))
+    def _resim_sec(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Ürün Resmi Seç", "", "Resim Dosyaları (*.png *.jpg *.jpeg)")
+        if file_path:
+            # Resmi data/urun_resimleri klasörüne kopyala
+            try:
+                resim_klasoru = os.path.join(os.path.dirname(self.db.db_name), "urun_resimleri")
+                os.makedirs(resim_klasoru, exist_ok=True)
+                yeni_path = os.path.join(resim_klasoru, os.path.basename(file_path))
+                shutil.copy2(file_path, yeni_path)
+                self.urun_resmi_path = yeni_path
+            except Exception as e:
+                QMessageBox.warning(self, "Hata", f"Resim kopyalanamadı: {e}")
+                self.urun_resmi_path = file_path # Kopyalanamazsa orijinal yolu kullan
+            self._load_urun_resmi()
 
-    def _on_fatura_double_click(self, event):
-        selected_item_iid = self.ilgili_faturalar_tree.focus()
-        if not selected_item_iid:
+    def _resim_sil(self):
+        self.urun_resmi_path = ""; self._load_urun_resmi()
+    
+    def _load_urun_resmi(self):
+        if self.urun_resmi_path and os.path.exists(self.urun_resmi_path):
+            self.original_pixmap = QPixmap(self.urun_resmi_path)
+            self._resize_image()
+        else:
+            self.original_pixmap = None; self.urun_resmi_label.setText("Resim Yok"); self.urun_resmi_label.setPixmap(QPixmap())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event); QTimer.singleShot(50, self._resize_image) # Küçük bir gecikme ekle
+
+    def _resize_image(self):
+        if self.original_pixmap and not self.original_pixmap.isNull():
+            scaled_pixmap = self.original_pixmap.scaled(self.urun_resmi_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.urun_resmi_label.setPixmap(scaled_pixmap)
+            
+    def _stok_ekle_penceresi_ac(self):
+        if not self.urun_id:
+            QMessageBox.warning(self, "Uyarı", "Lütfen önce ürünü kaydedin.")
             return
         
-        fatura_id = self.ilgili_faturalar_tree.item(selected_item_iid)['values'][0]
-        if fatura_id:
-            FaturaDetayPenceresi(self.app, self.db, fatura_id)
+        # Güncel stok miktarını al
+        mevcut_stok_str = self.entries['stok_miktari'].text().replace(',', '.')
+        mevcut_stok = float(mevcut_stok_str)
+        
+        dialog = StokHareketiPenceresi(
+            self,
+            self.db,
+            self.urun_id,
+            self.entries['urun_adi'].text(),
+            mevcut_stok,
+            "EKLE",
+            self.refresh_data_and_ui # Bu pencereyi yenileyecek callback
+        )
+        dialog.exec()
+        
+    def _stok_eksilt_penceresi_ac(self):
+        if not self.urun_id:
+            QMessageBox.warning(self, "Uyarı", "Lütfen önce ürünü kaydedin.")
+            return
 
-class YeniKasaBankaEklePenceresi(tk.Toplevel):
+        # Güncel stok miktarını al
+        mevcut_stok_str = self.entries['stok_miktari'].text().replace(',', '.')
+        mevcut_stok = float(mevcut_stok_str)
+        
+        dialog = StokHareketiPenceresi(
+            self,
+            self.db,
+            self.urun_id,
+            self.entries['urun_adi'].text(),
+            mevcut_stok,
+            "EKSILT",
+            self.refresh_data_and_ui # Bu pencereyi yenileyecek callback
+        )
+        dialog.exec()
+
+class YeniKasaBankaEklePenceresi(QDialog):
     def __init__(self, parent, db_manager, yenile_callback, hesap_duzenle=None, app_ref=None):
         super().__init__(parent)
         self.db = db_manager
-        self.yenile_callback = yenile_callback
-        self.hesap_duzenle_id = hesap_duzenle[0] if hesap_duzenle else None
         self.app = app_ref
+        self.yenile_callback = yenile_callback
+        self.hesap_duzenle_data = hesap_duzenle
 
-        self.title("Yeni Kasa/Banka Hesabı Ekle" if not hesap_duzenle else "Hesap Düzenle")
-        self.geometry("480x450")
-        self.transient(parent)
-        self.grab_set()
+        self.hesap_duzenle_id = self.hesap_duzenle_data.get('id') if self.hesap_duzenle_data else None
 
-        main_frame = ttk.Frame(self, padding="15")
-        main_frame.pack(expand=True, fill=tk.BOTH)
+        title = "Yeni Kasa/Banka Hesabı" if not self.hesap_duzenle_id else "Hesap Düzenle"
+        self.setWindowTitle(title)
+        self.setMinimumSize(480, 450)
+        self.setModal(True)
 
-        ttk.Label(main_frame, text=self.title(), font=("Segoe UI", 14, "bold")).grid(row=0, column=0, columnspan=2, pady=(0,15))
+        main_layout = QVBoxLayout(self)
+        title_label = QLabel(title)
+        title_label.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        main_layout.addWidget(title_label)
 
-        labels_entries_kb = {
-            "Hesap Adı (*):": "entry_hesap_adi",
-            "Hesap Tipi (*):": "combo_tip",
-            "Banka Adı (Banka ise):": "entry_banka_adi",
-            "Şube Adı (Banka ise):": "entry_sube_adi",
-            "Hesap No/IBAN (Banka ise):": "entry_hesap_no",
-            "Açılış Bakiyesi:": "entry_bakiye",
-            "Para Birimi:": "entry_para_birimi",
-            "Açılış Tarihi (YYYY-AA-GG):": "entry_acilis_tarihi",
-            "Varsayılan Ödeme Türü:": "combo_varsayilan_odeme_turu"
+        form_layout = QGridLayout()
+        main_layout.addLayout(form_layout)
+        
+        self.entries = {}
+        self.odeme_turleri = ["YOK", "NAKİT", "KART", "EFT/HAVALE", "ÇEK", "SENET", "AÇIK HESAP"]
+        
+        # Form elemanları
+        form_layout.addWidget(QLabel("Hesap Adı (*):"), 0, 0)
+        self.entries['hesap_adi'] = QLineEdit()
+        form_layout.addWidget(self.entries['hesap_adi'], 0, 1)
+
+        form_layout.addWidget(QLabel("Hesap Tipi (*):"), 1, 0)
+        self.entries['tip'] = QComboBox()
+        self.entries['tip'].addItems(["KASA", "BANKA"])
+        self.entries['tip'].currentTextChanged.connect(self._tip_degisince_banka_alanlarini_ayarla)
+        form_layout.addWidget(self.entries['tip'], 1, 1)
+
+        self.banka_labels = {
+            'banka_adi': QLabel("Banka Adı:"),
+            'sube_adi': QLabel("Şube Adı:"),
+            'hesap_no': QLabel("Hesap No/IBAN:")
         }
-        self.entries_kb = {}
-        row_idx = 1
-        for label_text, entry_name in labels_entries_kb.items():
-            ttk.Label(main_frame, text=label_text).grid(row=row_idx, column=0, padx=5, pady=7, sticky=tk.W)
-            if entry_name == "combo_tip":
-                self.entries_kb[entry_name] = ttk.Combobox(main_frame, values=["KASA", "BANKA"], state="readonly", width=25)
-                self.entries_kb[entry_name].bind("<<ComboboxSelected>>", self.tip_degisince_banka_alanlarini_ayarla)
-            elif entry_name == "combo_varsayilan_odeme_turu":
-                self.entries_kb[entry_name] = ttk.Combobox(main_frame, 
-                                                            values=["YOK", self.db.ODEME_TURU_NAKIT, self.db.ODEME_TURU_KART, # <-- Düzeltildi
-                                                                    self.db.ODEME_TURU_EFT_HAVALE, self.db.ODEME_TURU_CEK, # <-- Düzeltildi
-                                                                    self.db.ODEME_TURU_SENET, self.db.ODEME_TURU_ACIK_HESAP], # <-- Düzeltildi
-                                                            state="readonly", width=25)
-                self.entries_kb[entry_name].set("YOK")
-            else:
-                self.entries_kb[entry_name] = ttk.Entry(main_frame, width=30)
-            self.entries_kb[entry_name].grid(row=row_idx, column=1, padx=5, pady=7, sticky=tk.EW)
+        form_layout.addWidget(self.banka_labels['banka_adi'], 2, 0)
+        self.entries['banka_adi'] = QLineEdit()
+        form_layout.addWidget(self.entries['banka_adi'], 2, 1)
+        
+        form_layout.addWidget(self.banka_labels['sube_adi'], 3, 0)
+        self.entries['sube_adi'] = QLineEdit()
+        form_layout.addWidget(self.entries['sube_adi'], 3, 1)
 
-            if entry_name == "entry_acilis_tarihi":
-                setup_date_entry(self.app, self.entries_kb["entry_acilis_tarihi"])
-                ttk.Button(main_frame, text="🗓️", command=lambda: self._open_date_picker(self.entries_kb["entry_acilis_tarihi"]), width=3).grid(row=row_idx, column=2, padx=2, pady=7, sticky=tk.W)
+        form_layout.addWidget(self.banka_labels['hesap_no'], 4, 0)
+        self.entries['hesap_no'] = QLineEdit()
+        form_layout.addWidget(self.entries['hesap_no'], 4, 1)
+        
+        form_layout.addWidget(QLabel("Açılış Bakiyesi:"), 5, 0)
+        self.entries['bakiye'] = QLineEdit("0,00")
+        self.entries['bakiye'].setValidator(QDoubleValidator(0.0, 999999999.0, 2))
+        form_layout.addWidget(self.entries['bakiye'], 5, 1)
 
-            row_idx += 1
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.columnconfigure(2, weight=0) # Takvim butonu sütunu
+        form_layout.addWidget(QLabel("Para Birimi:"), 6, 0)
+        self.entries['para_birimi'] = QLineEdit("TL")
+        form_layout.addWidget(self.entries['para_birimi'], 6, 1)
 
-        self.entries_kb["entry_bakiye"].insert(0, "0,00")
-        self.entries_kb["entry_para_birimi"].insert(0, "TL")
-        self.entries_kb["combo_tip"].current(0)
-        self.tip_degisince_banka_alanlarini_ayarla()
+        form_layout.addWidget(QLabel("Varsayılan Ödeme Türü:"), 7, 0)
+        self.entries['varsayilan_odeme_turu'] = QComboBox()
+        self.entries['varsayilan_odeme_turu'].addItems(self.odeme_turleri)
+        form_layout.addWidget(self.entries['varsayilan_odeme_turu'], 7, 1)
 
-        if hesap_duzenle:
-            self.entries_kb["entry_hesap_adi"].insert(0, hesap_duzenle[1])
-            self.entries_kb["combo_tip"].set(hesap_duzenle[5])
-            self.entries_kb["entry_banka_adi"].insert(0, hesap_duzenle[7] or "")
-            self.entries_kb["entry_sube_adi"].insert(0, hesap_duzenle[8] or "")
-            self.entries_kb["entry_hesap_no"].insert(0, hesap_duzenle[2] or "")
-            self.entries_kb["entry_bakiye"].delete(0, tk.END)
-            self.entries_kb["entry_bakiye"].insert(0, f"{hesap_duzenle[3]:.2f}".replace('.',','))
-            self.entries_kb["entry_para_birimi"].delete(0, tk.END)
-            self.entries_kb["entry_para_birimi"].insert(0, hesap_duzenle[4])
-            self.entries_kb["entry_acilis_tarihi"].insert(0, hesap_duzenle[6] or "")
-            self.tip_degisince_banka_alanlarini_ayarla()
-            varsayilan_odeme_turu_db = hesap_duzenle[9] if len(hesap_duzenle) > 9 and hesap_duzenle[9] else "YOK"
-            self.entries_kb["combo_varsayilan_odeme_turu"].set(varsayilan_odeme_turu_db)
+        button_layout = QHBoxLayout()
+        main_layout.addLayout(button_layout)
+        button_layout.addStretch()
+        kaydet_button = QPushButton("Kaydet")
+        kaydet_button.clicked.connect(self.kaydet)
+        button_layout.addWidget(kaydet_button)
+        iptal_button = QPushButton("İptal")
+        iptal_button.clicked.connect(self.reject)
+        button_layout.addWidget(iptal_button)
+        
+        self._verileri_yukle()
+        self._tip_degisince_banka_alanlarini_ayarla()
 
-        button_frame_kb_alt = ttk.Frame(main_frame)
-        button_frame_kb_alt.grid(row=row_idx, column=0, columnspan=3, pady=(15,0), sticky=tk.E)
+    def _tip_degisince_banka_alanlarini_ayarla(self):
+        is_banka = self.entries['tip'].currentText() == "BANKA"
+        for key, widget in self.banka_labels.items():
+            widget.setVisible(is_banka)
+        for key in ['banka_adi', 'sube_adi', 'hesap_no']:
+            self.entries[key].setVisible(is_banka)
+        if not is_banka:
+            for key in ['banka_adi', 'sube_adi', 'hesap_no']:
+                self.entries[key].clear()
 
-        ttk.Button(button_frame_kb_alt, text="Kaydet", command=self.kaydet_hesap, style="Accent.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame_kb_alt, text="İptal", command=self.destroy).pack(side=tk.LEFT)
+    def _verileri_yukle(self):
+        if self.hesap_duzenle_data:
+            self.entries['hesap_adi'].setText(self.hesap_duzenle_data.get('hesap_adi', ''))
+            self.entries['tip'].setCurrentText(self.hesap_duzenle_data.get('tip', 'KASA'))
+            self.entries['banka_adi'].setText(self.hesap_duzenle_data.get('banka_adi', ''))
+            self.entries['sube_adi'].setText(self.hesap_duzenle_data.get('sube_adi', ''))
+            self.entries['hesap_no'].setText(self.hesap_duzenle_data.get('hesap_no', ''))
+            bakiye = self.hesap_duzenle_data.get('bakiye', 0.0)
+            self.entries['bakiye'].setText(f"{bakiye:.2f}".replace('.', ','))
+            self.entries['para_birimi'].setText(self.hesap_duzenle_data.get('para_birimi', 'TL'))
+            varsayilan_odeme_turu = self.hesap_duzenle_data.get('varsayilan_odeme_turu')
+            self.entries['varsayilan_odeme_turu'].setCurrentText(varsayilan_odeme_turu if varsayilan_odeme_turu else "YOK")
+            self.entries['bakiye'].setReadOnly(True) # Açılış bakiyesi düzenlemede değiştirilemez
 
-    def _open_date_picker(self, target_entry):
-        """Bir Entry widget'ı için tarih seçici penceresi açar."""
-        from yardimcilar import DatePickerDialog
-        DatePickerDialog(self.app, target_entry)
-        self.app.set_status("Tarih seçici açıldı.")
-
-    def tip_degisince_banka_alanlarini_ayarla(self, event=None):
-        secili_tip = self.entries_kb["combo_tip"].get()
-        banka_alanlari = ["entry_banka_adi", "entry_sube_adi", "entry_hesap_no"]
-        for alan_adi in banka_alanlari:
-            self.entries_kb[alan_adi].config(state=tk.NORMAL if secili_tip == "BANKA" else tk.DISABLED)
-
-        if secili_tip != "BANKA":
-            for alan_adi in banka_alanlari:
-                self.entries_kb[alan_adi].delete(0, tk.END)
-
-    def kaydet_hesap(self):
-        h_adi = self.entries_kb["entry_hesap_adi"].get().strip()
-        h_tip = self.entries_kb["combo_tip"].get()
-        b_adi = self.entries_kb["entry_banka_adi"].get().strip() if h_tip == "BANKA" else None
-        s_adi = self.entries_kb["entry_sube_adi"].get().strip() if h_tip == "BANKA" else None
-        h_no = self.entries_kb["entry_hesap_no"].get().strip() if h_tip == "BANKA" else None
-        bakiye_str = self.entries_kb["entry_bakiye"].get().strip()
-        p_birimi = self.entries_kb["entry_para_birimi"].get().strip()
-        a_tarihi = self.entries_kb["entry_acilis_tarihi"].get().strip() or None
-        varsayilan_odeme_turu_secilen = self.entries_kb["combo_varsayilan_odeme_turu"].get()
-        varsayilan_odeme_turu_to_db = None if varsayilan_odeme_turu_secilen == "YOK" else varsayilan_odeme_turu_secilen
-
-        if not (h_adi and h_tip):
-            messagebox.showerror("Eksik Bilgi", "Hesap Adı ve Hesap Tipi zorunludur.", parent=self)
+    def kaydet(self):
+        hesap_adi = self.entries['hesap_adi'].text().strip()
+        if not hesap_adi:
+            QMessageBox.warning(self, "Eksik Bilgi", "Hesap Adı alanı boş bırakılamaz.")
             return
 
-        if self.hesap_duzenle_id:
-            success, message = self.db.kasa_banka_guncelle(self.hesap_duzenle_id, h_adi, h_no, bakiye_str, p_birimi, h_tip, a_tarihi, b_adi, s_adi, varsayilan_odeme_turu_to_db)
-            if success:
-                messagebox.showinfo("Başarılı", message, parent=self)
-                if self.app: self.app.set_status(message)
-                self.yenile_callback()
-                self.destroy()
+        bakiye_str = self.entries['bakiye'].text().replace(',', '.')
+        
+        data = {
+            "hesap_adi": hesap_adi,
+            "tip": self.entries['tip'].currentText(),
+            "bakiye": float(bakiye_str) if bakiye_str else 0.0,
+            "banka_adi": self.entries['banka_adi'].text().strip(),
+            "sube_adi": self.entries['sube_adi'].text().strip(),
+            "hesap_no": self.entries['hesap_no'].text().strip(),
+            "para_birimi": self.entries['para_birimi'].text().strip(),
+            "varsayilan_odeme_turu": self.entries['varsayilan_odeme_turu'].currentText()
+        }
+        if data["varsayilan_odeme_turu"] == "YOK":
+            data["varsayilan_odeme_turu"] = None
+
+        try:
+            if self.hesap_duzenle_id:
+                api_url = f"{API_BASE_URL}/kasalar_bankalar/{self.hesap_duzenle_id}"
+                response = requests.put(api_url, json=data)
             else:
-                messagebox.showerror("Hata", message, parent=self)
-        else:
-            success, message_or_id = self.db.kasa_banka_ekle(h_adi, h_no, bakiye_str, p_birimi, h_tip, a_tarihi, b_adi, s_adi, varsayilan_odeme_turu_to_db)
-            if success:
-                messagebox.showinfo("Başarılı", message_or_id, parent=self)
-                if self.app: self.app.set_status(message_or_id)
+                api_url = f"{API_BASE_URL}/kasalar_bankalar/"
+                response = requests.post(api_url, json=data)
+
+            response.raise_for_status()
+            QMessageBox.information(self, "Başarılı", "Kasa/Banka hesabı başarıyla kaydedildi.")
+            if self.yenile_callback:
                 self.yenile_callback()
-                self.destroy()
-            else:
-                messagebox.showerror("Hata", message_or_id, parent=self)
-class YeniTedarikciEklePenceresi(tk.Toplevel):
+            self.accept()
+
+        except requests.exceptions.RequestException as e:
+            error_detail = str(e)
+            if e.response is not None:
+                try: error_detail = e.response.json().get('detail', str(e.response.content))
+                except ValueError: pass
+            QMessageBox.critical(self, "API Hatası", f"Hesap kaydedilirken bir hata oluştu:\n{error_detail}")
+
+class YeniTedarikciEklePenceresi(QDialog):
     def __init__(self, parent, db_manager, yenile_callback, tedarikci_duzenle=None, app_ref=None):
         super().__init__(parent)
         self.db = db_manager
-        self.yenile_callback = yenile_callback
-        self.tedarikci_duzenle_id = tedarikci_duzenle[0] if tedarikci_duzenle else None
         self.app = app_ref
+        self.yenile_callback = yenile_callback
+        self.tedarikci_duzenle_data = tedarikci_duzenle
 
-        self.title("Yeni Tedarikçi Ekle" if not tedarikci_duzenle else "Tedarikçi Düzenle")
-        self.geometry("500x420") 
-        self.transient(parent) 
-        self.grab_set() 
+        self.tedarikci_duzenle_id = self.tedarikci_duzenle_data.get('id') if self.tedarikci_duzenle_data else None
 
-        main_frame = ttk.Frame(self, padding="15")
-        main_frame.pack(expand=True, fill=tk.BOTH)
+        title = "Yeni Tedarikçi Ekle" if not self.tedarikci_duzenle_id else "Tedarikçi Düzenle"
+        self.setWindowTitle(title)
+        self.setMinimumSize(500, 420)
+        self.setModal(True)
 
-        ttk.Label(main_frame, text=self.title(), font=("Segoe UI", 14, "bold")).grid(row=0, column=0, columnspan=2, pady=(0,15))
+        main_layout = QVBoxLayout(self)
+        title_label = QLabel(title)
+        title_label.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        main_layout.addWidget(title_label)
 
+        form_layout = QGridLayout()
+        main_layout.addLayout(form_layout)
+        
+        self.entries = {}
         labels_entries = {
             "Tedarikçi Kodu:": "entry_kod",
-            "Ad Soyad:": "entry_ad",
+            "Ad Soyad (*):": "entry_ad",
             "Telefon:": "entry_tel",
             "Adres:": "entry_adres",
             "Vergi Dairesi:": "entry_vd",
             "Vergi No:": "entry_vn"
         }
-        self.entries = {} # Entry widget'larını saklamak için sözlük
 
-        for i, (label_text, entry_name) in enumerate(labels_entries.items(), 1):
-            ttk.Label(main_frame, text=label_text).grid(row=i, column=0, padx=5, pady=8, sticky=tk.W)
-            if entry_name == "entry_adres":
-                self.entries[entry_name] = tk.Text(main_frame, height=3, width=30) 
-            else:
-                self.entries[entry_name] = ttk.Entry(main_frame, width=30) 
-            self.entries[entry_name].grid(row=i, column=1, padx=5, pady=8, sticky=tk.EW)
+        for i, (label_text, entry_name) in enumerate(labels_entries.items()):
+            form_layout.addWidget(QLabel(label_text), i, 0, alignment=Qt.AlignLeft)
+            widget = QTextEdit() if entry_name == "entry_adres" else QLineEdit()
+            if isinstance(widget, QTextEdit): widget.setFixedHeight(80)
+            self.entries[entry_name] = widget
+            form_layout.addWidget(widget, i, 1)
 
-        main_frame.columnconfigure(1, weight=1) # Entry'lerin genişlemesi için
+        button_layout = QHBoxLayout()
+        main_layout.addLayout(button_layout)
+        button_layout.addStretch()
+        self.kaydet_button = QPushButton("Kaydet")
+        self.kaydet_button.clicked.connect(self.kaydet)
+        button_layout.addWidget(self.kaydet_button)
+        self.iptal_button = QPushButton("İptal")
+        self.iptal_button.clicked.connect(self.reject)
+        button_layout.addWidget(self.iptal_button)
+        
+        self._verileri_yukle()
 
-        # Tedarikçi kodu otomatik oluşturulacak ve düzenlenemez olacak
-        if not tedarikci_duzenle: # Sadece yeni tedarikçi eklerken kodu otomatik oluştur
-            generated_code = self.db.get_next_tedarikci_kodu() 
-            self.entries["entry_kod"].insert(0, generated_code)
-            self.entries["entry_kod"].config(state=tk.DISABLED) # Otomatik kodu düzenlenemez yap
-        else: # Düzenleme modu
-            # tedarikci_duzenle: (id, tedarikci_kodu, ad, telefon, adres, vergi_dairesi, vergi_no)
-            self.entries["entry_kod"].insert(0, tedarikci_duzenle[1])
-            self.entries["entry_ad"].insert(0, tedarikci_duzenle[2])
-            self.entries["entry_tel"].insert(0, tedarikci_duzenle[3] if tedarikci_duzenle[3] else "")
-            if isinstance(self.entries["entry_adres"], tk.Text):
-                self.entries["entry_adres"].insert("1.0", tedarikci_duzenle[4] if tedarikci_duzenle[4] else "")
-            self.entries["entry_vd"].insert(0, tedarikci_duzenle[5] if tedarikci_duzenle[5] else "")
-            self.entries["entry_vn"].insert(0, tedarikci_duzenle[6] if tedarikci_duzenle[6] else "")
-
-            # Düzenleme modunda da tedarikçi kodunu düzenlenemez yapıyoruz
-            self.entries["entry_kod"].config(state=tk.DISABLED) 
-
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=len(labels_entries)+1, column=0, columnspan=2, pady=(20,0), sticky=tk.E)
-        ttk.Button(button_frame, text="Kaydet", command=self.kaydet, style="Accent.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="İptal", command=self.destroy).pack(side=tk.LEFT)
+    def _verileri_yukle(self):
+        if self.tedarikci_duzenle_data:
+            self.entries["entry_kod"].setText(self.tedarikci_duzenle_data.get('tedarikci_kodu', ''))
+            self.entries["entry_ad"].setText(self.tedarikci_duzenle_data.get('ad', ''))
+            self.entries["entry_tel"].setText(self.tedarikci_duzenle_data.get('telefon', ''))
+            self.entries["entry_adres"].setPlainText(self.tedarikci_duzenle_data.get('adres', ''))
+            self.entries["entry_vd"].setText(self.tedarikci_duzenle_data.get('vergi_dairesi', ''))
+            self.entries["entry_vn"].setText(self.tedarikci_duzenle_data.get('vergi_no', ''))
+            self.entries["entry_kod"].setReadOnly(True)
+        else:
+            generated_code = self.db.get_next_tedarikci_kodu()
+            self.entries["entry_kod"].setText(generated_code)
+            self.entries["entry_kod"].setReadOnly(True)
 
     def kaydet(self):
-        kod = self.entries["entry_kod"].get().strip() 
-        ad = self.entries["entry_ad"].get().strip()
-        tel = self.entries["entry_tel"].get().strip()
-        adres = self.entries["entry_adres"].get("1.0", tk.END).strip() if isinstance(self.entries["entry_adres"], tk.Text) else ""
-        vd = self.entries["entry_vd"].get().strip()
-        vn = self.entries["entry_vn"].get().strip()
-
-        if not (kod and ad):
-            messagebox.showerror("Eksik Bilgi", "Tedarikçi Kodu ve Ad Soyad boş bırakılamaz.", parent=self)
+        ad = self.entries["entry_ad"].text().strip()
+        if not ad:
+            QMessageBox.warning(self, "Eksik Bilgi", "Tedarikçi Adı alanı boş bırakılamaz.")
             return
 
-        if self.tedarikci_duzenle_id: # Güncelleme işlemi
-            success, message = self.db.tedarikci_guncelle(self.tedarikci_duzenle_id, kod, ad, tel, adres, vd, vn)
-            if success:
-                messagebox.showinfo("Başarılı", message, parent=self)
-                if self.app: self.app.set_status(message)
-                self.yenile_callback()
-                self.destroy()
-            else:
-                messagebox.showerror("Hata", message, parent=self)
-        else: 
-            success, message_or_id = self.db.tedarikci_ekle(kod, ad, tel, adres, vd, vn)
-            if success:
-            
-                messagebox.showinfo("Başarılı", f"'{ad}' tedarikçisi başarıyla eklendi (ID: {message_or_id}).", parent=self)
-                if self.app: self.app.set_status(f"Yeni tedarikçi '{ad}' eklendi (ID: {message_or_id}).")
-                self.yenile_callback()
-                self.destroy()
-            else:
-                messagebox.showerror("Hata", message_or_id, parent=self)
+        data = {
+            "ad": ad,
+            "tedarikci_kodu": self.entries["entry_kod"].text().strip(),
+            "telefon": self.entries["entry_tel"].text().strip(),
+            "adres": self.entries["entry_adres"].toPlainText().strip(),
+            "vergi_dairesi": self.entries["entry_vd"].text().strip(),
+            "vergi_no": self.entries["entry_vn"].text().strip()
+        }
 
-class YeniMusteriEklePenceresi(tk.Toplevel):
+        try:
+            if self.tedarikci_duzenle_id:
+                api_url = f"{API_BASE_URL}/tedarikciler/{self.tedarikci_duzenle_id}"
+                response = requests.put(api_url, json=data)
+            else:
+                api_url = f"{API_BASE_URL}/tedarikciler/"
+                response = requests.post(api_url, json=data)
+
+            response.raise_for_status()
+            QMessageBox.information(self, "Başarılı", "Tedarikçi bilgileri başarıyla kaydedildi.")
+            if self.yenile_callback:
+                self.yenile_callback()
+            self.accept()
+
+        except requests.exceptions.RequestException as e:
+            error_detail = str(e)
+            if e.response is not None:
+                try: error_detail = e.response.json().get('detail', str(e.response.content))
+                except ValueError: pass
+            QMessageBox.critical(self, "API Hatası", f"Tedarikçi kaydedilirken bir hata oluştu:\n{error_detail}")
+
+class YeniMusteriEklePenceresi(QDialog):
     def __init__(self, parent, db_manager, yenile_callback, musteri_duzenle=None, app_ref=None):
         super().__init__(parent)
-        self.db = db_manager
-        self.yenile_callback = yenile_callback
-        self.musteri_duzenle_id = musteri_duzenle[0] if musteri_duzenle else None
+        self.db = db_manager # Otomatik kod üretme gibi yardımcı fonksiyonlar için hala gerekli olabilir
         self.app = app_ref
+        self.yenile_callback = yenile_callback
+        self.musteri_duzenle_data = musteri_duzenle # API'den gelen düzenleme verisi
 
-        # Eğer müşteri düzenleniyorsa ve ID'si perakende müşteri ID'si ile aynıysa True olur.
-        self.is_perakende_duzenleme = (musteri_duzenle and str(self.musteri_duzenle_id) == str(self.db.perakende_musteri_id))
+        # Eğer düzenleme modundaysak, ID'yi sakla
+        self.musteri_duzenle_id = self.musteri_duzenle_data.get('id') if self.musteri_duzenle_data else None
 
-        self.title("Yeni Müşteri Ekle" if not musteri_duzenle else ("Perakende Müşteri Düzenle" if self.is_perakende_duzenleme else "Müşteri Düzenle"))
-        self.geometry("500x420") # <-- DÜZELTME: Pencere boyutu ayarlandı
-        self.transient(parent); self.grab_set()
+        title = "Yeni Müşteri Ekle" if not self.musteri_duzenle_id else "Müşteri Düzenle"
+        self.setWindowTitle(title)
+        self.setMinimumSize(500, 420)
+        self.setModal(True) # Bu pencere açıkken ana pencereye tıklamayı engeller
 
-        main_frame = ttk.Frame(self, padding="15")
-        main_frame.pack(expand=True, fill=tk.BOTH)
-        ttk.Label(main_frame, text=self.title(), font=("Segoe UI", 14, "bold")).grid(row=0, column=0, columnspan=2, pady=(0,15))
+        # Ana layout
+        main_layout = QVBoxLayout(self)
+        
+        title_label = QLabel(title)
+        title_label.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        main_layout.addWidget(title_label)
 
-        labels_entries = {
-            "Müşteri Kodu:": "entry_kod", "Ad Soyad:": "entry_ad", "Telefon:": "entry_tel",
-            "Adres:": "entry_adres", "Vergi Dairesi:": "entry_vd", "Vergi No:": "entry_vn"
-        }
+        # Form için grid layout
+        form_layout = QGridLayout()
+        main_layout.addLayout(form_layout)
+        
+        # Form elemanları
         self.entries = {}
+        labels_entries = {
+            "Müşteri Kodu:": "entry_kod",
+            "Ad Soyad (*):": "entry_ad",
+            "Telefon:": "entry_tel",
+            "Adres:": "entry_adres",
+            "Vergi Dairesi:": "entry_vd",
+            "Vergi No:": "entry_vn"
+        }
 
-        for i, (label_text, entry_name) in enumerate(labels_entries.items(), 1):
-            ttk.Label(main_frame, text=label_text).grid(row=i, column=0, padx=5, pady=8, sticky=tk.W)
+        for i, (label_text, entry_name) in enumerate(labels_entries.items()):
+            form_layout.addWidget(QLabel(label_text), i, 0, alignment=Qt.AlignLeft)
             if entry_name == "entry_adres":
-                self.entries[entry_name] = tk.Text(main_frame, height=3, width=30) 
+                widget = QTextEdit()
+                widget.setFixedHeight(80) # Adres alanı için yükseklik
             else:
-                self.entries[entry_name] = ttk.Entry(main_frame, width=30) 
-            self.entries[entry_name].grid(row=i, column=1, padx=5, pady=8, sticky=tk.EW)
+                widget = QLineEdit()
+            
+            self.entries[entry_name] = widget
+            form_layout.addWidget(widget, i, 1)
 
-        main_frame.columnconfigure(1, weight=1)
+        # Butonlar için yatay layout
+        button_layout = QHBoxLayout()
+        main_layout.addLayout(button_layout)
+        button_layout.addStretch() # Butonları sağa yaslamak için boşluk ekle
 
-        # Müşteri kodu otomatik oluşturulacak ve düzenlenemez olacak
-        if not musteri_duzenle: # Sadece yeni müşteri eklerken kodu otomatik oluştur
-            generated_code = self.db.get_next_musteri_kodu() 
-            self.entries["entry_kod"].insert(0, generated_code)
-            self.entries["entry_kod"].config(state=tk.DISABLED) # Otomatik kodu düzenlenemez yap
-        else: # Düzenleme modu
-            # musteri_duzenle: (id, musteri_kodu, ad, telefon, adres, vergi_dairesi, vergi_no)
-            self.entries["entry_kod"].insert(0, musteri_duzenle[1])
-            self.entries["entry_ad"].insert(0, musteri_duzenle[2])
-            self.entries["entry_tel"].insert(0, musteri_duzenle[3] if musteri_duzenle[3] else "")
-            if isinstance(self.entries["entry_adres"], tk.Text):
-                self.entries["entry_adres"].insert("1.0", musteri_duzenle[4] if musteri_duzenle[4] else "")
-            self.entries["entry_vd"].insert(0, musteri_duzenle[5] if musteri_duzenle[5] else "")
-            self.entries["entry_vn"].insert(0, musteri_duzenle[6] if musteri_duzenle[6] else "")
+        self.kaydet_button = QPushButton("Kaydet")
+        self.kaydet_button.clicked.connect(self.kaydet)
+        button_layout.addWidget(self.kaydet_button)
+        
+        self.iptal_button = QPushButton("İptal")
+        self.iptal_button.clicked.connect(self.reject) # QDialog'u kapatır
+        button_layout.addWidget(self.iptal_button)
+        
+        self._verileri_yukle()
 
-            # Düzenleme modunda da müşteri kodunu düzenlenemez yapıyoruz
-            self.entries["entry_kod"].config(state=tk.DISABLED) 
-
-            # DEĞİŞİKLİK BAŞLANGICI: Perakende müşterinin alanlarını kısıtlama
-            if self.is_perakende_duzenleme:
-                # Sadece ad ve kodu düzenlenebilir olmalı, diğerleri kilitli.
-                self.entries["entry_tel"].config(state=tk.DISABLED)
-                if isinstance(self.entries["entry_adres"], tk.Text): # Text widget'ı için ayrı kontrol
-                    self.entries["entry_adres"].config(state=tk.DISABLED)
-                else: # Entry widget'ı için
-                    self.entries["entry_adres"].config(state=tk.DISABLED)
-                self.entries["entry_vd"].config(state=tk.DISABLED)
-                self.entries["entry_vn"].config(state=tk.DISABLED)
-            # DEĞİŞİKLİK BİTİŞİ
-
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=len(labels_entries)+1, column=0, columnspan=2, pady=(20,0), sticky=tk.E)
-        ttk.Button(button_frame, text="Kaydet", command=self.kaydet, style="Accent.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="İptal", command=self.destroy).pack(side=tk.LEFT)
+    def _verileri_yukle(self):
+        """Mevcut müşteri verilerini düzenleme modunda forma yükler."""
+        if self.musteri_duzenle_data:
+            # Düzenleme modu
+            self.entries["entry_kod"].setText(self.musteri_duzenle_data.get('kod', ''))
+            self.entries["entry_ad"].setText(self.musteri_duzenle_data.get('ad', ''))
+            self.entries["entry_tel"].setText(self.musteri_duzenle_data.get('telefon', ''))
+            self.entries["entry_adres"].setPlainText(self.musteri_duzenle_data.get('adres', ''))
+            self.entries["entry_vd"].setText(self.musteri_duzenle_data.get('vergi_dairesi', ''))
+            self.entries["entry_vn"].setText(self.musteri_duzenle_data.get('vergi_no', ''))
+            # Düzenleme modunda kodu değiştirilemez yapalım
+            self.entries["entry_kod"].setReadOnly(True)
+        else:
+            # Yeni kayıt modu
+            generated_code = self.db.get_next_musteri_kodu()
+            self.entries["entry_kod"].setText(generated_code)
+            self.entries["entry_kod"].setReadOnly(True)
 
     def kaydet(self):
-        kod = self.entries["entry_kod"].get().strip() 
-        ad = self.entries["entry_ad"].get().strip()
-        tel = self.entries["entry_tel"].get().strip()
-        adres = self.entries["entry_adres"].get("1.0", tk.END).strip() if isinstance(self.entries["entry_adres"], tk.Text) else ""
-        vd = self.entries["entry_vd"].get().strip()
-        vn = self.entries["entry_vn"].get().strip()
-
-        if not (kod and ad):
-            messagebox.showerror("Eksik Bilgi", "Müşteri Kodu ve Ad Soyad boş bırakılamaz.", parent=self)
+        """Formdaki verileri toplar ve API'ye gönderir."""
+        ad = self.entries["entry_ad"].text().strip()
+        if not ad:
+            QMessageBox.warning(self, "Eksik Bilgi", "Müşteri Adı alanı boş bırakılamaz.")
             return
 
-        if self.is_perakende_duzenleme:
-            kod = self.db.PERAKENDE_MUSTERI_KODU
+        data = {
+            "ad": ad,
+            "kod": self.entries["entry_kod"].text().strip(),
+            "telefon": self.entries["entry_tel"].text().strip(),
+            "adres": self.entries["entry_adres"].toPlainText().strip(),
+            "vergi_dairesi": self.entries["entry_vd"].text().strip(),
+            "vergi_no": self.entries["entry_vn"].text().strip()
+        }
 
-        if self.musteri_duzenle_id: # Güncelleme işlemi
-            success, message = self.db.musteri_guncelle(self.musteri_duzenle_id, kod, ad, tel, adres, vd, vn)
-            if success:
-                messagebox.showinfo("Başarılı", message, parent=self)
-                if self.app: self.app.set_status(message)
-                self.yenile_callback()
-                self.destroy()
+        try:
+            if self.musteri_duzenle_id:
+                # GÜNCELLEME (PUT isteği)
+                api_url = f"{API_BASE_URL}/musteriler/{self.musteri_duzenle_id}"
+                response = requests.put(api_url, json=data)
             else:
-                messagebox.showerror("Hata", message, parent=self)
-        else: 
-            success, message_or_id = self.db.musteri_ekle(kod, ad, tel, adres, vd, vn)
-            if success:
+                # YENİ KAYIT (POST isteği)
+                api_url = f"{API_BASE_URL}/musteriler/"
+                response = requests.post(api_url, json=data)
+
+            response.raise_for_status()
+
+            QMessageBox.information(self, "Başarılı", "Müşteri bilgileri başarıyla kaydedildi.")
             
-                messagebox.showinfo("Başarılı", f"'{ad}' müşterisi başarıyla eklendi (ID: {message_or_id}).", parent=self)
-                if self.app: self.app.set_status(f"Yeni müşteri '{ad}' eklendi (ID: {message_or_id}).")
+            if self.yenile_callback:
                 self.yenile_callback()
-                self.destroy()
-            else:
-                messagebox.showerror("Hata", message_or_id, parent=self)
+            
+            self.accept()
 
+        except requests.exceptions.RequestException as e:
+            error_detail = str(e)
+            if e.response is not None:
+                try:
+                    error_detail = e.response.json().get('detail', str(e.response.content))
+                except ValueError:
+                    pass
+            QMessageBox.critical(self, "API Hatası", f"Müşteri kaydedilirken bir hata oluştu:\n{error_detail}")
+            
 class KalemDuzenlePenceresi(tk.Toplevel):
     def __init__(self, parent_page, kalem_index, kalem_verisi, islem_tipi, fatura_id_duzenle=None):
         # <<< DEĞİŞİKLİK BU METODUN İÇİNDE BAŞLIYOR >>>
