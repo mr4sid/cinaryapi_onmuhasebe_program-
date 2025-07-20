@@ -14,8 +14,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer # QTimer eklendi
 from PySide6.QtGui import QIcon, QPixmap, QFont, QPalette, QColor
-
 # Yerel Uygulama Modülleri
+from pencereler import FaturaPenceresi 
 from veritabani import OnMuhasebe
 from hizmetler import FaturaService, TopluIslemService
 from yardimcilar import setup_locale
@@ -332,7 +332,25 @@ class App(QMainWindow):
         self.set_status_message("Ana Sayfa gösteriliyor.")
 
     def show_invoice_form(self, invoice_type):
-        QMessageBox.information(self, "Fatura Oluştur", f"Yeni {invoice_type} faturası formu burada açılacak.")
+        """
+        Yeni bir satış veya alış faturası oluşturma penceresini açar.
+        """
+        try:
+            # FaturaPenceresi'ne fatura tipini gönderiyoruz (SATIŞ veya ALIŞ)
+            dialog = FaturaPenceresi(
+                self, # Parent (ana uygulama)
+                self.db, # Veritabanı yöneticisi (self.db olarak mevcut)
+                self, # app_ref (App sınıfının kendisi)
+                fatura_tipi=invoice_type, # 'SATIŞ' veya 'ALIŞ'
+                duzenleme_id=None, # Yeni fatura olduğu için None
+                yenile_callback=lambda: self.show_tab("Faturalar") # Fatura kaydedilince fatura listesini yenile
+            )
+            dialog.exec() # Modalı olarak göster
+
+            self.set_status_message(f"Yeni {invoice_type} faturası penceresi açıldı.")
+        except Exception as e:
+            QMessageBox.critical(self, "Hata", f"Fatura penceresi açılırken bir hata oluştu:\n{e}")
+            self.set_status_message(f"Hata: Fatura penceresi açılamadı - {e}")
 
     def show_tab(self, page_name: str):
         if page_name in self.pages:
@@ -382,8 +400,7 @@ class App(QMainWindow):
             elif hasattr(widget, 'gg_listesini_yukle'):
                 widget.gg_listesini_yukle()
             elif hasattr(widget, 'raporu_olustur_ve_yenile'):
-                widget.raporu_olustur_ve_yenile()
-            
+                widget.raporu_olustur_ve_yenile()    
             # self.app.set_status_message yerine doğrudan self.set_status_message kullan
             self.set_status_message(f"'{page_name}' sekmesi açıldı.") # <-- Burası güncellendi
         else:

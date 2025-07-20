@@ -88,6 +88,26 @@ class Fatura(Base):
     olusturan_kullanici_id = Column(Integer)
     son_guncelleyen_kullanici_id = Column(Integer)
 
+class FaturaKalemleri(Base):
+    __tablename__ = "fatura_kalemleri"
+    id = Column(Integer, primary_key=True, index=True)
+    fatura_id = Column(Integer, ForeignKey("faturalar.id"), nullable=False)
+    urun_id = Column(Integer, ForeignKey("tbl_stoklar.id"), nullable=False)
+    miktar = Column(Numeric, nullable=False)
+    birim_fiyat = Column(Numeric, nullable=False)  # KDV Hariç orijinal birim fiyat
+    kdv_orani = Column(Numeric, nullable=False)
+    kdv_tutari = Column(Numeric)
+    kalem_toplam_kdv_haric = Column(Numeric)
+    kalem_toplam_kdv_dahil = Column(Numeric)
+    iskonto_yuzde_1 = Column(Numeric, default=0.0)
+    iskonto_yuzde_2 = Column(Numeric, default=0.0)
+    iskonto_tipi = Column(String)
+    iskonto_degeri = Column(Numeric)
+    alis_fiyati_fatura_aninda = Column(Numeric)
+    kdv_orani_fatura_aninda = Column(Numeric)
+    olusturma_tarihi_saat = Column(TIMESTAMP)
+    olusturan_kullanici_id = Column(Integer)
+
 class Siparis(Base):
     __tablename__ = "siparisler"
     id = Column(Integer, primary_key=True, index=True)
@@ -144,26 +164,6 @@ class StokHareketleri(Base):
     aciklama = Column(String)
     kaynak_tip = Column(String)  # Örn: 'FATURA', 'MANUEL'
     kaynak_id = Column(Integer)  # Örn: ilgili faturanın ID'si    
-
-class FaturaKalemleri(Base):
-    __tablename__ = "fatura_kalemleri"
-    id = Column(Integer, primary_key=True, index=True)
-    fatura_id = Column(Integer, ForeignKey("faturalar.id"), nullable=False)
-    urun_id = Column(Integer, ForeignKey("tbl_stoklar.id"), nullable=False)
-    miktar = Column(Numeric, nullable=False)
-    birim_fiyat = Column(Numeric, nullable=False)  # KDV Hariç orijinal birim fiyat
-    kdv_orani = Column(Numeric, nullable=False)
-    kdv_tutari = Column(Numeric)
-    kalem_toplam_kdv_haric = Column(Numeric)
-    kalem_toplam_kdv_dahil = Column(Numeric)
-    iskonto_yuzde_1 = Column(Numeric, default=0.0)
-    iskonto_yuzde_2 = Column(Numeric, default=0.0)
-    iskonto_tipi = Column(String)
-    iskonto_degeri = Column(Numeric)
-    alis_fiyati_fatura_aninda = Column(Numeric)
-    kdv_orani_fatura_aninda = Column(Numeric)
-    olusturma_tarihi_saat = Column(TIMESTAMP)
-    olusturan_kullanici_id = Column(Integer)    
 
 class SiparisKalemleri(Base):
     __tablename__ = "siparis_kalemleri"
