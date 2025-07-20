@@ -10,9 +10,9 @@ from datetime import datetime, date, timedelta
 import locale # Yeni: Sayısal formatlama için eklendi
 # PySide6 modülleri
 from PySide6.QtWidgets import (
-    QWidget, QLabel, QPushButton, QTabWidget, QMessageBox,
+    QWidget,QDialog, QLabel, QPushButton, QTabWidget, QMessageBox,
     QGridLayout, QVBoxLayout, QHBoxLayout, QFrame,
-    QLineEdit, QComboBox, QTreeWidget, QTreeWidgetItem, QAbstractItemView,
+    QLineEdit, QMainWindow, QFileDialog, QComboBox, QTreeWidget, QTreeWidgetItem, QAbstractItemView,
     QHeaderView, QTextEdit, QScrollArea, QMenu # QTextEdit, QScrollArea ve QMenu eklendi
 )
 from PySide6.QtCore import Qt, QTimer, Signal # Qt.Align* için Qt, QTimer ve Signal
@@ -30,7 +30,7 @@ from matplotlib.figure import Figure
 # Yerel Uygulama Modülleri
 from veritabani import OnMuhasebe
 from hizmetler import FaturaService, TopluIslemService
-from pencereler import YeniMusteriEklePenceresi, YeniTedarikciEklePenceresi, UrunKartiPenceresi
+from pencereler import YeniMusteriEklePenceresi, YeniTedarikciEklePenceresi, UrunKartiPenceresi,YeniKasaBankaEklePenceresi
 from yardimcilar import DatePickerDialog, normalize_turkish_chars, setup_locale
 from datetime import datetime
 import requests 
@@ -98,8 +98,8 @@ class AnaSayfa(QWidget):
             self.buttons_container_layout.setColumnStretch(i, 1)
 
         buttons_info = [
-            ("Yeni Satış Faturası", lambda: self.app.show_tab("Yeni Satış Faturası"), "🛍️"),
-            ("Yeni Alış Faturası", lambda: self.app.show_tab("Yeni Alış Faturası"), "🛒"),
+            ("Yeni Satış Faturası", lambda: self.app.show_invoice_form("SATIŞ"), "🛍️"),
+            ("Yeni Alış Faturası", lambda: self.app.show_invoice_form("ALIŞ"), "🛒"),
             ("Fatura Listesi", lambda: self.app.show_tab("Faturalar"), "🧾"),
             ("Stok Yönetimi", lambda: self.app.show_tab("Stok Yönetimi"), "📦"),
             ("Müşteri Yönetimi", lambda: self.app.show_tab("Müşteri Yönetimi"), "👥"),
@@ -984,7 +984,6 @@ class MusteriYonetimiSayfasi(QWidget):
             response.raise_for_status()
             musteri_detaylari = response.json()
 
-            # Yeni QDialog penceremizi düzenleme modunda oluşturuyoruz
             dialog = YeniMusteriEklePenceresi(
                 self,
                 self.db,
@@ -2716,7 +2715,6 @@ class BaseIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
             elif hasattr(self.app, 'temp_purchase_order_data') and self.islem_tipi == 'ALIŞ_SIPARIS': self.app.temp_purchase_order_data = None
 
             self.app.set_status_message(f"{self.islem_tipi} işlemi iptal edildi ve taslak temizlendi.")
-            # Parent'ın bir QDialog olduğunu varsayarak kapatma
             if isinstance(self.parent, QDialog): # Eğer parent bir dialog ise
                  self.parent.reject() # Dialog'u kapat
             elif hasattr(self.parent, 'close'): # Diğer widget türleri için genel kapatma
@@ -3794,9 +3792,6 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         # QTimer.singleShot(0, self._on_iade_modu_changed) # UI hazır olunca çağır
 
     def _on_iade_modu_changed(self): # *args kaldırıldı
-        # Parent penceresinin başlığını güncelle
-        # PySide6'da QDialog.setWindowTitle() veya QMainWindow.setWindowTitle() kullanılır.
-        # Bu sınıf bir QWidget olduğu için, parent'ı bir QDialog/QMainWindow ise onun başlığını güncelleriz.
         if isinstance(self.parent(), QDialog):
             self.parent().setWindowTitle(self._get_baslik())
         elif isinstance(self.parent(), QMainWindow): # Eğer main window içinde bir sekme ise
@@ -4277,7 +4272,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         fatura_ana = self.db.fatura_getir_by_id(self.duzenleme_id)
         if not fatura_ana:
             QMessageBox.critical(self.app, "Hata", "Düzenlenecek fatura bilgileri alınamadı.")
-            self.parent().close() # QDialog/QMainWindow parent'ı kapat
+            self.parent().close() 
             return
 
         self._loaded_fatura_data_for_edit = fatura_ana
@@ -5601,9 +5596,6 @@ class BaseFinansalIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
             display_text = f"{cari_ad} (Kod: {cari_kodu})"
             self.cari_map_display_to_id[display_text] = str(cari_id)
             self.tum_cariler_cache_data.append(c)
-            
-        # _filtre_liste() çağrısı burada yapılmalıydı, ancak bu metodun QDialog içindeki QLineEdit'i beslemesi bekleniyor.
-        # Bu metod QDialog'a ait bir combobox'ı doldurmak için kullanılacaktır.
 
     def _yukle_kasa_banka_hesaplarini(self):
         """Kasa/Banka hesaplarını veritabanından çeker ve ilgili combobox'ı doldurur."""

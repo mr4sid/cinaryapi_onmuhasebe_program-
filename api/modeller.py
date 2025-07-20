@@ -120,7 +120,6 @@ class FaturaKalemBase(BaseModel): # response_model için temel kalem
     birim_fiyat: float # iskontolu kdv dahil
     kalem_toplam_kdv_dahil: float
 
-
 class FaturaKalemCreate(BaseModel):
     urun_id: int
     miktar: float
@@ -145,7 +144,7 @@ class FaturaCreate(BaseModel):
     vade_tarihi: Optional[date] = None
     genel_iskonto_tipi: Optional[str] = "YOK"
     genel_iskonto_degeri: Optional[float] = 0.0
-    original_fatura_id: Optional[int] = None # İade faturaları için eklendi
+    original_fatura_id: Optional[int] = None
 
 class SiparisKalemCreate(BaseModel):
     urun_id: int

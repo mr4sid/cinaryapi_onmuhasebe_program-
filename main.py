@@ -338,9 +338,8 @@ class App(QMainWindow):
         try:
             # FaturaPenceresi'ne fatura tipini gönderiyoruz (SATIŞ veya ALIŞ)
             dialog = FaturaPenceresi(
-                self, # Parent (ana uygulama)
-                self.db, # Veritabanı yöneticisi (self.db olarak mevcut)
-                self, # app_ref (App sınıfının kendisi)
+                parent=self, # Parent (ana uygulama)
+                db_manager=self.db, # Veritabanı yöneticisi (self.db olarak mevcut)
                 fatura_tipi=invoice_type, # 'SATIŞ' veya 'ALIŞ'
                 duzenleme_id=None, # Yeni fatura olduğu için None
                 yenile_callback=lambda: self.show_tab("Faturalar") # Fatura kaydedilince fatura listesini yenile
