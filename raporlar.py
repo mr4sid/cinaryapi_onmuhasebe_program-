@@ -1,295 +1,431 @@
+# raporlar.py dosyası
 import traceback
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-from datetime import datetime, date, timedelta # datetime.date de eklendi
+import os 
+from datetime import datetime, date, timedelta
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
-from reportlab.lib.pagesizes import landscape, A4
-from reportlab.lib.units import cm
-from reportlab.platypus import Table, TableStyle, Paragraph, SimpleDocTemplate, Spacer
-from reportlab.lib import colors
-from reportlab.pdfgen import canvas as rp_canvas
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-import threading
-import os 
+import requests
+import logging
+# PySide6 importları
+from PySide6.QtWidgets import (
+    QDialog, QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
+    QLabel, QPushButton, QTreeWidget, QTreeWidgetItem, QAbstractItemView, 
+    QHeaderView, QMessageBox, QFrame, QComboBox, QLineEdit, QSizePolicy, QTabWidget, QMenu
+)
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtGui import QFont, QBrush, QColor, QDoubleValidator
 
-# Fontlar artık veritabani.py'den import ediliyor ve orada kaydediliyor, burada tekrar yüklemeye gerek yok.
-# Sadece font isimlerini kullanacağız.
-from veritabani import TURKISH_FONT_NORMAL, TURKISH_FONT_BOLD 
-from reportlab.pdfbase import pdfmetrics # pdfmetrics hala gerekli
+# Yerel Uygulama Modülleri
+# OnMuhasebe sınıfı veritabanı.py dosyasından geliyor.
+# TURKISH_FONT_NORMAL, TURKISH_FONT_BOLD değişkenleri veritabanı.py'de tanımlanmış.
+from veritabani import TURKISH_FONT_NORMAL, TURKISH_FONT_BOLD, OnMuhasebe
+from yardimcilar import DatePickerDialog, normalize_turkish_chars, setup_locale
 
-# YARDIMCI MODÜLLERDEN GEREKENLER
-from yardimcilar import sort_treeview_column, setup_date_entry, DatePickerDialog
+# pencereler.py'deki PySide6 sınıflarını import et
+from pencereler import CariHesapEkstresiPenceresi, TedarikciSecimDialog, UrunKartiPenceresi, SiparisPenceresi
 
-# PENCERELER MODÜLÜNDEN GEREKENLER (Bu dosyadaki sınıflar için gerekli olanlar)
-from pencereler import BeklemePenceresi, CariHesapEkstresiPenceresi 
-from pencereler import TedarikciSecimDialog # CriticalStockWarningPenceresi içinde çağrıldığı için buraya eklendi
-
-
-class CriticalStockWarningPenceresi(tk.Toplevel):
+class CriticalStockWarningPenceresi(QDialog):
     def __init__(self, parent_app, db_manager):
         super().__init__(parent_app)
         self.app = parent_app
-        self.db = db_manager
-        self.title("Kritik Stok Uyarısı ve Sipariş Önerisi")
-        self.geometry("800x500")
-        self.transient(parent_app)
-        self.grab_set()
+        self.db = db_manager # OnMuhasebe objesi
+        self.setWindowTitle("Kritik Stok Uyarısı ve Sipariş Önerisi")
+        self.setMinimumSize(800, 500)
+        self.setModal(True) # Modalı olarak ayarla
 
-        ttk.Label(self, text="Kritik Stoktaki Ürünler", font=("Segoe UI", 16, "bold")).pack(pady=10, anchor=tk.W, padx=10)
+        main_layout = QVBoxLayout(self)
+        
+        # Başlık etiketi
+        title_label = QLabel("Kritik Stoktaki Ürünler")
+        title_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title_label.setAlignment(Qt.AlignLeft)
+        main_layout.addWidget(title_label, alignment=Qt.AlignTop | Qt.AlignLeft)
 
-        info_frame = ttk.Frame(self, padding="10")
-        info_frame.pack(fill=tk.X, padx=10)
-        ttk.Label(info_frame, text="Minimum stok seviyesinin altında olan ürünler listelenmiştir. İstenilen stok seviyesine ulaşmak için önerilen miktarları sipariş edebilirsiniz.").pack(anchor=tk.W)
+        # Bilgi mesajı çerçevesi
+        info_frame = QFrame(self)
+        info_layout = QVBoxLayout(info_frame)
+        main_layout.addWidget(info_frame)
+        info_label = QLabel("Minimum stok seviyesinin altında olan ürünler listelenmiştir. İstenilen stok seviyesine ulaşmak için önerilen miktarları sipariş edebilirsiniz.")
+        info_label.setWordWrap(True)
+        info_layout.addWidget(info_label, alignment=Qt.AlignLeft)
 
-        # Kritik Stok Listesi (Treeview)
-        tree_frame = ttk.Frame(self, padding="10")
-        tree_frame.pack(expand=True, fill=tk.BOTH)
+        # Kritik Stok Listesi (TreeWidget)
+        tree_frame = QFrame(self)
+        tree_layout = QVBoxLayout(tree_frame)
+        main_layout.addWidget(tree_frame, 1) # Streç faktör 1, genişlemesini sağlar
+        tree_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         cols = ("Ürün Kodu", "Ürün Adı", "Mevcut Stok", "Min. Stok", "Fark", "Önerilen Sipariş Mik.")
-        self.tree = ttk.Treeview(tree_frame, columns=cols, show='headings', selectmode="none") # Seçim olmasın
+        self.tree = QTreeWidget(tree_frame)
+        self.tree.setHeaderLabels(cols)
+        self.tree.setSelectionBehavior(QAbstractItemView.SelectRows) # Tüm satırı seç
+        self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection) # Çoklu seçim
+        self.tree.setAlternatingRowColors(True) # Zebra deseni
 
+        # Sütun ayarları
         col_defs = [
-            ("Ürün Kodu", 100, tk.W, tk.NO),
-            ("Ürün Adı", 250, tk.W, tk.YES),
-            ("Mevcut Stok", 100, tk.E, tk.NO),
-            ("Min. Stok", 100, tk.E, tk.NO),
-            ("Fark", 80, tk.E, tk.NO),
-            ("Önerilen Sipariş Mik.", 150, tk.E, tk.NO)
+            ("Ürün Kodu", 100, Qt.AlignLeft),
+            ("Ürün Adı", 250, Qt.AlignLeft),
+            ("Mevcut Stok", 100, Qt.AlignRight),
+            ("Min. Stok", 100, Qt.AlignRight),
+            ("Fark", 80, Qt.AlignRight),
+            ("Önerilen Sipariş Mik.", 150, Qt.AlignRight)
         ]
-        for cn,w,a,s in col_defs:
-            self.tree.column(cn, width=w, anchor=a, stretch=s)
-            self.tree.heading(cn, text=cn, command=lambda _c=cn: sort_treeview_column(self.tree, _c, False)) # Sıralama eklendi
-
-        vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
-        self.tree.configure(yscrollcommand=vsb.set)
-        self.tree.pack(expand=True, fill=tk.BOTH)
+        for i, (col_name, width, alignment) in enumerate(col_defs):
+            self.tree.setColumnWidth(i, width)
+            self.tree.headerItem().setTextAlignment(i, alignment)
+            # FONT KULLANIMI DÜZELTİLDİ
+            self.tree.headerItem().setFont(i, QFont("Segoe UI", 9, QFont.Bold))
+            if col_name == "Ürün Adı": # Ürün Adı sütunu esnek olsun
+                self.tree.header().setSectionResizeMode(i, QHeaderView.Stretch)
+            else:
+                self.tree.header().setSectionResizeMode(i, QHeaderView.Interactive) # Diğerleri interaktif
         
-        self.load_critical_stock()
+        tree_layout.addWidget(self.tree)
+        
+        # Sağ tık menüsü
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._open_context_menu)
+
 
         # Butonlar
-        button_frame = ttk.Frame(self, padding="10")
-        button_frame.pack(fill=tk.X)
-        ttk.Button(button_frame, text="Yenile", command=self.load_critical_stock, style="Accent.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Sipariş Oluştur", command=self._siparis_olustur_critical_stock, style="Accent.TButton").pack(side=tk.RIGHT, padx=5) 
-        ttk.Button(button_frame, text="Kapat", command=self.destroy).pack(side=tk.RIGHT)
+        button_frame = QFrame(self)
+        button_layout = QHBoxLayout(button_frame)
+        main_layout.addWidget(button_frame)
+        
+        btn_yenile = QPushButton("Yenile")
+        btn_yenile.clicked.connect(self.load_critical_stock)
+        button_layout.addWidget(btn_yenile)
+        
+        btn_siparis_olustur = QPushButton("Seçili Ürünlerden Sipariş Oluştur")
+        btn_siparis_olustur.clicked.connect(self._siparis_olustur_critical_stock)
+        button_layout.addWidget(btn_siparis_olustur)
+
+        button_layout.addStretch() # Sağ tarafa yaslamak için boşluk
+        
+        btn_kapat = QPushButton("Kapat")
+        btn_kapat.clicked.connect(self.close)
+        button_layout.addWidget(btn_kapat)
+
+        self.load_critical_stock() # Pencere açıldığında verileri yükle
 
     def load_critical_stock(self):
-        for i in self.tree.get_children():
-            self.tree.delete(i)
+        self.tree.clear()
         
-        critical_items = self.db.get_critical_stock_items()
+        # db_manager'dan kritik stoktaki ürünleri al
+        critical_items = self.db.get_critical_stock_items() # Bu metod db.py içinde tanımlı
+
         if not critical_items:
-            self.tree.insert("", tk.END, values=("", "", "", "", "", "Kritik Stokta Ürün Bulunmuyor."))
-            self.app.set_status("Kritik stokta ürün bulunmuyor.")
+            item_qt = QTreeWidgetItem(self.tree)
+            item_qt.setText(1, "Kritik Stokta Ürün Bulunmuyor.") # Ürün Adı sütunu
+            for i in range(self.tree.columnCount()):
+                item_qt.setForeground(i, QBrush(QColor("gray")))
+            self.app.set_status_message("Kritik stokta ürün bulunmuyor.")
             return
 
         for item in critical_items:
+            urun_id = item[0]
             urun_kodu = item[1]
             urun_adi = item[2]
             mevcut_stok = item[3]
             min_stok = item[7]
             fark = min_stok - mevcut_stok
-            onerilen_siparis = fark 
+            onerilen_siparis = fark # Önerilen miktar, fark kadar
 
-            self.tree.insert("", tk.END, values=(
-                urun_kodu,
-                urun_adi,
-                f"{mevcut_stok:.2f}".rstrip('0').rstrip('.'),
-                f"{min_stok:.2f}".rstrip('0').rstrip('.'),
-                f"{fark:.2f}".rstrip('0').rstrip('.'),
-                f"{onerilen_siparis:.2f}".rstrip('0').rstrip('.')
-            ))
-        self.app.set_status(f"{len(critical_items)} ürün kritik stok seviyesinin altında.")
+            item_qt = QTreeWidgetItem(self.tree)
+            item_qt.setText(0, urun_kodu)
+            item_qt.setText(1, urun_adi)
+            item_qt.setText(2, f"{mevcut_stok:.2f}".rstrip('0').rstrip('.'))
+            item_qt.setText(3, f"{min_stok:.2f}".rstrip('0').rstrip('.'))
+            item_qt.setText(4, f"{fark:.2f}".rstrip('0').rstrip('.'))
+            item_qt.setText(5, f"{onerilen_siparis:.2f}".rstrip('0').rstrip('.'))
+            
+            # Ürün ID'sini UserRole olarak sakla
+            item_qt.setData(0, Qt.UserRole, urun_id) 
 
-    def _siparis_olustur_critical_stock(self):
+        self.app.set_status_message(f"{len(critical_items)} ürün kritik stok seviyesinin altında.")
+
+    def _open_context_menu(self, pos):
+        item = self.tree.itemAt(pos)
+        if not item: return
+
+        self.tree.setCurrentItem(item)
+
+        context_menu = QMenu(self)
+        
+        open_product_card_action = context_menu.addAction("Ürün Kartını Aç")
+        open_product_card_action.triggered.connect(lambda: self._open_urun_karti(item))
+
+        siparis_olustur_action = context_menu.addAction("Bu Üründen Sipariş Oluştur")
+        siparis_olustur_action.triggered.connect(lambda: self._siparis_olustur_critical_stock(specific_item=item))
+
+        context_menu.exec(self.tree.mapToGlobal(pos))
+
+    def _open_urun_karti(self, item):
+        urun_id = item.data(0, Qt.UserRole)
+        if urun_id:
+            try:
+                # API_BASE_URL'i self.app'ten alıyoruz
+                response = requests.get(f"{self.app.API_BASE_URL}/stoklar/{urun_id}")
+                response.raise_for_status()
+                urun_detaylari = response.json()
+                # UrunKartiPenceresi pencereler.py'den import edildi
+                dialog = UrunKartiPenceresi(self.app, self.db, self.load_critical_stock, urun_duzenle=urun_detaylari, app_ref=self.app)
+                dialog.exec()
+            except requests.exceptions.RequestException as e:
+                QMessageBox.critical(self.app, "API Hatası", f"Ürün kartı açılamadı: {e}")
+                logging.error(f"Kritik stok uyarısı - Ürün kartı açma hatası: {e}")
+
+    def _siparis_olustur_critical_stock(self, specific_item=None):
         """
-        Kritik stoktaki ürünleri toplar ve tedarikçi seçimi sonrası alış faturası oluşturma akışını başlatır.
+        Seçili kritik stok ürünlerini toplar ve tedarikçi seçimi sonrası alış siparişi oluşturma akışını başlatır.
+        Eğer specific_item verilirse, sadece o üründen sipariş oluşturulur.
         """
         urunler_for_siparis = []
-        all_critical_items_db = self.db.get_critical_stock_items() 
-        for item_db in all_critical_items_db:
-            urun_id = item_db[0]
-            urun_kodu_db = item_db[1]
-            urun_adi_db = item_db[2] # <<-- Düzeltilen Satır
-            onerilen_miktar = item_db[7] - item_db[3] 
-            
-            if onerilen_miktar > 0:
-                urunler_for_siparis.append({
-                    "id": urun_id,
-                    "kodu": urun_kodu_db,
-                    "adi": urun_adi_db,
-                    "miktar": onerilen_miktar, 
-                    "alis_fiyati_kdv_haric": item_db[4], 
-                    "kdv_orani": item_db[6],   
-                    "alis_fiyati_kdv_dahil": item_db[8] 
-                })
+        
+        if specific_item:
+            selected_items = [specific_item]
+        else:
+            selected_items = self.tree.selectedItems()
 
-        if not urunler_for_siparis:
-            messagebox.showinfo("Bilgi", "Sipariş oluşturmak için kritik stokta ürün bulunmuyor.", parent=self)
+        if not selected_items:
+            QMessageBox.warning(self, "Uyarı", "Lütfen sipariş oluşturmak için bir veya daha fazla ürün seçin.")
             return
 
-        # Tedarikçi Seçim Diyaloğunu aç ve callback'i _tedarikci_secildi_ve_siparis_olustur olarak ayarla
-        # TedarikciSecimDialog zaten raporlar.py başında import edildiği için buradan kaldırdık.
-        TedarikciSecimDialog(self, self.db, 
-                             lambda selected_tedarikci_id, selected_tedarikci_ad: 
-                             self._tedarikci_secildi_ve_siparis_olustur(selected_tedarikci_id, selected_tedarikci_ad, urunler_for_siparis))
+        for item_qt in selected_items:
+            urun_id = item_qt.data(0, Qt.UserRole)
+            urun_adi = item_qt.text(1) # Ürün Adı
+            onerilen_miktar_str = item_qt.text(5).replace(',', '.') # Önerilen sipariş miktarı
+            
+            try:
+                onerilen_miktar = float(onerilen_miktar_str)
+                if onerilen_miktar <= 0: continue # Negatif veya sıfır önerileri atla
+                
+                # Ürün detaylarını çek (fiyatlar için)
+                # API_BASE_URL'i self.app'ten alıyoruz
+                response = requests.get(f"{self.app.API_BASE_URL}/stoklar/{urun_id}")
+                response.raise_for_status()
+                urun_detay = response.json()
+
+                urunler_for_siparis.append({
+                    "id": urun_id,
+                    "urun_kodu": urun_detay.get('urun_kodu'),
+                    "urun_adi": urun_detay.get('urun_adi'),
+                    "miktar": onerilen_miktar,
+                    "birim_fiyat": urun_detay.get('alis_fiyati_kdv_haric'), # Alış siparişinde KDV Hariç alış fiyatı
+                    "kdv_orani": urun_detay.get('kdv_orani'),
+                    "alis_fiyati_siparis_aninda": urun_detay.get('alis_fiyati_kdv_dahil') # KDV dahil alış fiyatı
+                })
+            except (ValueError, requests.exceptions.RequestException) as e:
+                QMessageBox.warning(self, "Hata", f"Ürün '{urun_adi}' için sipariş verisi hazırlanırken hata: {e}")
+                logging.error(f"Kritik stok - sipariş hazırlama hatası: {e}")
+                return
+
+        if not urunler_for_siparis:
+            QMessageBox.information(self, "Bilgi", "Sipariş oluşturmak için geçerli ürün bulunmuyor veya seçilen ürünlerin miktarları sıfırın altında.")
+            return
+
+        # TedarikciSecimDialog pencereler.py'den import edildi
+        dialog = TedarikciSecimDialog(self, self.db, 
+                                     lambda selected_tedarikci_id, selected_tedarikci_ad: 
+                                     self._tedarikci_secildi_ve_siparis_olustur(selected_tedarikci_id, selected_tedarikci_ad, urunler_for_siparis))
+        dialog.exec() # Modalı olarak göster
 
     def _tedarikci_secildi_ve_siparis_olustur(self, tedarikci_id, tedarikci_ad, urunler_for_siparis):
         """
         Tedarikçi seçildikten sonra çağrılır. Alış siparişi oluşturma sayfasını başlatır.
         """
         if tedarikci_id:
-            self.app.tedarikci_siparisi_goster(initial_cari_id=tedarikci_id, initial_urunler=urunler_for_siparis)
-            self.app.set_status(f"'{tedarikci_ad}' için tedarikçi siparişi oluşturma ekranı açıldı.")
-            self.destroy() 
+            # SiparisPenceresi pencereler.py'den import edildi
+            try:
+                dialog = SiparisPenceresi(
+                    self.app, # parent
+                    self.db, # db_manager
+                    self.app, # app_ref
+                    siparis_tipi=self.db.SIPARIS_TIP_ALIS, # Alış siparişi
+                    initial_cari_id=tedarikci_id, # Seçili tedarikçiyi gönder
+                    initial_urunler=urunler_for_siparis, # Önerilen ürünleri gönder
+                    yenile_callback=self.app.siparis_listesi_sayfasi.siparis_listesini_yukle if hasattr(self.app, 'siparis_listesi_sayfasi') else None
+                )
+                dialog.exec()
+                self.app.set_status_message(f"'{tedarikci_ad}' için tedarikçi siparişi oluşturma ekranı açıldı.")
+                self.close() # Kritik Stok Uyarısı penceresini kapat
+            except Exception as e:
+                QMessageBox.critical(self, "Hata", f"Sipariş oluşturma penceresi açılamadı: {e}")
+                logging.error(f"Kritik stok - sipariş penceresi açma hatası: {e}")
         else:
-            self.app.set_status("Tedarikçi seçimi iptal edildi. Sipariş oluşturulmadı.")
-            messagebox.showwarning("İptal Edildi", "Tedarikçi seçimi yapılmadığı için sipariş oluşturma işlemi iptal edildi.", parent=self)
+            self.app.set_status_message("Tedarikçi seçimi iptal edildi. Sipariş oluşturulmadı.")
+            QMessageBox.warning(self, "İptal Edildi", "Tedarikçi seçimi yapılmadığı için sipariş oluşturma işlemi iptal edildi.")
 
 
-class NotificationDetailsPenceresi(tk.Toplevel):
+class NotificationDetailsPenceresi(QDialog):
     def __init__(self, parent_app, db_manager, notifications_data):
         super().__init__(parent_app)
         self.app = parent_app
         self.db = db_manager
         self.notifications_data = notifications_data 
-        self.title("Aktif Bildirim Detayları")
-        self.geometry("900x600")
-        self.transient(parent_app)
-        self.grab_set()
+        self.setWindowTitle("Aktif Bildirim Detayları")
+        self.setMinimumSize(900, 600)
+        self.setModal(True) # Modalı olarak ayarla
 
-        ttk.Label(self, text="Aktif Bildirim Detayları", font=("Segoe UI", 16, "bold")).pack(pady=10, anchor=tk.W, padx=10)
+        main_layout = QVBoxLayout(self)
 
-        self.notebook_details = ttk.Notebook(self)
-        self.notebook_details.pack(expand=True, fill=tk.BOTH, padx=10, pady=5)
+        title_label = QLabel("Aktif Bildirim Detayları")
+        title_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title_label.setAlignment(Qt.AlignLeft)
+        main_layout.addWidget(title_label)
+
+        self.notebook_details = QTabWidget(self)
+        main_layout.addWidget(self.notebook_details, 1) # Streç faktör 1
 
         # Kritik Stok Sekmesi
-        if 'critical_stock' in self.notifications_data:
-            critical_stock_frame = ttk.Frame(self.notebook_details, padding="10")
-            self.notebook_details.add(critical_stock_frame, text="📦 Kritik Stok")
+        if 'critical_stock' in self.notifications_data and self.notifications_data['critical_stock']:
+            critical_stock_frame = QFrame(self.notebook_details)
+            critical_stock_frame.setLayout(QVBoxLayout(critical_stock_frame))
+            self.notebook_details.addTab(critical_stock_frame, "📦 Kritik Stok")
             self._create_critical_stock_tab(critical_stock_frame, self.notifications_data['critical_stock'])
 
         # Vadesi Geçmiş Alacaklar Sekmesi
-        if 'overdue_receivables' in self.notifications_data:
-            overdue_receivables_frame = ttk.Frame(self.notebook_details, padding="10")
-            self.notebook_details.add(overdue_receivables_frame, text="💰 Vadesi Geçmiş Alacaklar")
+        if 'overdue_receivables' in self.notifications_data and self.notifications_data['overdue_receivables']:
+            overdue_receivables_frame = QFrame(self.notebook_details)
+            overdue_receivables_frame.setLayout(QVBoxLayout(overdue_receivables_frame))
+            self.notebook_details.addTab(overdue_receivables_frame, "💰 Vadesi Geçmiş Alacaklar")
             self._create_overdue_receivables_tab(overdue_receivables_frame, self.notifications_data['overdue_receivables'])
 
         # Vadesi Geçmiş Borçlar Sekmesi
-        if 'overdue_payables' in self.notifications_data:
-            overdue_payables_frame = ttk.Frame(self.notebook_details, padding="10")
-            self.notebook_details.add(overdue_payables_frame, text="💸 Vadesi Geçmiş Borçlar")
+        if 'overdue_payables' in self.notifications_data and self.notifications_data['overdue_payables']:
+            overdue_payables_frame = QFrame(self.notebook_details)
+            overdue_payables_frame.setLayout(QVBoxLayout(overdue_payables_frame))
+            self.notebook_details.addTab(overdue_payables_frame, "💸 Vadesi Geçmiş Borçlar")
             self._create_overdue_payables_tab(overdue_payables_frame, self.notifications_data['overdue_payables'])
 
-        ttk.Button(self, text="Kapat", command=self.destroy).pack(pady=10)
+        button_frame = QFrame(self)
+        button_layout = QHBoxLayout(button_frame)
+        main_layout.addWidget(button_frame)
+        
+        button_layout.addStretch()
+        btn_kapat = QPushButton("Kapat")
+        btn_kapat.clicked.connect(self.close)
+        button_layout.addWidget(btn_kapat)
 
     def _create_critical_stock_tab(self, parent_frame, data):
         cols = ("Ürün Kodu", "Ürün Adı", "Mevcut Stok", "Min. Stok", "Fark", "Önerilen Sipariş Mik.")
-        self.tree = ttk.Treeview(parent_frame, columns=cols, show='headings', selectmode="none") # self.tree olarak düzeltildi
+        tree = QTreeWidget(parent_frame)
+        tree.setHeaderLabels(cols)
+        tree.setSelectionBehavior(QAbstractItemView.SelectRows)
+        tree.setSelectionMode(QAbstractItemView.ExtendedSelection) # Çoklu seçim
+        tree.setAlternatingRowColors(True)
 
         col_defs = [
-            ("Ürün Kodu", 100, tk.W, tk.NO),
-            ("Ürün Adı", 250, tk.W, tk.YES),
-            ("Mevcut Stok", 100, tk.E, tk.NO),
-            ("Min. Stok", 100, tk.E, tk.NO),
-            ("Fark", 80, tk.E, tk.NO),
-            ("Önerilen Sipariş Mik.", 150, tk.E, tk.NO)
+            ("Ürün Kodu", 100, Qt.AlignLeft),
+            ("Ürün Adı", 250, Qt.AlignLeft),
+            ("Mevcut Stok", 100, Qt.AlignRight),
+            ("Min. Stok", 100, Qt.AlignRight),
+            ("Fark", 80, Qt.AlignRight),
+            ("Önerilen Sipariş Mik.", 150, Qt.AlignRight)
         ]
-        for cn,w,a,s in col_defs:
-            self.tree.column(cn, width=w, anchor=a, stretch=s) # self.tree olarak düzelt
-            self.tree.heading(cn, text=cn) # self.tree olarak düzelt
-
-        vsb = ttk.Scrollbar(parent_frame, orient="vertical", command=self.tree.yview) # self.tree olarak düzelt
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
-        self.tree.configure(yscrollcommand=vsb.set) # self.tree olarak düzelt
-        self.tree.pack(expand=True, fill=tk.BOTH) # self.tree olarak düzelt
+        for i, (col_name, width, alignment) in enumerate(col_defs):
+            tree.setColumnWidth(i, width)
+            tree.headerItem().setTextAlignment(i, alignment)
+            # FONT KULLANIMI DÜZELTİLDİ
+            tree.headerItem().setFont(i, QFont("Segoe UI", 9, QFont.Bold))
+            if col_name == "Ürün Adı":
+                tree.header().setSectionResizeMode(i, QHeaderView.Stretch)
+            else:
+                tree.header().setSectionResizeMode(i, QHeaderView.Interactive)
+        parent_frame.layout().addWidget(tree)
 
         for item in data:
+            urun_id = item[0]
             urun_kodu = item[1]
             urun_adi = item[2]
             mevcut_stok = item[3]
             min_stok = item[7]
             fark = min_stok - mevcut_stok
             onerilen_siparis = fark
-            self.tree.insert("", tk.END, values=(
-                urun_kodu, urun_adi,
-                f"{mevcut_stok:.2f}".rstrip('0').rstrip('.'),
-                f"{min_stok:.2f}".rstrip('0').rstrip('.'),
-                f"{fark:.2f}".rstrip('0').rstrip('.'),
-                f"{onerilen_siparis:.2f}".rstrip('0').rstrip('.')
-            ))
+            
+            item_qt = QTreeWidgetItem(tree)
+            item_qt.setText(0, urun_kodu)
+            item_qt.setText(1, urun_adi)
+            item_qt.setText(2, f"{mevcut_stok:.2f}".rstrip('0').rstrip('.'))
+            item_qt.setText(3, f"{min_stok:.2f}".rstrip('0').rstrip('.'))
+            item_qt.setText(4, f"{fark:.2f}".rstrip('0').rstrip('.'))
+            item_qt.setText(5, f"{onerilen_siparis:.2f}".rstrip('0').rstrip('.'))
+            item_qt.setData(0, Qt.UserRole, urun_id) # Ürün ID
 
     def _create_overdue_receivables_tab(self, parent_frame, data):
         cols = ("Müşteri Adı", "Net Borç", "Vadesi Geçen Gün")
-        self.tree = ttk.Treeview(parent_frame, columns=cols, show='headings', selectmode="browse") # self.tree olarak düzeltildi
+        tree = QTreeWidget(parent_frame)
+        tree.setHeaderLabels(cols)
+        tree.setSelectionBehavior(QAbstractItemView.SelectRows)
+        tree.setSelectionMode(QAbstractItemView.SingleSelection)
+        tree.setAlternatingRowColors(True)
 
         col_defs = [
-            ("Müşteri Adı", 250, tk.W, tk.YES),
-            ("Net Borç", 120, tk.E, tk.NO),
-            ("Vadesi Geçen Gün", 120, tk.E, tk.NO)
+            ("Müşteri Adı", 250, Qt.AlignLeft),
+            ("Net Borç", 120, Qt.AlignRight),
+            ("Vadesi Geçen Gün", 120, Qt.AlignRight)
         ]
-        for cn,w,a,s in col_defs:
-            self.tree.column(cn, width=w, anchor=a, stretch=s) # self.tree olarak düzelt
-            self.tree.heading(cn, text=cn) # self.tree olarak düzelt
-
-        vsb = ttk.Scrollbar(parent_frame, orient="vertical", command=self.tree.yview) # self.tree olarak düzelt
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
-        self.tree.configure(yscrollcommand=vsb.set) # self.tree olarak düzelt
-        self.tree.pack(expand=True, fill=tk.BOTH) # self.tree olarak düzelt
+        for i, (col_name, width, alignment) in enumerate(col_defs):
+            tree.setColumnWidth(i, width)
+            tree.headerItem().setTextAlignment(i, alignment)
+            # FONT KULLANIMI DÜZELTİLDİ: QFont.Bold
+            tree.headerItem().setFont(i, QFont("Segoe UI", 9, QFont.Bold))
+            if col_name == "Müşteri Adı":
+                tree.header().setSectionResizeMode(i, QHeaderView.Stretch)
+            else:
+                tree.header().setSectionResizeMode(i, QHeaderView.Interactive)
+        parent_frame.layout().addWidget(tree)
 
         for item in data:
-            self.tree.insert("", tk.END, values=(
-                item[1], self.db._format_currency(item[2]), item[3]
-            ))
-        self.tree.bind("<Double-1>", lambda event: self._open_cari_ekstresi_from_notification(event, self.tree, 'MUSTERI')) # self.tree olarak düzelt
+            item_qt = QTreeWidgetItem(tree)
+            item_qt.setText(0, item[1]) # Müşteri Adı
+            item_qt.setText(1, self.db._format_currency(item[2])) # Net Borç
+            item_qt.setText(2, str(item[3])) # Vadesi Geçen Gün
+            item_qt.setData(0, Qt.UserRole, item[0]) # Cari ID
 
+        tree.itemDoubleClicked.connect(lambda item, col: self._open_cari_ekstresi_from_notification(item, 'MUSTERI'))
+            
     def _create_overdue_payables_tab(self, parent_frame, data):
         cols = ("Tedarikçi Adı", "Net Borç", "Vadesi Geçen Gün")
-        self.tree = ttk.Treeview(parent_frame, columns=cols, show='headings', selectmode="browse") # self.tree olarak düzeltildi
+        tree = QTreeWidget(parent_frame)
+        tree.setHeaderLabels(cols)
+        tree.setSelectionBehavior(QAbstractItemView.SelectRows)
+        tree.setSelectionMode(QAbstractItemView.SingleSelection)
+        tree.setAlternatingRowColors(True)
 
         col_defs = [
-            ("Tedarikçi Adı", 250, tk.W, tk.YES),
-            ("Net Borç", 120, tk.E, tk.NO),
-            ("Vadesi Geçen Gün", 120, tk.E, tk.NO)
+            ("Tedarikçi Adı", 250, Qt.AlignLeft),
+            ("Net Borç", 120, Qt.AlignRight),
+            ("Vadesi Geçen Gün", 120, Qt.AlignRight)
         ]
-        for cn,w,a,s in col_defs:
-            self.tree.column(cn, width=w, anchor=a, stretch=s) # self.tree olarak düzelt
-            self.tree.heading(cn, text=cn) # self.tree olarak düzelt
-
-        vsb = ttk.Scrollbar(parent_frame, orient="vertical", command=self.tree.yview) # self.tree olarak düzelt
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
-        self.tree.configure(yscrollcommand=vsb.set) # self.tree olarak düzelt
-        self.tree.pack(expand=True, fill=tk.BOTH) # self.tree olarak düzelt
+        for i, (col_name, width, alignment) in enumerate(col_defs):
+            tree.setColumnWidth(i, width)
+            tree.headerItem().setTextAlignment(i, alignment)
+            # FONT KULLANIMI DÜZELTİLDİ: QFont.Bold
+            tree.headerItem().setFont(i, QFont("Segoe UI", 9, QFont.Bold))
+            if col_name == "Tedarikçi Adı":
+                tree.header().setSectionResizeMode(i, QHeaderView.Stretch)
+            else:
+                tree.header().setSectionResizeMode(i, QHeaderView.Interactive)
+        parent_frame.layout().addWidget(tree)
 
         for item in data:
-            self.tree.insert("", tk.END, values=(
-                item[1], self.db._format_currency(item[2]), item[3]
-            ))
-        self.tree.bind("<Double-1>", lambda event: self._open_cari_ekstresi_from_notification(event, self.tree, 'TEDARIKCI')) # self.tree olarak düzelt
+            item_qt = QTreeWidgetItem(tree)
+            item_qt.setText(0, item[1]) # Tedarikçi Adı
+            item_qt.setText(1, self.db._format_currency(item[2])) # Net Borç
+            item_qt.setText(2, str(item[3])) # Vadesi Geçen Gün
+            item_qt.setData(0, Qt.UserRole, item[0]) # Cari ID
 
-    def _open_cari_ekstresi_from_notification(self, event, tree, cari_tip):
-        selected_item = tree.focus()
-        if not selected_item:
-            return
-        
-        item_values = tree.item(selected_item, 'values')
-        cari_adi = item_values[0] 
-        
-        cari_id = None
-        if cari_tip == 'MUSTERI':
-            for item in self.notifications_data.get('overdue_receivables', []):
-                if item[1] == cari_adi:
-                    cari_id = item[0]
-                    break
-        elif cari_tip == 'TEDARIKCI':
-            for item in self.notifications_data.get('overdue_payables', []):
-                if item[1] == cari_adi:
-                    cari_id = item[0]
-                    break
-        
+        tree.itemDoubleClicked.connect(lambda item, col: self._open_cari_ekstresi_from_notification(item, 'TEDARIKCI'))
+
+    def _open_cari_ekstresi_from_notification(self, item, cari_tip):
+        cari_id = item.data(0, Qt.UserRole)
+        cari_adi = item.text(0) # İlk sütun (Ad)
+
         if cari_id:
-            CariHesapEkstresiPenceresi(self.app, self.db, cari_id, cari_tip, cari_adi)
+            # CariHesapEkstresiPenceresi pencereler.py'den import edildi
+            dialog = CariHesapEkstresiPenceresi(self.app, self.db, cari_id, cari_tip, cari_adi)
+            dialog.exec() # Modalı olarak göster
         else:
-            messagebox.showwarning("Hata", "Cari ID bulunamadı.", parent=self)
+            QMessageBox.warning(self.app, "Hata", "Cari ID bulunamadı.")
