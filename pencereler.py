@@ -19,9 +19,18 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from veritabani import OnMuhasebe # OnMuhasebe sınıfının import edildiğinden emin olun
 from yardimcilar import DatePickerDialog, normalize_turkish_chars, setup_locale
 from config import API_BASE_URL
+from arayuz import Ui_MMusteriKartiPenceresi 
+# Logger kurulumu
+logger = logging.getLogger(__name__)
+# Eğer ana uygulama tarafından zaten yapılandırılmadıysa, basit bir konsol çıktısı için:
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
 def setup_numeric_entry(parent_app, entry_widget, allow_negative=False, decimal_places=2, max_value=None):
-    # PySide6 için QDoubleValidator kullanımı. Tkinter'daki fonksiyon kaldırıldı.
     validator = QDoubleValidator()
     validator.setBottom(0.0 if not allow_negative else -999999999.0)
     validator.setTop(999999999.0 if max_value is None else float(max_value))
@@ -2449,8 +2458,8 @@ class FaturaPenceresi(QDialog):
             response = requests.get(f"{API_BASE_URL}/stoklar/{urun_id}")
             response.raise_for_status()
             urun_detaylari = response.json()
-            from pencereler import UrunKartiPenceresi
-            dialog = UrunKartiPenceresi(self.app, self.db, self._urunleri_yukle_ve_cachele, urun_duzenle=urun_detaylari, app_ref=self.app)
+            from pencereler import StokKartiPenceresi
+            dialog = StokKartiPenceresi(self.app, self.db, self._urunleri_yukle_ve_cachele, urun_duzenle=urun_detaylari, app_ref=self.app)
             dialog.exec()
         except requests.exceptions.RequestException as e:
             QMessageBox.critical(self.app, "API Hatası", f"Ürün kartı açılamadı: {e}")
@@ -4442,9 +4451,6 @@ class UrunNitelikYonetimiPenceresi(QDialog):
             for k in kategoriler:
                 self.kategoriler_map[k.get('kategori_adi')] = k.get('id')
                 kategori_display_values.append(k.get('kategori_adi'))
-            # self.combo_kategori Tkinter Combobox, PySide6'da QComboBox olacak.
-            # self.combo_kategori.clear() ve self.combo_kategori.addItems(kategori_display_values)
-            # gibi PySide6 QComboBox metotları kullanılmalı.
         except requests.exceptions.RequestException as e:
             logging.error(f"Kategoriler combobox yüklenirken hata: {e}")
 
@@ -4458,7 +4464,6 @@ class UrunNitelikYonetimiPenceresi(QDialog):
             for m in markalar:
                 self.markalar_map[m.get('marka_adi')] = m.get('id')
                 marka_display_values.append(m.get('marka_adi'))
-            # self.combo_marka Tkinter Combobox
         except requests.exceptions.RequestException as e:
             logging.error(f"Markalar combobox yüklenirken hata: {e}")
 
@@ -4474,7 +4479,6 @@ class UrunNitelikYonetimiPenceresi(QDialog):
             for g in urun_gruplari:
                 self.urun_gruplari_map[g.get('grup_adi')] = g.get('id')
                 urun_grubu_display_values.append(g.get('grup_adi'))
-            # self.combo_urun_grubu Tkinter Combobox
         except requests.exceptions.RequestException as e:
             logging.error(f"Ürün grupları combobox yüklenirken hata: {e}")
 
@@ -4488,7 +4492,6 @@ class UrunNitelikYonetimiPenceresi(QDialog):
             for b in urun_birimleri:
                 self.urun_birimleri_map[b.get('birim_adi')] = b.get('id')
                 urun_birimi_display_values.append(b.get('birim_adi'))
-            # self.combo_urun_birimi Tkinter Combobox
         except requests.exceptions.RequestException as e:
             logging.error(f"Ürün birimleri combobox yüklenirken hata: {e}")
 
@@ -4502,20 +4505,21 @@ class UrunNitelikYonetimiPenceresi(QDialog):
             for u in ulkeler:
                 self.ulkeler_map[u.get('ulke_adi')] = u.get('id')
                 ulke_display_values.append(u.get('ulke_adi'))
-            # self.combo_mense Tkinter Combobox
         except requests.exceptions.RequestException as e:
             logging.error(f"Ülkeler combobox yüklenirken hata: {e}")
 
-class UrunKartiPenceresi(QDialog):
-    def __init__(self, parent, db_manager, yenile_callback, urun_duzenle=None, app_ref=None):
-        super().__init__(parent)
-        self.db = db_manager
-        self.app = app_ref
-        self.yenile_callback = yenile_callback
-        self.urun_duzenle_data = urun_duzenle
-        self.urun_id = self.urun_duzenle_data.get('id') if self.urun_duzenle_data else None
+class StokKartiPenceresi(QDialog):
+    data_updated = Signal() # Veri güncellendiğinde ana pencereye sinyal göndermek için
 
-        title = "Yeni Ürün Kartı" if not self.urun_id else f"Ürün Düzenle: {self.urun_duzenle_data.get('urun_adi', '')}"
+    # __init__ metodunu sizin sağladığınız yapıya göre güncelledim
+    def __init__(self, parent=None, db_manager=None, stok_duzenle=None, app_ref=None):
+        super().__init__(parent)
+        self.db = db_manager # API tabanlı db_manager
+        self.app = app_ref # setup_numeric_entry için tutuluyor, ancak kaldırılacak
+        self.stok_duzenle_data = stok_duzenle # Düzenlenecek stokun verileri
+        self.stok_id = self.stok_duzenle_data.get('id') if self.stok_duzenle_data else None
+
+        title = "Yeni Stok Kartı" if not self.stok_id else f"Stok Düzenle: {self.stok_duzenle_data.get('ad', '')}"
         self.setWindowTitle(title)
         self.setMinimumSize(950, 750)
         self.setModal(True)
@@ -4525,9 +4529,9 @@ class UrunKartiPenceresi(QDialog):
         self.combos = {}
         self.combo_maps = {'kategori': {}, 'marka': {}, 'urun_grubu': {}, 'urun_birimi': {}, 'mense': {}}
         self.label_kar_orani = QLabel("% 0,00")
-        self.urun_resmi_label = QLabel("Resim Yok")
+        self.urun_resmi_label = QLabel("Resim Yok") # İsim değişmedi, UI'da böyle kalabilir
         self.original_pixmap = None
-        self.urun_resmi_path = ""
+        self.urun_resmi_path = "" # Veritabanında (API üzerinden) saklanacak resim yolu
         
         self.main_layout = QVBoxLayout(self)
         self.notebook = QTabWidget()
@@ -4537,8 +4541,9 @@ class UrunKartiPenceresi(QDialog):
         self._create_placeholder_tabs()
         self._add_bottom_buttons()
         
+        self._set_validators_and_signals() # Validator ve sinyal bağlantılarını burada kur
         self._verileri_yukle()
-        self.entries['urun_adi'].setFocus()
+        self.entries['ad'].setFocus() # 'urun_adi' yerine 'ad' kullanıldı
 
     def _create_genel_bilgiler_tab(self):
         tab_genel = QWidget()
@@ -4552,36 +4557,39 @@ class UrunKartiPenceresi(QDialog):
         layout_genel.setColumnStretch(0, 3)
         layout_genel.setColumnStretch(1, 1)
 
-        gbox_temel = QGroupBox("Temel Ürün Bilgileri")
+        gbox_temel = QGroupBox("Temel Stok Bilgileri") # "Ürün" yerine "Stok"
         ltemel = QGridLayout(gbox_temel)
-        self.entries['urun_kodu'] = QLineEdit(); self.entries['urun_kodu'].setReadOnly(True)
-        self.entries['urun_adi'] = QLineEdit()
-        self.entries['urun_detayi'] = QTextEdit(); self.entries['urun_detayi'].setFixedHeight(60)
-        ltemel.addWidget(QLabel("Ürün Kodu:"), 0, 0); ltemel.addWidget(self.entries['urun_kodu'], 0, 1)
-        ltemel.addWidget(QLabel("Ürün Adı (*):"), 0, 2); ltemel.addWidget(self.entries['urun_adi'], 0, 3)
-        ltemel.addWidget(QLabel("Ürün Detayı:"), 1, 0, alignment=Qt.AlignTop); ltemel.addWidget(self.entries['urun_detayi'], 1, 1, 1, 3)
+        self.entries['kod'] = QLineEdit(); self.entries['kod'].setReadOnly(True) # 'urun_kodu' yerine 'kod'
+        self.entries['ad'] = QLineEdit() # 'urun_adi' yerine 'ad'
+        self.entries['detay'] = QTextEdit(); self.entries['detay'].setFixedHeight(60) # 'urun_detayi' yerine 'detay'
+        ltemel.addWidget(QLabel("Stok Kodu:"), 0, 0); ltemel.addWidget(self.entries['kod'], 0, 1)
+        ltemel.addWidget(QLabel("Stok Adı (*):"), 0, 2); ltemel.addWidget(self.entries['ad'], 0, 3)
+        ltemel.addWidget(QLabel("Stok Detayı:"), 1, 0, alignment=Qt.AlignTop); ltemel.addWidget(self.entries['detay'], 1, 1, 1, 3)
         left_panel_vbox.addWidget(gbox_temel)
 
         gbox_fiyat = QGroupBox("Fiyatlandırma Bilgileri")
         lfiyat = QGridLayout(gbox_fiyat)
-        self.entries['alis_fiyati_kdv_haric'] = QLineEdit("0,00"); self.entries['alis_fiyati_kdv_dahil'] = QLineEdit("0,00")
-        self.entries['satis_fiyati_kdv_haric'] = QLineEdit("0,00"); self.entries['satis_fiyati_kdv_dahil'] = QLineEdit("0,00")
+        self.entries['alis_fiyati'] = QLineEdit("0,00") # 'alis_fiyati_kdv_haric' yerine 'alis_fiyati' (API'de tek fiyat var)
+        self.entries['satis_fiyati'] = QLineEdit("0,00") # 'satis_fiyati_kdv_haric' yerine 'satis_fiyati' (API'de tek fiyat var)
         self.entries['kdv_orani'] = QLineEdit("20"); self.label_kar_orani.setFont(QFont("Segoe UI", 9, QFont.Bold))
-        lfiyat.addWidget(QLabel("Alış Fiyatı (KDV Hariç):"), 0, 0); lfiyat.addWidget(self.entries['alis_fiyati_kdv_haric'], 0, 1)
-        lfiyat.addWidget(QLabel("Alış Fiyatı (KDV Dahil):"), 0, 2); lfiyat.addWidget(self.entries['alis_fiyati_kdv_dahil'], 0, 3)
-        lfiyat.addWidget(QLabel("Satış Fiyatı (KDV Hariç):"), 1, 0); lfiyat.addWidget(self.entries['satis_fiyati_kdv_haric'], 1, 1)
-        lfiyat.addWidget(QLabel("Satış Fiyatı (KDV Dahil):"), 1, 2); lfiyat.addWidget(self.entries['satis_fiyati_kdv_dahil'], 1, 3)
+        
+        # API'de KDV dahil/hariç ayrımı yok, tek fiyat alanı var.
+        # Bu yüzden UI'daki KDV dahil/hariç inputlarını tek inputa düşürdüm.
+        # Eğer API'de KDV dahil/hariç fiyatlar ayrı ayrı tutuluyorsa, API şemasının güncellenmesi gerekir.
+        # Şu anki API şemasına göre 'alis_fiyati' ve 'satis_fiyati' var.
+        lfiyat.addWidget(QLabel("Alış Fiyatı:"), 0, 0); lfiyat.addWidget(self.entries['alis_fiyati'], 0, 1)
+        lfiyat.addWidget(QLabel("Satış Fiyatı:"), 1, 0); lfiyat.addWidget(self.entries['satis_fiyati'], 1, 1)
         lfiyat.addWidget(QLabel("KDV Oranı (%):"), 2, 0); lfiyat.addWidget(self.entries['kdv_orani'], 2, 1)
         lfiyat.addWidget(QLabel("Kar Oranı:"), 2, 2); lfiyat.addWidget(self.label_kar_orani, 2, 3)
         left_panel_vbox.addWidget(gbox_fiyat)
 
         gbox_nitelik = QGroupBox("Ek Nitelikler"); lnitelik = QGridLayout(gbox_nitelik)
         self.combos['kategori'] = QComboBox(); self.combos['marka'] = QComboBox()
-        self.combos['urun_grubu'] = QComboBox(); self.combos['urun_birimi'] = QComboBox(); self.combos['mense'] = QComboBox()
+        self.combos['urun_grubu'] = QComboBox(); self.combos['birim'] = QComboBox(); self.combos['mense'] = QComboBox() # 'urun_birimi' yerine 'birim'
         lnitelik.addWidget(QLabel("Kategori:"), 0, 0); lnitelik.addWidget(self.combos['kategori'], 0, 1)
         lnitelik.addWidget(QLabel("Marka:"), 0, 2); lnitelik.addWidget(self.combos['marka'], 0, 3)
         lnitelik.addWidget(QLabel("Ürün Grubu:"), 1, 0); lnitelik.addWidget(self.combos['urun_grubu'], 1, 1)
-        lnitelik.addWidget(QLabel("Ürün Birimi:"), 1, 2); lnitelik.addWidget(self.combos['urun_birimi'], 1, 3)
+        lnitelik.addWidget(QLabel("Birim:"), 1, 2); lnitelik.addWidget(self.combos['birim'], 1, 3) # 'Ürün Birimi' yerine 'Birim'
         lnitelik.addWidget(QLabel("Menşe:"), 2, 0); lnitelik.addWidget(self.combos['mense'], 2, 1)
         left_panel_vbox.addWidget(gbox_nitelik); left_panel_vbox.addStretch()
 
@@ -4592,7 +4600,7 @@ class UrunKartiPenceresi(QDialog):
         layout_stok_sag.addWidget(QLabel("Min. Stok Seviyesi:"), 1, 0); layout_stok_sag.addWidget(self.entries['min_stok_seviyesi'], 1, 1)
         right_panel_vbox.addWidget(gbox_stok_sag)
 
-        gbox_gorsel = QGroupBox("Ürün Görseli"); layout_gorsel = QVBoxLayout(gbox_gorsel)
+        gbox_gorsel = QGroupBox("Stok Görseli"); layout_gorsel = QVBoxLayout(gbox_gorsel) # "Ürün Görseli" yerine "Stok Görseli"
         self.urun_resmi_label.setAlignment(Qt.AlignCenter); self.urun_resmi_label.setMinimumSize(200, 200)
         self.urun_resmi_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored); self.urun_resmi_label.setStyleSheet("border: 1px solid grey;")
         layout_gorsel.addWidget(self.urun_resmi_label)
@@ -4609,22 +4617,16 @@ class UrunKartiPenceresi(QDialog):
         right_panel_vbox.addWidget(gbox_operasyon)
         right_panel_vbox.addStretch()
 
-        self._set_validators_and_signals()
-        
     def _create_placeholder_tabs(self):
         # Bu sekmelerin içeriği, arayuz.py'deki ilgili sınıfın PySide6'ya dönüştürülmesinden sonra eklenecektir.
-        # Şimdilik boş QWidget'lar ekleyelim.
         self.notebook.addTab(QWidget(), "Stok Hareketleri") 
         self.notebook.addTab(QWidget(), "İlgili Faturalar") 
         # Nitelik Yönetimi sekmesi ayrı bir pencereye taşındığı için burada placeholder olarak tutulmayabilir.
-        # Eğer yine de bir referans tutulacaksa, tıklanınca ilgili pencereyi açan bir buton veya benzeri olabilir.
-        # UrunNitelikYonetimiPenceresi artık ayrı bir dialog.
-        # Bu placeholder'ı kaldırabiliriz veya bilgi etiketi koyabiliriz.
         self.notebook.addTab(QLabel("Nitelik yönetimi ayrı bir pencereye taşınmıştır."), "Nitelik Yönetimi")
 
     def _add_bottom_buttons(self):
         button_layout = QHBoxLayout()
-        self.btn_sil = QPushButton("Ürünü Sil"); self.btn_sil.clicked.connect(self._urun_sil); self.btn_sil.setVisible(bool(self.urun_id))
+        self.btn_sil = QPushButton("Stoku Sil"); self.btn_sil.clicked.connect(self._stok_sil); self.btn_sil.setVisible(bool(self.stok_id))
         button_layout.addWidget(self.btn_sil, alignment=Qt.AlignLeft)
         button_layout.addStretch()
         self.kaydet_button = QPushButton("Kaydet"); self.kaydet_button.clicked.connect(self.kaydet)
@@ -4635,155 +4637,199 @@ class UrunKartiPenceresi(QDialog):
 
     def _set_validators_and_signals(self):
         # Sayısal alanlar için validator'lar
-        # setup_numeric_entry fonksiyonunu doğrudan çağıralım
-        setup_numeric_entry(self.app, self.entries['alis_fiyati_kdv_haric'], decimal_places=2)
-        setup_numeric_entry(self.app, self.entries['alis_fiyati_kdv_dahil'], decimal_places=2)
-        setup_numeric_entry(self.app, self.entries['satis_fiyati_kdv_haric'], decimal_places=2)
-        setup_numeric_entry(self.app, self.entries['satis_fiyati_kdv_dahil'], decimal_places=2)
-        setup_numeric_entry(self.app, self.entries['min_stok_seviyesi'], decimal_places=2)
-        setup_numeric_entry(self.app, self.entries['stok_miktari'], decimal_places=2) # ReadOnly olmasına rağmen validator olsun
+        double_validator = QDoubleValidator(0.0, 999999999.0, 2, self)
+        double_validator.setNotation(QDoubleValidator.StandardNotation)
+        
+        self.entries['alis_fiyati'].setValidator(double_validator)
+        self.entries['satis_fiyati'].setValidator(double_validator)
+        self.entries['min_stok_seviyesi'].setValidator(double_validator)
+        self.entries['stok_miktari'].setValidator(double_validator) # ReadOnly olmasına rağmen validator olsun
         
         # KDV oranı için int validator
         int_validator = QIntValidator(0, 100)
         self.entries['kdv_orani'].setValidator(int_validator)
 
         # Otomatik fiyat hesaplama için sinyal-slot bağlantıları
-        self.entries['alis_fiyati_kdv_haric'].textChanged.connect(lambda: self._otomatik_fiyat_doldur('haric', 'alis'))
-        self.entries['alis_fiyati_kdv_dahil'].textChanged.connect(lambda: self._otomatik_fiyat_doldur('dahil', 'alis'))
-        self.entries['satis_fiyati_kdv_haric'].textChanged.connect(lambda: self._otomatik_fiyat_doldur('haric', 'satis'))
-        self.entries['satis_fiyati_kdv_dahil'].textChanged.connect(lambda: self._otomatik_fiyat_doldur('dahil', 'satis'))
-        self.entries['kdv_orani'].textChanged.connect(self._update_all_prices_on_kdv_change)
+        # API'de KDV dahil/hariç fiyat ayrımı olmadığı için bu kısım sadeleştirildi.
+        # Sadece KDV oranı değiştiğinde kar oranını yeniden hesapla.
+        self.entries['alis_fiyati'].textChanged.connect(self._calculate_kar_orani)
+        self.entries['satis_fiyati'].textChanged.connect(self._calculate_kar_orani)
+        self.entries['kdv_orani'].textChanged.connect(self._calculate_kar_orani)
 
         # Klavye navigasyonu (Enter tuşu ile odak değiştirme)
-        self.entries['urun_adi'].returnPressed.connect(self.entries['min_stok_seviyesi'].setFocus)
-        self.entries['min_stok_seviyesi'].returnPressed.connect(self.entries['alis_fiyati_kdv_dahil'].setFocus)
-        self.entries['alis_fiyati_kdv_dahil'].returnPressed.connect(self.entries['satis_fiyati_kdv_dahil'].setFocus)
-        self.entries['satis_fiyati_kdv_dahil'].returnPressed.connect(self.kaydet_button.setFocus)
+        self.entries['ad'].returnPressed.connect(self.entries['min_stok_seviyesi'].setFocus)
+        self.entries['min_stok_seviyesi'].returnPressed.connect(self.entries['alis_fiyati'].setFocus)
+        self.entries['alis_fiyati'].returnPressed.connect(self.entries['satis_fiyati'].setFocus)
+        self.entries['satis_fiyati'].returnPressed.connect(self.kaydet_button.setFocus)
         
     def _verileri_yukle(self):
         self._yukle_combobox_verileri()
-        if self.urun_duzenle_data:
-            self.entries['urun_kodu'].setText(self.urun_duzenle_data.get('urun_kodu', ''))
-            self.entries['urun_adi'].setText(self.urun_duzenle_data.get('urun_adi', ''))
-            self.entries['urun_detayi'].setPlainText(self.urun_duzenle_data.get('urun_detayi', ''))
-            self.entries['alis_fiyati_kdv_dahil'].setText(f"{self.urun_duzenle_data.get('alis_fiyati_kdv_dahil', 0.0):.2f}".replace('.',','))
-            self.entries['satis_fiyati_kdv_dahil'].setText(f"{self.urun_duzenle_data.get('satis_fiyati_kdv_dahil', 0.0):.2f}".replace('.',','))
-            self.entries['kdv_orani'].setText(f"{self.urun_duzenle_data.get('kdv_orani', 20):.0f}")
-            self.entries['stok_miktari'].setText(f"{self.urun_duzenle_data.get('stok_miktari', 0.0):.2f}".replace('.',','))
-            self.entries['min_stok_seviyesi'].setText(f"{self.urun_duzenle_data.get('min_stok_seviyesi', 0.0):.2f}".replace('.',','))
-            self.urun_resmi_path = self.urun_duzenle_data.get('urun_resmi_yolu')
+        if self.stok_duzenle_data:
+            # API'den gelen veriye göre alanları doldur
+            self.entries['kod'].setText(self.stok_duzenle_data.get('kod', ''))
+            self.entries['ad'].setText(self.stok_duzenle_data.get('ad', ''))
+            self.entries['detay'].setPlainText(self.stok_duzenle_data.get('detay', ''))
+            self.entries['alis_fiyati'].setText(f"{self.stok_duzenle_data.get('alis_fiyati', 0.0):.2f}".replace('.',','))
+            self.entries['satis_fiyati'].setText(f"{self.stok_duzenle_data.get('satis_fiyati', 0.0):.2f}".replace('.',','))
+            self.entries['kdv_orani'].setText(f"{self.stok_duzenle_data.get('kdv_orani', 0):.0f}") # API'den gelen KDV oranı
+            self.entries['stok_miktari'].setText(f"{self.stok_duzenle_data.get('stok_miktari', 0.0):.2f}".replace('.',','))
+            self.entries['min_stok_seviyesi'].setText(f"{self.stok_duzenle_data.get('min_stok_seviyesi', 0.0):.2f}".replace('.',','))
+            
+            self.urun_resmi_path = self.stok_duzenle_data.get('urun_resmi_yolu') # API'den gelen resim yolu
             self._load_urun_resmi()
             QTimer.singleShot(150, self._set_combobox_defaults)
+            self._calculate_kar_orani() # Kar oranını yüklenen verilere göre hesapla
         else:
-            self.entries['urun_kodu'].setText(self.db.get_next_stok_kodu())
+            # Yeni stok için kod otomatik API tarafından atanacaksa boş bırakılır,
+            # aksi takdirde manuel giriş veya db.get_next_stok_kodu() gibi bir API çağrısı gerekir.
+            # Şu anki API'nin stok kodu otomatik atadığını varsayıyoruz.
+            self.entries['kod'].setText("Otomatik Atanacak") # Kullanıcıya bilgi ver
+            self.entries['kod'].setReadOnly(True) # Kodu manuel değiştirmeyi engelle
     
     def _set_combobox_defaults(self):
-        if not self.urun_duzenle_data: return
-        for nitelik in self.combos.keys():
-            combo = self.combos[nitelik]
-            target_id = self.urun_duzenle_data.get(f"{nitelik}_id")
+        if not self.stok_duzenle_data: return
+        
+        # Nitelik tiplerini ve ilgili combobox'ları eşle
+        nitelik_tipleri_map = {
+            'kategori': 'kategori_id',
+            'marka': 'marka_id',
+            'urun_grubu': 'urun_grubu_id',
+            'birim': 'birim_id', # 'urun_birimi_id' yerine 'birim_id'
+            'mense': 'mense_id'
+        }
+
+        for combo_key, data_key in nitelik_tipleri_map.items():
+            combo = self.combos[combo_key]
+            target_id = self.stok_duzenle_data.get(data_key)
             if target_id is not None:
+                # findData, userData ile eşleşir
                 index = combo.findData(target_id)
-                if index != -1: combo.setCurrentIndex(index)
+                if index != -1:
+                    combo.setCurrentIndex(index)
+                else:
+                    logger.warning(f"Combobox '{combo_key}' için ID '{target_id}' bulunamadı.")
     
     def _yukle_combobox_verileri(self):
-        nitelikler = {'kategori': 'kategoriler', 'marka': 'markalar', 'urun_grubu': 'urun_gruplari', 'urun_birimi': 'urun_birimleri', 'mense': 'ulkeler'}
-        for nitelik, path in nitelikler.items():
-            combo = self.combos[nitelik]; combo.clear(); combo.addItem("Seçim Yok", None)
-            try:
-                response = requests.get(f"{API_BASE_URL}/nitelikler/{path}")
-                response.raise_for_status()
-                for item in response.json():
-                    ad_key = next((key for key in item if key.endswith('_adi')), None)
-                    if ad_key: combo.addItem(item[ad_key], item['id'])
-            except requests.exceptions.RequestException as e: print(f"Hata: {nitelik} verileri çekilemedi - {e}")
-            
-    def _otomatik_fiyat_doldur(self, source, price_type):
-        active_widget = QApplication.focusWidget()
-        if source == 'haric' and price_type == 'alis' and active_widget != self.entries['alis_fiyati_kdv_haric']: return
-        if source == 'dahil' and price_type == 'alis' and active_widget != self.entries['alis_fiyati_kdv_dahil']: return
-        if source == 'haric' and price_type == 'satis' and active_widget != self.entries['satis_fiyati_kdv_haric']: return
-        if source == 'dahil' and price_type == 'satis' and active_widget != self.entries['satis_fiyati_kdv_dahil']: return
-
+        """API'den tüm nitelikleri çeker ve ilgili combobox'lara doldurur."""
         try:
-            kdv_str = self.entries['kdv_orani'].text().replace(',', '.'); kdv = float(kdv_str) if kdv_str else 0.0
-            kdv_carpan = 1 + kdv / 100
+            all_nitelikler = self.db.nitelik_listesi_al()
+        except Exception as e:
+            logger.error(f"Nitelik verileri çekilemedi: {e}")
+            QMessageBox.warning(self, "Hata", f"Nitelik verileri yüklenirken bir hata oluştu: {e}")
+            return
+
+        # Nitelik tiplerini ve ilgili combobox'ları eşle
+        nitelik_tipleri_map = {
+            'kategori': 'Kategori',
+            'marka': 'Marka',
+            'urun_grubu': 'Ürün Grubu',
+            'birim': 'Birim', # API'deki değer tipi 'Birim' olmalı
+            'mense': 'Menşe' # API'deki değer tipi 'Menşe' olmalı
+        }
+
+        for combo_key, nitelik_tipi in nitelik_tipleri_map.items():
+            combo = self.combos[combo_key]
+            combo.clear()
+            combo.addItem("Seçim Yok", None) # İlk öğe olarak "Seçim Yok" ekle
+
+            filtered_nitelikler = [n for n in all_nitelikler if n.get('deger_tipi') == nitelik_tipi]
             
-            widgets = {'alis': (self.entries['alis_fiyati_kdv_haric'], self.entries['alis_fiyati_kdv_dahil']), 'satis': (self.entries['satis_fiyati_kdv_haric'], self.entries['satis_fiyati_kdv_dahil'])}
-            haric_widget, dahil_widget = widgets[price_type]
+            for item in filtered_nitelikler:
+                # Nitelik objesinde 'ad' alanı olduğunu varsayıyoruz
+                item_ad = item.get('ad')
+                item_id = item.get('id')
+                if item_ad and item_id is not None:
+                    combo.addItem(item_ad, item_id)
+            logger.info(f"{nitelik_tipi} combobox başarıyla yüklendi.")
 
-            if source == 'haric':
-                haric_val_str = haric_widget.text().replace(',', '.'); haric_val = float(haric_val_str) if haric_val_str else 0.0
-                dahil_val = haric_val * kdv_carpan
-                dahil_widget.blockSignals(True); dahil_widget.setText(f"{dahil_val:.2f}".replace('.', ',')); dahil_widget.blockSignals(False)
-            elif source == 'dahil':
-                dahil_val_str = dahil_widget.text().replace(',', '.'); dahil_val = float(dahil_val_str) if dahil_val_str else 0.0
-                haric_val = dahil_val / kdv_carpan if kdv_carpan != 0 else 0.0
-                haric_widget.blockSignals(True); haric_widget.setText(f"{haric_val:.2f}".replace('.', ',')); haric_widget.blockSignals(False)
-            self._calculate_kar_orani()
-        except (ValueError, ZeroDivisionError): pass
-
-    def _update_all_prices_on_kdv_change(self):
-        self._otomatik_fiyat_doldur('dahil', 'alis'); self._otomatik_fiyat_doldur('dahil', 'satis')
-        
+    # Otomatik fiyat doldurma fonksiyonları sadeleştirildi, çünkü API'de tek fiyat alanı var
     def _calculate_kar_orani(self):
+        """Alış ve satış fiyatlarına göre kar oranını hesaplar."""
         try:
-            alis_fiyati_str = self.entries['alis_fiyati_kdv_dahil'].text().replace(',', '.'); alis_fiyati = float(alis_fiyati_str) if alis_fiyati_str else 0.0
-            satis_fiyati_str = self.entries['satis_fiyati_kdv_dahil'].text().replace(',', '.'); satis_fiyati = float(satis_fiyati_str) if satis_fiyati_str else 0.0
+            alis_fiyati_str = self.entries['alis_fiyati'].text().replace(',', '.'); alis_fiyati = float(alis_fiyati_str) if alis_fiyati_str else 0.0
+            satis_fiyati_str = self.entries['satis_fiyati'].text().replace(',', '.'); satis_fiyati = float(satis_fiyati_str) if satis_fiyati_str else 0.0
+            
+            # KDV oranı da kar oranını etkileyebilir, ancak API'de KDV dahil/hariç fiyat ayrımı kaldırıldı.
+            # Eğer KDV'nin kar oranına etkisi hesaplanacaksa, bu mantık buraya eklenebilir.
+            # Şu an için sadece alış ve satış fiyatları üzerinden basit kar oranı hesaplanıyor.
+            
             kar_orani = ((satis_fiyati - alis_fiyati) / alis_fiyati) * 100 if alis_fiyati > 0 else 0.0
             self.label_kar_orani.setText(f"% {kar_orani:,.2f}".replace('.',','))
-        except (ValueError, ZeroDivisionError): self.label_kar_orani.setText("Hesaplanamadı")
+        except (ValueError, ZeroDivisionError):
+            self.label_kar_orani.setText("Hesaplanamadı")
+            logger.warning("Kar oranı hesaplanırken hata oluştu (geçersiz değer veya sıfıra bölme).")
 
     def kaydet(self):
-        if not self.entries['urun_adi'].text().strip(): QMessageBox.warning(self, "Eksik Bilgi", "Ürün Adı alanı boş bırakılamaz."); return
+        """Formdaki bilgileri toplayıp API üzerinden stok ekler veya günceller."""
+        if not self.entries['ad'].text().strip(): # 'urun_adi' yerine 'ad'
+            QMessageBox.warning(self, "Eksik Bilgi", "Stok Adı alanı boş bırakılamaz."); return
         
         data = {}
         try:
             for key, widget in self.entries.items():
+                if key == 'kod' and not self.stok_id: # Yeni ürün eklerken kodu gönderme, API atayacak
+                    continue
                 text_value = widget.text() if isinstance(widget, QLineEdit) else widget.toPlainText()
-                if any(substr in key for substr in ['fiyat', 'stok', 'seviye', 'kdv']): 
+                if any(substr in key for substr in ['fiyati', 'stok', 'seviye', 'kdv']): # 'fiyat' yerine 'fiyati'
                     data[key] = float(text_value.replace(',', '.') if text_value else 0.0)
-                else: data[key] = text_value.strip()
-            for key, combo in self.combos.items(): data[f"{key}_id"] = combo.currentData()
-        except ValueError: QMessageBox.critical(self, "Geçersiz Değer", "Lütfen sayısal alanları doğru formatta girin."); return
+                else:
+                    data[key] = text_value.strip()
+            
+            # Combobox'lardan seçilen nitelik ID'lerini ekle
+            data['kategori_id'] = self.combos['kategori'].currentData()
+            data['marka_id'] = self.combos['marka'].currentData()
+            data['urun_grubu_id'] = self.combos['urun_grubu'].currentData()
+            data['birim_id'] = self.combos['birim'].currentData() # 'urun_birimi_id' yerine 'birim_id'
+            data['mense_id'] = self.combos['mense'].currentData()
+
+        except ValueError:
+            QMessageBox.critical(self, "Geçersiz Değer", "Lütfen sayısal alanları doğru formatta girin."); return
         
-        if not self.urun_id: data.pop('stok_miktari', None) 
-        data['urun_resmi_yolu'] = self.urun_resmi_path
+        data['urun_resmi_yolu'] = self.urun_resmi_path # Resim yolu veri tabanına kaydedilecek
 
         try:
-            if self.urun_id:
-                api_url = f"{API_BASE_URL}/stoklar/{self.urun_id}"; response = requests.put(api_url, json=data)
+            if self.stok_id:
+                # Mevcut stoku güncelle
+                response = self.db.stok_guncelle(self.stok_id, data)
             else:
-                api_url = f"{API_BASE_URL}/stoklar/"; response = requests.post(api_url, json=data)
-            response.raise_for_status()
-            QMessageBox.information(self, "Başarılı", "Ürün bilgileri başarıyla kaydedildi.")
-            if self.yenile_callback: self.yenile_callback()
-            self.accept()
-        except requests.exceptions.RequestException as e:
-            error_detail = str(e)
-            if e.response is not None:
-                try: error_detail = e.response.json().get('detail', str(e.response.content))
-                except ValueError: pass
-            QMessageBox.critical(self, "API Hatası", f"Ürün kaydedilirken bir hata oluştu:\n{error_detail}")
+                # Yeni stok ekle
+                response = self.db.stok_ekle(data)
+            
+            QMessageBox.information(self, "Başarılı", "Stok bilgileri başarıyla kaydedildi.")
+            self.data_updated.emit() # Ana pencereye veri güncellendi sinyali gönder
+            self.accept() # Pencereyi kapat
+            logger.info(f"Stok kaydedildi/güncellendi: ID {self.stok_id if self.stok_id else 'Yeni'}")
+        except Exception as e:
+            error_message = f"Stok kaydedilirken bir hata oluştu: {e}"
+            QMessageBox.critical(self, "API Hatası", error_message)
+            logger.error(f"Stok kaydetme/güncelleme hatası: {e}", exc_info=True)
 
-    def _urun_sil(self):
-        if not self.urun_id: return
-        reply = QMessageBox.question(self, "Onay", f"'{self.entries['urun_adi'].text()}' ürününü silmek istediğinizden emin misiniz?", QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
+    def _stok_sil(self): # 'urun_sil' yerine '_stok_sil'
+        """Seçili stoku API üzerinden siler."""
+        if not self.stok_id:
+            QMessageBox.warning(self, "Uyarı", "Silinecek bir stok seçilmedi."); return
+        
+        reply = QMessageBox.question(self, "Onay", f"'{self.entries['ad'].text()}' stokunu silmek istediğinizden emin misiniz?", # 'urun_adi' yerine 'ad'
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
             try:
-                api_url = f"{API_BASE_URL}/stoklar/{self.urun_id}"; response = requests.delete(api_url); response.raise_for_status()
-                QMessageBox.information(self, "Başarılı", "Ürün başarıyla silindi.")
-                if self.yenile_callback: self.yenile_callback()
+                self.db.stok_sil(self.stok_id)
+                QMessageBox.information(self, "Başarılı", "Stok başarıyla silindi.")
+                self.data_updated.emit()
                 self.accept()
-            except requests.exceptions.RequestException as e: QMessageBox.critical(self, "API Hatası", f"Ürün silinirken bir hata oluştu: {e}")
+                logger.info(f"Stok silindi: ID {self.stok_id}")
+            except Exception as e:
+                QMessageBox.critical(self, "Hata", f"Stok silinirken bir hata oluştu: {e}")
+                logger.error(f"Stok silme hatası: {e}", exc_info=True)
 
     def _resim_sec(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Ürün Resmi Seç", "", "Resim Dosyaları (*.png *.jpg *.jpeg)")
+        """Ürün resmi seçme ve kopyalama işlemi."""
+        file_path, _ = QFileDialog.getOpenFileName(self, "Stok Resmi Seç", "", "Resim Dosyaları (*.png *.jpg *.jpeg)")
         if file_path:
             try:
-                # self.db.db_name artık veritabani.py'den geliyor (SQLite kısmı)
-                # Yeni mimaride bu path'i API üzerinden yönetmek daha doğru olabilir.
-                # Ancak şimdilik bu şekilde devam edelim.
+                # Resim dosyalarını uygulamanın 'data/urun_resimleri' klasörüne kopyala
+                # Bu kısım, API'nin resim yükleme endpoint'i varsa gelecekte değiştirilmelidir.
+                # Şimdilik yerel dosya kopyalama devam ediyor.
                 base_dir = os.path.dirname(os.path.abspath(__file__)) # pencereler.py'nin bulunduğu dizin
                 data_dir = os.path.join(base_dir, 'data') # data klasörü
                 urun_resimleri_klasoru = os.path.join(data_dir, "urun_resimleri")
@@ -4792,43 +4838,64 @@ class UrunKartiPenceresi(QDialog):
                 yeni_path = os.path.join(urun_resimleri_klasoru, os.path.basename(file_path))
                 shutil.copy2(file_path, yeni_path)
                 self.urun_resmi_path = yeni_path
+                logger.info(f"Resim kopyalandı: {yeni_path}")
             except Exception as e:
                 QMessageBox.warning(self, "Hata", f"Resim kopyalanamadı: {e}")
-                self.urun_resmi_path = file_path # Kopyalanamazsa orijinal yolu kullan
+                logger.error(f"Resim kopyalama hatası: {e}", exc_info=True)
+                self.urun_resmi_path = "" # Hata durumunda yolu temizle
             self._load_urun_resmi()
 
     def _resim_sil(self):
-        self.urun_resmi_path = ""; self._load_urun_resmi()
+        """Ürün resmini temizler."""
+        self.urun_resmi_path = ""
+        self._load_urun_resmi()
+        logger.info("Ürün resmi silindi.")
     
     def _load_urun_resmi(self):
+        """Kaydedilen resim yolundan resmi yükler ve QLabel'de gösterir."""
         if self.urun_resmi_path and os.path.exists(self.urun_resmi_path):
             self.original_pixmap = QPixmap(self.urun_resmi_path)
             self._resize_image()
+            self.urun_resmi_label.setText("") # Resim varsa metni temizle
+            logger.debug(f"Resim yüklendi: {self.urun_resmi_path}")
         else:
-            self.original_pixmap = None; self.urun_resmi_label.setText("Resim Yok"); self.urun_resmi_label.setPixmap(QPixmap())
+            self.original_pixmap = None
+            self.urun_resmi_label.setText("Resim Yok")
+            self.urun_resmi_label.setPixmap(QPixmap()) # Pixmap'i temizle
+            logger.debug("Resim yok veya bulunamadı.")
 
     def resizeEvent(self, event):
-        super().resizeEvent(event); QTimer.singleShot(50, self._resize_image) # Küçük bir gecikme ekle
+        """Pencere boyutu değiştiğinde resmi yeniden boyutlandırır."""
+        super().resizeEvent(event)
+        QTimer.singleShot(50, self._resize_image) # Küçük bir gecikme ekle
 
     def _resize_image(self):
+        """Resmi QLabel boyutuna göre ölçekler."""
         if self.original_pixmap and not self.original_pixmap.isNull():
             scaled_pixmap = self.original_pixmap.scaled(self.urun_resmi_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self.urun_resmi_label.setPixmap(scaled_pixmap)
             
     def _stok_ekle_penceresi_ac(self):
-        if not self.urun_id:
-            QMessageBox.warning(self, "Uyarı", "Lütfen önce ürünü kaydedin.")
+        """Stok ekleme penceresini açar."""
+        if not self.stok_id:
+            QMessageBox.warning(self, "Uyarı", "Lütfen önce stoku kaydedin.")
             return
         
-        # Güncel stok miktarını al
-        mevcut_stok_str = self.entries['stok_miktari'].text().replace(',', '.')
-        mevcut_stok = float(mevcut_stok_str)
-        
+        # Güncel stok miktarını API'den çekerek al
+        try:
+            current_stok_data = self.db.stok_getir_by_id(self.stok_id)
+            mevcut_stok = current_stok_data.get('stok_miktari', 0.0)
+        except Exception as e:
+            QMessageBox.critical(self, "Hata", f"Mevcut stok miktarı alınırken hata oluştu: {e}")
+            logger.error(f"Stok miktarı alınırken hata: {e}", exc_info=True)
+            return
+
+        from pencereler import StokHareketiPenceresi # Döngüsel bağımlılığı önlemek için burada import edildi
         dialog = StokHareketiPenceresi(
             self, # parent
             self.db, # db_manager
-            self.urun_id,
-            self.entries['urun_adi'].text(),
+            self.stok_id,
+            self.entries['ad'].text(), # 'urun_adi' yerine 'ad'
             mevcut_stok,
             "EKLE",
             self.refresh_data_and_ui # Bu pencereyi yenileyecek callback
@@ -4836,19 +4903,26 @@ class UrunKartiPenceresi(QDialog):
         dialog.exec()
         
     def _stok_eksilt_penceresi_ac(self):
-        if not self.urun_id:
-            QMessageBox.warning(self, "Uyarı", "Lütfen önce ürünü kaydedin.")
+        """Stok eksiltme penceresini açar."""
+        if not self.stok_id:
+            QMessageBox.warning(self, "Uyarı", "Lütfen önce stoku kaydedin.")
             return
 
-        # Güncel stok miktarını al
-        mevcut_stok_str = self.entries['stok_miktari'].text().replace(',', '.')
-        mevcut_stok = float(mevcut_stok_str)
+        # Güncel stok miktarını API'den çekerek al
+        try:
+            current_stok_data = self.db.stok_getir_by_id(self.stok_id)
+            mevcut_stok = current_stok_data.get('stok_miktari', 0.0)
+        except Exception as e:
+            QMessageBox.critical(self, "Hata", f"Mevcut stok miktarı alınırken hata oluştu: {e}")
+            logger.error(f"Stok miktarı alınırken hata: {e}", exc_info=True)
+            return
         
+        from pencereler import StokHareketiPenceresi # Döngüsel bağımlılığı önlemek için burada import edildi
         dialog = StokHareketiPenceresi(
             self, # parent
             self.db, # db_manager
-            self.urun_id,
-            self.entries['urun_adi'].text(),
+            self.stok_id,
+            self.entries['ad'].text(), # 'urun_adi' yerine 'ad'
             mevcut_stok,
             "EKSILT",
             self.refresh_data_and_ui # Bu pencereyi yenileyecek callback
@@ -4856,37 +4930,35 @@ class UrunKartiPenceresi(QDialog):
         dialog.exec()
 
     def refresh_data_and_ui(self):
-        """Ürün kartı verilerini yeniden yükler ve UI'ı günceller."""
+        """Stok kartı verilerini yeniden yükler ve UI'ı günceller."""
+        if not self.stok_id: return # Stok ID yoksa yenileme yapma
+
         try:
             # API'den ürünün güncel verilerini çek
-            response = requests.get(f"{API_BASE_URL}/stoklar/{self.urun_id}")
-            response.raise_for_status()
-            updated_urun_data = response.json()
+            updated_stok_data = self.db.stok_getir_by_id(self.stok_id)
 
             # UI elementlerini güncel verilerle doldur
-            self.entries['stok_miktari'].setText(f"{updated_urun_data.get('stok_miktari', 0.0):.2f}".replace('.',','))
-            self.entries['min_stok_seviyesi'].setText(f"{updated_urun_data.get('min_stok_seviyesi', 0.0):.2f}".replace('.',','))
+            self.entries['stok_miktari'].setText(f"{updated_stok_data.get('stok_miktari', 0.0):.2f}".replace('.',','))
+            self.entries['min_stok_seviyesi'].setText(f"{updated_stok_data.get('min_stok_seviyesi', 0.0):.2f}".replace('.',','))
             
             # Diğer ilgili alanları da güncelleyebilirsiniz
-            self.entries['alis_fiyati_kdv_dahil'].setText(f"{updated_urun_data.get('alis_fiyati_kdv_dahil', 0.0):.2f}".replace('.',','))
-            self.entries['satis_fiyati_kdv_dahil'].setText(f"{updated_urun_data.get('satis_fiyati_kdv_dahil', 0.0):.2f}".replace('.',','))
-            self.entries['kdv_orani'].setText(f"{updated_urun_data.get('kdv_orani', 20):.0f}")
+            self.entries['alis_fiyati'].setText(f"{updated_stok_data.get('alis_fiyati', 0.0):.2f}".replace('.',','))
+            self.entries['satis_fiyati'].setText(f"{updated_stok_data.get('satis_fiyati', 0.0):.2f}".replace('.',','))
+            self.entries['kdv_orani'].setText(f"{updated_stok_data.get('kdv_orani', 0):.0f}")
 
             # Kar oranını yeniden hesapla
             self._calculate_kar_orani()
 
-            # Dışarıdaki listeyi de yenile
-            if self.yenile_callback:
-                self.yenile_callback()
+            # Dışarıdaki listeyi de yenile (main.py'deki _initial_load_data gibi)
+            self.data_updated.emit()
                 
-            QMessageBox.information(self, "Başarılı", "Ürün verileri güncellendi.")
+            QMessageBox.information(self, "Başarılı", "Stok verileri güncellendi.")
+            logger.info(f"Stok kartı verileri yenilendi: ID {self.stok_id}")
 
-        except requests.exceptions.RequestException as e:
-            QMessageBox.critical(self, "API Hatası", f"Ürün verileri yenilenirken hata oluştu:\n{e}")
-            logging.error(f"UrunKartiPenceresi refresh_data_and_ui hatası: {e}", exc_info=True)
         except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Ürün verileri yenilenirken beklenmeyen bir hata oluştu:\n{e}")
-            logging.error(f"UrunKartiPenceresi refresh_data_and_ui beklenmeyen hata: {e}", exc_info=True)
+            QMessageBox.critical(self, "Hata", f"Stok verileri yenilenirken hata oluştu:\n{e}")
+            logger.error(f"StokKartiPenceresi refresh_data_and_ui hatası: {e}", exc_info=True)
+
 
 class YeniKasaBankaEklePenceresi(QDialog):
     def __init__(self, parent, db_manager, yenile_callback, hesap_duzenle=None, app_ref=None):
@@ -6162,7 +6234,7 @@ class TarihAraligiDialog(QDialog): # simpledialog.Dialog yerine QDialog kullanı
 
         self.bas_tarih_entry_dialog.setFocus() # İlk odaklanılacak widget
 
-    def _apply(self): # apply metodu Tkinter'a özel, burada manuel çağrılacak
+    def _apply(self): 
         bas_t_str_dialog = self.bas_tarih_entry_dialog.text()
         bit_t_str_dialog = self.bit_tarih_entry_dialog.text()
         try:

@@ -30,7 +30,7 @@ from matplotlib.figure import Figure
 # Yerel Uygulama Modülleri
 from veritabani import OnMuhasebe
 from hizmetler import FaturaService, TopluIslemService
-from pencereler import YeniMusteriEklePenceresi, YeniTedarikciEklePenceresi, UrunKartiPenceresi,YeniKasaBankaEklePenceresi
+from pencereler import YeniMusteriEklePenceresi, YeniTedarikciEklePenceresi, StokKartiPenceresi,YeniKasaBankaEklePenceresi
 from yardimcilar import DatePickerDialog, normalize_turkish_chars, setup_locale
 from datetime import datetime
 import requests 
@@ -453,7 +453,7 @@ class StokYonetimiSayfasi(QWidget):
 
     def yeni_urun_ekle_penceresi(self):
         try:
-            dialog = UrunKartiPenceresi(
+            dialog = StokKartiPenceresi(
                 self, self.db, self.stok_listesini_yenile,
                 urun_duzenle=None, app_ref=self.app
             )
@@ -475,7 +475,7 @@ class StokYonetimiSayfasi(QWidget):
             response = requests.get(api_url); response.raise_for_status()
             urun_detaylari = response.json()
 
-            dialog = UrunKartiPenceresi(
+            dialog = StokKartiPenceresi(
                 self, self.db, self.stok_listesini_yenile,
                 urun_duzenle=urun_detaylari, app_ref=self.app
             )
@@ -1704,9 +1704,6 @@ class SiparisListesiSayfasi(QWidget): # ttk.Frame yerine QWidget
         self._on_siparis_select() # Buton durumlarını ayarla
 
     def on_item_double_click(self, item, column): # item ve column sinyalden gelir
-        # Tkinter'daki identify_row(event.y) gibi bir karşılık burada doğrudan item objesidir.
-        # Bu metod, FaturaDetayPenceresi'nin PySide6 versiyonu yazıldığında etkinleşecektir.
-        # Şimdilik sadece placeholder.
         QMessageBox.information(self.app, "Bilgi", "Bu işlem bir fatura değildir, detayı görüntülenemez (Placeholder).")
 
     def yeni_siparis_penceresi_ac(self, siparis_tipi):
@@ -2608,8 +2605,6 @@ class AlisFaturalariListesi(BaseFaturaListesi):
         super().__init__(parent, db_manager, app_ref, fatura_tipi=fatura_tipi)
         
 class TumFaturalarListesi(QWidget): # BaseFaturaListesi'nden değil, QWidget'ten miras alıyor.
-                                   # Tkinter'da BaseFaturaListesi'nden miras alıyordu.
-                                   # Bu bir placeholder olduğu için şimdilik önemli değil.
     def __init__(self, parent, db_manager, app_ref, fatura_tipi):
         super().__init__(parent)
         self.db = db_manager
@@ -2647,7 +2642,7 @@ class BaseIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
         self.secili_cari_id = None
         self.secili_cari_adi = None
 
-        self.after_timer = QTimer(self) # Tkinter'daki after_id yerine QTimer
+        self.after_timer = QTimer(self) 
         self.after_timer.setSingleShot(True)
 
         self.sv_genel_iskonto_degeri = "0,00" # Başlangıç değeri
@@ -2995,8 +2990,6 @@ class BaseIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
         alt_urun_ekle_layout.addWidget(self.btn_sepete_ekle)
 
     def _select_product_from_search_list_and_focus_quantity(self, item): # item itemDoubleClicked sinyalinden gelir
-        # Tkinter'daki event objesi yerine PySide6'da item objesi gelir.
-        # Bu metod, QLineEdit'e odaklanmayı ve metni seçmeyi sağlar.
         self.secili_urun_bilgilerini_goster_arama_listesinden(item) # Ürün bilgilerini doldur
         self.mik_e.setFocus() # Miktar kutusuna odaklan
         self.mik_e.selectAll() # Metni seçili yap
@@ -3067,7 +3060,6 @@ class BaseIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
         alt_layout.addWidget(self.kaydet_buton, 0, 3, 2, 1, Qt.AlignRight) # Row 0, Col 3, span 2 rows, 1 col, Right
 
     def _open_sepet_context_menu(self, pos): # pos parametresi customContextMenuRequested sinyalinden gelir
-        # Tkinter'daki identify_row ve itemDoubleClicked yerine PySide6'da daha doğrudan erişim var.
 
         item = self.sep_tree.itemAt(pos) # Tıklanan öğeyi al
         if not item:
@@ -3702,7 +3694,7 @@ class BaseIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
         except ValueError:
             return
         
-        # UrunKartiPenceresi'nin PySide6 versiyonu burada çağrılacak.
+        # StokKartiPenceresi'nin PySide6 versiyonu burada çağrılacak.
         QMessageBox.information(self.app, "Ürün Kartı", f"Ürün ID: {urun_id} için ürün kartı açılacak (Placeholder).")
 
     def _open_urun_karti_from_search(self, item, column): # item ve column sinyalden gelir
@@ -3711,7 +3703,7 @@ class BaseIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
         
         if urun_id is None: return
 
-        # UrunKartiPenceresi'nin PySide6 versiyonu burada çağrılacak.
+        # StokKartiPenceresi'nin PySide6 versiyonu burada çağrılacak.
         QMessageBox.information(self.app, "Ürün Kartı", f"Ürün ID: {urun_id} için ürün kartı açılacak (Placeholder).")
 
     def _format_numeric_line_edit(self, line_edit: QLineEdit, decimals: int):
@@ -3740,7 +3732,6 @@ class BaseIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
 # FaturaOlusturmaSayfasi sınıfı (Dönüştürülmüş PySide6 versiyonu)
 class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
     def __init__(self, parent, db_manager, app_ref, fatura_tipi, duzenleme_id=None, yenile_callback=None, initial_cari_id=None, initial_urunler=None, initial_data=None):
-        # Tkinter'daki tk.BooleanVar yerine doğrudan boolean kullanacağız.
         self.iade_modu_aktif = False 
         self.original_fatura_id_for_iade = None
 
@@ -3859,7 +3850,6 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         takvim_button_tarih.setFixedWidth(30)
         takvim_button_tarih.clicked.connect(lambda: DatePickerDialog(self.app, self.fatura_tarihi_entry))
         layout.addWidget(takvim_button_tarih, 0, 4)
-        # setup_date_entry Tkinter'a özel. PySide6'da QDateEdit veya QCalendarWidget ile daha iyi entegrasyon yapılmalı.
         self.form_entries_order.append(self.fatura_tarihi_entry)
 
         # Cari Seçim
@@ -4290,7 +4280,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         kasa_banka_id_db = fatura_ana['kasa_banka_id']
 
         # Formu doldurma...
-        self.f_no_e.setEnabled(True) # Tkinter'daki config(state=NORMAL)
+        self.f_no_e.setEnabled(True) 
         self.f_no_e.setText(f_no)
         self.fatura_tarihi_entry.setText(tarih_db)
 
@@ -4461,7 +4451,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
 
         # Kasa/Banka alanının görünürlüğünü ve aktifliğini ayarla
         if secili_odeme_turu in pesin_odeme_turleri:
-            self.islem_hesap_cb.setEnabled(True) # Tkinter'daki state="readonly" yerine enable
+            self.islem_hesap_cb.setEnabled(True) 
             
             # Varsayılan Kasa/Banka Seçimi
             varsayilan_kb_db = self.db.get_kasa_banka_by_odeme_turu(secili_odeme_turu)
@@ -4492,7 +4482,6 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
 
 class SiparisOlusturmaSayfasi(BaseIslemSayfasi):
     def __init__(self, parent, db_manager, app_ref, islem_tipi, duzenleme_id=None, yenile_callback=None, initial_cari_id=None, initial_urunler=None, initial_data=None):
-        # iade_modu_aktif Tkinter'a özeldi, siparişlerde kullanılmıyorsa kaldırılabilir veya bool olarak kalabilir.
         self.iade_modu_aktif = False # PySide6'da doğrudan boolean
         self.original_fatura_id_for_iade = None # Siparişler için geçerli değil
 
@@ -7046,7 +7035,7 @@ class StokHareketleriSekmesi(QWidget): # ttk.Frame yerine QWidget
                 QMessageBox.information(self.app, "Başarılı", message)
                 self._load_stok_hareketleri() # Bu sekmenin kendi listesini yenile
                 
-                # Parent pencere (UrunKartiPenceresi) referansı varsa, onu da yenile
+                # Parent pencere (StokKartiPenceresi) referansı varsa, onu da yenile
                 if self.parent_pencere and hasattr(self.parent_pencere, 'refresh_data_and_ui'):
                     try:
                         self.parent_pencere.refresh_data_and_ui() # Ana ürün kartını yenile
@@ -7069,7 +7058,7 @@ class StokHareketleriSekmesi(QWidget): # ttk.Frame yerine QWidget
         """
         logging.debug("StokHareketleriSekmesi.refresh_data_and_ui çağrıldı.")
         # Bu metodun ne yapacağı, StokHareketleriSekmesi'nin kendisi değil,
-        # onu çağıran UrunKartiPenceresi'nin içindeki mantıkla ilgilidir.
+        # onu çağıran StokKartiPenceresi'nin içindeki mantıkla ilgilidir.
         # Bu sekme kendi listesini _load_stok_hareketleri ile yeniler.
         self._load_stok_hareketleri()
 

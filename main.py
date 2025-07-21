@@ -1,470 +1,327 @@
 import sys
 import os
+import json
 import logging
-import traceback
-from datetime import datetime, date, timedelta
-import multiprocessing
-import threading
-import sqlite3
-import shutil
-# PySide6 modülleri
-from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QLabel, 
-    QPushButton, QTabWidget, QStatusBar, QMessageBox, QFileDialog, QSizePolicy
-)
-from PySide6.QtCore import Qt, QTimer # QTimer eklendi
-from PySide6.QtGui import QIcon, QPixmap, QFont, QPalette, QColor
-# Yerel Uygulama Modülleri
-from pencereler import FaturaPenceresi 
-from veritabani import OnMuhasebe
+from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog
+from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QDate, Signal # Signal import edildi
+
+# Kendi modüllerimiz
+from arayuz import Ui_MainWindow
+from veritabani import OnMuhasebe  # Güncellenmiş OnMuhasebe sınıfını içe aktarıyoruz
 from hizmetler import FaturaService, TopluIslemService
-from yardimcilar import setup_locale
-from arayuz import MusteriYonetimiSayfasi, TedarikciYonetimiSayfasi, AnaSayfa, StokYonetimiSayfasi,FaturaListesiSayfasi,RaporlamaMerkeziSayfasi,GelirGiderSayfasi,FinansalIslemlerSayfasi,SiparisListesiSayfasi,KasaBankaYonetimiSayfasi
-# VERİTABANI VE LOG DOSYALARI İÇİN TEMEL DİZİN TANIMLAMA (ANA UYGULAMA GİRİŞ NOKTASI)
-if getattr(sys, 'frozen', False):
-    base_dir = os.path.dirname(sys.executable)
-else:
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+from raporlar import Raporlama
+# pencereler modülünden gerekli sınıfları burada import edeceğiz
+# Ancak döngüsel bağımlılığı önlemek için fonksiyonların içinde import edeceğiz.
 
-data_dir = os.path.join(base_dir, 'data')
-if not os.path.exists(data_dir):
-    os.makedirs(data_dir)
+# Logger kurulumu
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
-# LOGLAMA YAPILANDIRMASI (TÜM UYGULAMA İÇİN SADECE BURADA YAPILACAK)
-log_file_path = os.path.join(data_dir, 'application.log')
-logging.basicConfig(filename=log_file_path, level=logging.ERROR,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+# Veri dizini oluşturma (mevcutsa atla)
+_data_dir = os.path.join(os.path.dirname(__file__), 'data')
+os.makedirs(_data_dir, exist_ok=True)
 
+# Config dosyasını yükle veya oluştur
+_config_path = os.path.join(_data_dir, 'config.json')
 
-# _pdf_olusturma_islemi fonksiyonu, multiprocessing kullandığı için ayrı bir fonksiyon olarak kalabilir.
-# Ancak PySide6'da da main thread'i bloklamamak adına thread/process kullanımı önemlidir.
-def _pdf_olusturma_islemi(db_name_path, cari_tip, cari_id, bas_t, bit_t, dosya_yolu, result_queue):
+def load_config():
+    """Uygulama yapılandırmasını yükler."""
+    if os.path.exists(_config_path):
+        try:
+            with open(_config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            logger.error(f"Hatalı config.json dosyası: {_config_path}. Varsayılan yapılandırma kullanılıyor.")
+            return {"api_base_url": "http://127.0.0.1:8000"}
+    return {"api_base_url": "http://127.0.0.1:8000"} # Varsayılan API URL'si
+
+def save_config(config):
+    """Uygulama yapılandırmasını kaydeder."""
     try:
-        temp_db_manager = OnMuhasebe(db_name=db_name_path)
-        success, message = temp_db_manager.cari_ekstresi_pdf_olustur(cari_tip, cari_id, bas_t, bit_t, dosya_yolu)
-        result_queue.put((success, message))
-    except Exception as e:
-        error_message = f"PDF işleminde hata: {e}\n{traceback.format_exc()}"
-        logging.error(error_message)
-        result_queue.put((False, error_message))
-    finally:
-        if 'temp_db_manager' in locals() and temp_db_manager.conn:
-            temp_db_manager.conn.close()
+        with open(_config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=4)
+    except IOError as e:
+        logger.error(f"Config dosyası kaydedilirken hata oluştu: {e}")
 
-# main.py içinde PySide6 tabanlı App sınıfı
-# main.py dosyasındaki App sınıfının içindeki __init__ metodunun GÜNCELLENMİŞ HALİ
 class App(QMainWindow):
-    def __init__(self, db_manager):
+    def __init__(self):
         super().__init__()
-        self.db = db_manager
-        
-        self.pages = {} # Açılan sayfaları (widget'ları) saklamak için bir sözlük
+        self.ui = Ui_MainWindow()
+        self.ui.setupUi(self)
 
-        self.setWindowTitle("Çınar Yapı Ön Muhasebe Programı")
-        self.showMaximized()
-        self.setMinimumSize(800, 600)
+        # Yapılandırmayı yükle
+        self.config = load_config()
 
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.main_layout = QVBoxLayout(self.central_widget)
+        # OnMuhasebe sınıfını API URL'si ile başlat
+        self.db_manager = None # Başlangıçta None olarak ayarla
+        self._initialize_db_manager()
 
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        
-        self.notification_label = QLabel("")
-        self.notification_label.setStyleSheet("background-color: #FFD2D2; color: red; font-weight: bold; padding: 5px;")
-        self.notification_label.setAlignment(Qt.AlignCenter)
-        self.notification_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.status_bar.addPermanentWidget(self.notification_label)
-        self.notification_label.setVisible(False)
-        
-        self.login_user_and_start_main_ui((1, "admin", "admin"))
+        # Servis sınıflarını başlat
+        self.fatura_service = FaturaService(self.db_manager)
+        self.toplu_islem_service = TopluIslemService(self.db_manager)
+        self.raporlama = Raporlama(self.db_manager)
 
-    def login_user_and_start_main_ui(self, user_info):
-        self.current_user = user_info
-        self.setWindowTitle(f"Çınar Yapı Ön Muhasebe - Hoş Geldiniz, {self.current_user[1]} ({self.current_user[2].capitalize()})")
-        self.set_status_message(f"Hoş geldiniz, {self.current_user[1]}")
-        
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setTabsClosable(True)
-        self.tab_widget.tabCloseRequested.connect(self.close_tab)
-        self.main_layout.addWidget(self.tab_widget)
+        # UI bağlantıları ve ilk yüklemeler
+        self._setup_ui_connections()
+        self._initial_load_data()
 
-        self._create_menu_bar()
-        
-        self.show_tab("Ana Sayfa")
+        # Varsayılan tarihleri ayarla
+        self._set_default_dates()
 
-    def _create_menu_bar(self):
-        menu_bar = self.menuBar()
+        # Menü eylemleri bağlantıları
+        self.ui.actionStok_Kart.triggered.connect(self._stok_karti_penceresi_ac)
+        self.ui.actionM_teri_Kart.triggered.connect(self._musteri_karti_penceresi_ac)
+        self.ui.actionTedarik_i_Kart.triggered.connect(self._tedarikci_karti_penceresi_ac)
+        self.ui.actionKasa_Banka_Kart.triggered.connect(self._kasa_banka_karti_penceresi_ac)
+        self.ui.actionGelir_Gider_Kart.triggered.connect(self._gelir_gider_karti_penceresi_ac)
+        self.ui.actionFatura_Kart.triggered.connect(self._fatura_karti_penceresi_ac)
+        self.ui.action_rsiparis.triggered.connect(self._siparis_karti_penceresi_ac)
+        self.ui.actionCari_Hareketler.triggered.connect(self._cari_hareketler_penceresi_ac)
+        self.ui.actionNitelik_Y_netimi.triggered.connect(self._nitelik_yonetimi_penceresi_ac)
+        self.ui.actionToplu_Veri_Aktar_m.triggered.connect(self._toplu_veri_aktarim_penceresi_ac)
 
-        # Dosya Menüsü
-        file_menu = menu_bar.addMenu("Dosya")
-        file_menu.addAction("Şirket Bilgileri", self.show_company_info)
-        file_menu.addSeparator()
-        file_menu.addAction("Veritabanı Yedekle", self.backup_database)
-        file_menu.addAction("Veritabanı Geri Yükle", self.restore_database)
-        file_menu.addSeparator()
-        file_menu.addAction("Çıkış Yap", self.logout_and_show_login)
-        file_menu.addAction("Programdan Çık", self.close) # QMainWindow'un close metodu
+        # Raporlar menüsü bağlantıları
+        self.ui.actionM_teri_Raporu.triggered.connect(lambda: self._rapor_olustur("musteri"))
+        self.ui.actionTedarik_i_Raporu.triggered.connect(lambda: self._rapor_olustur("tedarikci"))
+        self.ui.actionStok_Raporu.triggered.connect(lambda: self._rapor_olustur("stok"))
+        self.ui.actionFatura_Raporu.triggered.connect(lambda: self._rapor_olustur("fatura"))
+        self.ui.actionKasa_Banka_Raporu.triggered.connect(lambda: self._rapor_olustur("kasa_banka"))
+        self.ui.actionGelir_Gider_Raporu.triggered.connect(lambda: self._rapor_olustur("gelir_gider"))
+        self.ui.actionCari_Hareket_Raporu.triggered.connect(lambda: self._rapor_olustur("cari_hareket"))
+        self.ui.actionSiparis_Raporu.triggered.connect(lambda: self._rapor_olustur("siparis"))
+        self.ui.actionNitelik_Raporu.triggered.connect(lambda: self._rapor_olustur("nitelik"))
 
-        # Yönetim Menüsü (sadece admin ise)
-        if self.current_user and self.current_user[2] == 'admin':
-            admin_menu = menu_bar.addMenu("Yönetim")
-            admin_menu.addAction("Kullanıcı Yönetimi", self.show_user_management)
-            admin_menu.addSeparator()
-            admin_menu.addAction("Toplu Veri Ekle", self.show_bulk_data_import)
-            admin_menu.addAction("Gelir/Gider Sınıflandırma Yönetimi", self.show_income_expense_category_management)
-            admin_menu.addAction("Veri Sıfırlama ve Temizleme", self.show_admin_utilities)
-            admin_menu.addSeparator()
-            admin_menu.addAction("Log Dosyasını Sıfırla", self.clear_log_file_ui)
-            admin_menu.addAction("Veritabanını Optimize Et", self.optimize_database_ui)
-            admin_menu.addAction("Eksik Stok Hareketlerini Oluştur (Tek Seferlik)", self.run_backfill_script_ui)
-        
-        # Raporlar Menüsü
-        reports_menu = menu_bar.addMenu("Raporlar")
-        reports_menu.addAction("Stok Raporu (Excel)", lambda: self.show_report_excel("Stok"))
-        reports_menu.addAction("Tarihsel Satış Raporu (Excel)", lambda: self.show_report_excel("Satış"))
-        reports_menu.addAction("Tarihsel Satış Raporu (PDF)", lambda: self.show_report_pdf("Satış"))
-        reports_menu.addAction("Nakit Akış Raporu", lambda: self.show_report("Nakit Akışı")) # Şimdilik placeholder
-        reports_menu.addAction("Kâr/Zarar Raporu", lambda: self.show_report("Kâr ve Zarar")) # Şimdilik placeholder
-        reports_menu.addSeparator()
-        reports_menu.addAction("Finansal Raporlar ve Analiz", lambda: self.show_report("Genel Bakış")) # QTabWidget'a yönlendirme
-        reports_menu.addSeparator()
-        reports_menu.addAction("Kritik Stok Uyarısı", self.show_critical_stock_warning)
-        reports_menu.addAction("Cari Hesap Yaşlandırma Raporu", lambda: self.show_report("Cari Hesaplar")) # QTabWidget'a yönlendirme
+        # Veritabanı işlemleri
+        self.ui.actionYedekle.triggered.connect(self._yedekle)
+        self.ui.actionGeri_Y_kle.triggered.connect(self._geri_yukle)
+        self.ui.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
 
-        # Hızlı Erişim Menüsü
-        quick_access_menu = menu_bar.addMenu("Hızlı Erişim")
-        # Örnek kısayollar. PySide'da kısayollar farklı entegre edilir.
-        quick_access_menu.addAction("Ana Sayfa", self.show_home_page)
-        quick_access_menu.addAction("Yeni Satış Faturası", lambda: self.show_invoice_form("SATIŞ"))
-        quick_access_menu.addAction("Yeni Alış Faturası", lambda: self.show_invoice_form("ALIŞ"))
-        quick_access_menu.addAction("Fatura Listesi", lambda: self.show_tab("Faturalar"))
-        quick_access_menu.addAction("Stok Yönetimi", lambda: self.show_tab("Stok Yönetimi"))
-        quick_access_menu.addAction("Müşteri Yönetimi", lambda: self.show_tab("Müşteri Yönetimi"))
-        quick_access_menu.addAction("Tedarikçi Yönetimi", lambda: self.show_tab("Tedarikçi Yönetimi"))
-        quick_access_menu.addAction("Finansal İşlemler", lambda: self.show_tab("Finansal İşlemler"))
-        quick_access_menu.addAction("Kasa/Banka Yönetimi", lambda: self.show_tab("Kasa/Banka"))
-        quick_access_menu.addAction("Yeni Müşteri Siparişi", lambda: self.show_order_form("SATIŞ_SIPARIS"))
-        quick_access_menu.addAction("Yeni Tedarikçi Siparişi", lambda: self.show_order_form("ALIŞ_SIPARIS"))
-        quick_access_menu.addAction("Sipariş Listesi", lambda: self.show_tab("Sipariş Yönetimi"))
+        # Durum çubuğunu güncelle
+        self._update_status_bar()
 
+    def _initialize_db_manager(self):
+        """OnMuhasebe yöneticisini API URL'si ile başlatır."""
+        try:
+            self.db_manager = OnMuhasebe(api_base_url=self.config["api_base_url"])
+            logger.info("Veritabanı yöneticisi API modu ile başarıyla başlatıldı.")
+        except Exception as e:
+            QMessageBox.critical(self, "API Bağlantı Hatası",
+                                 f"API'ye bağlanılamadı: {e}\n"
+                                 "Lütfen API sunucusunun çalıştığından ve doğru adreste olduğundan emin olun.")
+            logger.critical(f"Uygulama başlatılırken API bağlantı hatası: {e}")
+            sys.exit(1) # Uygulamayı kapat
 
-    # --- PySide6'ya özel metotlar ---
-    def set_status_message(self, message):
-        self.status_bar.showMessage(message)
+    def _setup_ui_connections(self):
+        # Ana pencere üzerindeki buton bağlantıları burada yapılabilir
+        # Örneğin: self.ui.pushButton_musteriEkle.clicked.connect(self._musteri_ekle)
+        pass
 
-    def _check_critical_stock(self):
-        critical_items = self.db.get_critical_stock_items()
-        overdue_receivables = self.db.get_overdue_receivables()
-        overdue_payables = self.db.get_overdue_payables()
-
-        notification_messages = []
-        self.current_notifications = {} # Detay penceresi için saklanacak veriler
-
-        if critical_items:
-            notification_messages.append(f"📦 Kritik Stok: {len(critical_items)} ürün!")
-            self.current_notifications['critical_stock'] = critical_items
-
-        if overdue_receivables:
-            notification_messages.append(f"💰 Vadesi Geçmiş Alacak: {len(overdue_receivables)} müşteri!")
-            self.current_notifications['overdue_receivables'] = overdue_receivables
-
-        if overdue_payables:
-            notification_messages.append(f"💸 Vadesi Geçmiş Borç: {len(overdue_payables)} tedarikçi!")
-            self.current_notifications['overdue_payables'] = overdue_payables
-
-        if notification_messages:
-            full_message = " | ".join(notification_messages)
-            self.notification_label.setText(f"UYARI: {full_message}")
-            self.notification_label.setVisible(True)
-        else:
-            self.notification_label.setText("")
-            self.notification_label.setVisible(False)
-
-    # --- Menü komutları için placeholder metotlar (şimdilik) ---
-    def show_company_info(self):
-        QMessageBox.information(self, "Şirket Bilgileri", "Şirket Bilgileri Formu burada açılacak.")
-
-    def backup_database(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Veritabanını Yedekle", "on_muhasebe_yedek.db_backup", "Veritabanı Yedekleri (*.db_backup);;Tüm Dosyalar (*)")
-        if file_path:
-            try:
-                # Kapatma ve kopyalama işlemleri Tkinter dışına taşınmalı ve PySide'a uygun hale getirilmeli
-                # Örnek: shutil.copy2(self.db.db_name, file_path)
-                # Başarılı mesajı PySide'da QMessageBox ile
-                self.set_status_message(f"Veritabanı yedeklendi: {file_path}")
-                QMessageBox.information(self, "Yedekleme", f"Veritabanı başarıyla yedeklendi: {file_path}")
-            except Exception as e:
-                self.set_status_message(f"Yedekleme hatası: {e}")
-                QMessageBox.critical(self, "Hata", f"Yedekleme sırasında hata: {e}")
-
-    def restore_database(self):
-        if self.current_user is None or self.current_user[2] != 'admin':
-            QMessageBox.warning(self, "Yetki Hatası", "Veritabanı geri yükleme işlemi için admin yetkisi gereklidir.")
+    def _initial_load_data(self):
+        """Uygulama başlangıcında veya veri güncellendiğinde ana ekrandaki verileri yükler."""
+        if not self.db_manager: # db_manager başlatılmamışsa çık
             return
 
-        file_path, _ = QFileDialog.getOpenFileName(self, "Veritabanı Yedeği Seç", "", "Veritabanı Yedekleri (*.db_backup *.db);;Tüm Dosyalar (*)")
-        if file_path:
-            reply = QMessageBox.question(self, "Geri Yükleme Onayı", "DİKKAT!\n\nVeritabanını geri yüklemek mevcut tüm verilerinizi SEÇİLEN YEDEKTEKİ VERİLERLE DEĞİŞTİRECEKTİR.\n\nBu işlem geri alınamaz. Devam etmek istediğinizden emin misiniz?",
-                                         QMessageBox.Yes | QMessageBox.No)
-            if reply == QMessageBox.Yes:
-                try:
-                    # Mevcut db bağlantısını kapat
-                    if self.db.conn:
-                        self.db.conn.close()
+        try:
+            musteri_sayisi = len(self.db_manager.musteri_listesi_al())
+            self.ui.label_musteriSayisi.setText(str(musteri_sayisi))
 
-                    # Yedek dosyayı ana veritabanı dosyasının üzerine kopyala
-                    shutil.copy2(file_path, self.db.db_name)
+            tedarikci_sayisi = len(self.db_manager.tedarikci_listesi_al())
+            self.ui.label_tedarikciSayisi.setText(str(tedarikci_sayisi))
 
-                    # Yeni bağlantıyı kur
-                    self.db.conn = sqlite3.connect(self.db.db_name)
-                    self.db.conn.row_factory = sqlite3.Row
-                    self.db.c = self.db.conn.cursor()
-                    self.db.create_tables() # Tabloları yeniden oluştur/kontrol et
-                    self.db.ensure_admin_user() # Admin kullanıcısının varlığını kontrol et
-                    self.db.sirket_bilgileri = self.db.sirket_bilgilerini_yukle() # Şirket bilgilerini yeniden yükle
+            stok_sayisi = len(self.db_manager.stok_listesi_al())
+            self.ui.label_stokSayisi.setText(str(stok_sayisi))
 
-                    QMessageBox.information(self, "Geri Yükleme Başarılı", "Veritabanı başarıyla geri yüklendi.\nProgram yeniden başlatılacak.")
-                    self.logout_and_show_login() # Programı yeniden başlatmak için giriş ekranına dön
-                except Exception as e:
-                    QMessageBox.critical(self, "Geri Yükleme Hatası", f"Veritabanı geri yüklenirken hata: {e}")
-                    # Hata durumunda bağlantıyı tekrar kapatmak iyi bir uygulama olabilir.
-                    if self.db.conn: self.db.conn.close()
-                    self.db.conn = None # Bağlantıyı None yap
+            fatura_sayisi = len(self.db_manager.fatura_listesi_al())
+            self.ui.label_faturaSayisi.setText(str(fatura_sayisi))
 
-    def logout_and_show_login(self):
-        self.current_user = None
-        self.setWindowTitle("Çınar Yapı Ön Muhasebe Programı")
-        # Login ekranını burada gösterme mantığı daha sonra eklenecek.
-        # Şimdilik uygulamayı yeniden başlatma gibi düşünebiliriz.
-        QMessageBox.information(self, "Çıkış Yapıldı", "Başarıyla çıkış yaptınız. Uygulama yeniden başlatılıyor.")
-        QApplication.quit() # Uygulamayı kapatıp tekrar çalıştırmasını bekleyeceğiz.
+            # Kasa/Banka toplam bakiyesi gibi özet bilgiler
+            kasalar = self.db_manager.kasa_banka_listesi_al()
+            toplam_bakiye = sum(kasa.get("bakiye", 0) for kasa in kasalar)
+            self.ui.label_kasaBankaBakiye.setText(f"{toplam_bakiye:.2f} TL")
 
-    def show_user_management(self):
-        if self.current_user is None or self.current_user[2] != 'admin':
-            QMessageBox.warning(self, "Yetki Hatası", "Bu işlem için admin yetkisine sahip olmalısınız.")
-            return
-        QMessageBox.information(self, "Kullanıcı Yönetimi", "Kullanıcı Yönetimi penceresi burada açılacak.")
+            # Gelir/Gider özetleri (örneğin son 30 gün)
+            gelirler = self.db_manager.gelir_gider_listesi_al() # Tüm gelir/giderleri al
+            # Burada tarih filtrelemesi API tarafında yapılmıyorsa, client tarafında yapılmalı
+            # Ancak API'de tarih filtreleme parametreleri eklenebilir.
+            toplam_gelir = sum(g.get("tutar", 0) for g in gelirler if g.get("tur") == "Gelir")
+            toplam_gider = sum(g.get("tutar", 0) for g in gelirler if g.get("tur") == "Gider")
+            self.ui.label_toplamGelir.setText(f"{toplam_gelir:.2f} TL")
+            self.ui.label_toplamGider.setText(f"{toplam_gider:.2f} TL")
 
-    def show_bulk_data_import(self):
-        if self.current_user is None or self.current_user[2] != 'admin':
-            QMessageBox.warning(self, "Yetki Hatası", "Bu işlem için admin yetkisine sahip olmalısınız.")
-            return
-        QMessageBox.information(self, "Toplu Veri Ekle", "Toplu Veri Ekleme penceresi burada açılacak.")
+            logger.info("Ana ekran verileri API'den başarıyla yüklendi.")
+        except ConnectionError:
+            QMessageBox.critical(self, "Bağlantı Hatası",
+                                 "API sunucusuna bağlanılamadı. Lütfen sunucunun çalıştığından emin olun.")
+            logger.critical("Ana ekran verileri yüklenirken API bağlantı hatası.")
+        except Exception as e:
+            QMessageBox.warning(self, "Veri Yükleme Hatası", f"Ana ekran verileri yüklenirken bir hata oluştu: {e}")
+            logger.error(f"Ana ekran verileri yüklenirken hata: {e}")
 
-    def show_income_expense_category_management(self):
-        QMessageBox.information(self, "Gelir/Gider Sınıflandırma", "Gelir/Gider Sınıflandırma Yönetimi penceresi burada açılacak.")
+    def _set_default_dates(self):
+        """Tarih alanlarını varsayılan değerlerle ayarlar (örneğin bugünün tarihi)."""
+        today = QDate.currentDate()
+        self.ui.dateEdit_baslangic.setDate(today.addMonths(-1)) # Son 1 ay
+        self.ui.dateEdit_bitis.setDate(today)
 
-    def show_admin_utilities(self):
-        if self.current_user is None or self.current_user[2] != 'admin':
-            QMessageBox.warning(self, "Yetki Hatası", "Bu işlem için admin yetkisine sahip olmalısınız.")
-            return
-        QMessageBox.information(self, "Yönetici Ayarları", "Veri Sıfırlama ve Temizleme penceresi burada açılacak.")
+    # Pencereleri açma metodları
+    def _stok_karti_penceresi_ac(self):
+        from pencereler import StokKartiPenceresi
+        self.stok_karti_penceresi = StokKartiPenceresi(self.db_manager)
+        self.stok_karti_penceresi.show()
+        self.stok_karti_penceresi.data_updated.connect(self._initial_load_data) # Veri güncellendiğinde ana ekranı yenile
 
-    def clear_log_file_ui(self):
-        if self.current_user is None or self.current_user[2] != 'admin':
-            QMessageBox.warning(self, "Yetki Gerekli", "Logları sıfırlama işlemi için admin yetkisi gereklidir.")
-            return
-        reply = QMessageBox.question(self, "Logları Sıfırla Onayı", "Log dosyasının içeriğini sıfırlamak istediğinizden emin misiniz?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            success, message = self.db.clear_log_file()
-            if success:
-                QMessageBox.information(self, "Başarılı", message)
-                self.set_status_message(message)
-            else:
-                QMessageBox.critical(self, "Hata", message)
-                self.set_status_message(f"Logları sıfırlama başarısız: {message}")
+    def _musteri_karti_penceresi_ac(self):
+        from pencereler import MusteriKartiPenceresi
+        self.musteri_karti_penceresi = MusteriKartiPenceresi(self.db_manager)
+        self.musteri_karti_penceresi.show()
+        self.musteri_karti_penceresi.data_updated.connect(self._initial_load_data)
 
-    def optimize_database_ui(self):
-        if self.current_user is None or self.current_user[2] != 'admin':
-            QMessageBox.warning(self, "Yetki Gerekli", "Veritabanı optimizasyonu için admin yetkisi gereklidir.")
-            return
-        reply = QMessageBox.question(self, "Veritabanı Optimizasyonu", "Veritabanı dosya boyutunu küçültmek ve performansı artırmak için optimize edilsin mi?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            success, message = self.db.optimize_database()
-            if success:
-                QMessageBox.information(self, "Başarılı", message)
-                self.set_status_message(message)
-            else:
-                QMessageBox.critical(self, "Hata", message)
-                self.set_status_message(f"Veritabanı optimizasyonu başarısız: {message}")
+    def _tedarikci_karti_penceresi_ac(self):
+        from pencereler import TedarikciKartiPenceresi
+        self.tedarikci_karti_penceresi = TedarikciKartiPenceresi(self.db_manager)
+        self.tedarikci_karti_penceresi.show()
+        self.tedarikci_karti_penceresi.data_updated.connect(self._initial_load_data)
 
-    def run_backfill_script_ui(self):
-        if self.current_user is None or self.current_user[2] != 'admin':
-            QMessageBox.warning(self, "Yetki Gerekli", "Bu işlem için admin yetkisi gereklidir.")
-            return
-        reply = QMessageBox.question(self, "Onay Gerekli", "Bu işlem, geçmiş tüm faturaları tarayarak eksik stok hareketlerini yeniden oluşturacaktır.\n\nNOT: Bu işlem mevcut fatura kaynaklı tüm stok hareketlerini silip yeniden oluşturur. Sadece bir kez çalıştırmanız yeterlidir.\n\nDevam etmek istiyor musunuz?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            self.set_status_message("Geçmiş veriler işleniyor, lütfen bekleyiniz...")
-            # Arka planda çalışacak işlem için threading kullanacağız
-            threading.Thread(target=self._run_backfill_threaded).start()
-        else:
-            self.set_status_message("İşlem kullanıcı tarafından iptal edildi.")
+    def _kasa_banka_karti_penceresi_ac(self):
+        from pencereler import KasaBankaKartiPenceresi
+        self.kasa_banka_karti_penceresi = KasaBankaKartiPenceresi(self.db_manager)
+        self.kasa_banka_karti_penceresi.show()
+        self.kasa_banka_karti_penceresi.data_updated.connect(self._initial_load_data)
 
-    def _run_backfill_threaded(self):
-        success, message = self.db.geriye_donuk_stok_hareketlerini_olustur()
-        # UI güncellemeleri için ana thread'e geri dönmeliyiz
-        self.statusBar().showMessage(message) # PyQt'de doğrudan erişim
-        if success:
-            QMessageBox.information(self, "Başarılı", message)
-        else:
-            QMessageBox.critical(self, "Hata", message)
+    def _gelir_gider_karti_penceresi_ac(self):
+        from pencereler import GelirGiderKartiPenceresi
+        self.gelir_gider_karti_penceresi = GelirGiderKartiPenceresi(self.db_manager)
+        self.gelir_gider_karti_penceresi.show()
+        self.gelir_gider_karti_penceresi.data_updated.connect(self._initial_load_data)
 
-    def show_report_excel(self, report_type):
-        QMessageBox.information(self, "Raporlama", f"{report_type} Raporu (Excel) burada oluşturulacak.")
+    def _fatura_karti_penceresi_ac(self):
+        from pencereler import FaturaKartiPenceresi
+        self.fatura_karti_penceresi = FaturaKartiPenceresi(self.db_manager, self.fatura_service)
+        self.fatura_karti_penceresi.show()
+        self.fatura_karti_penceresi.data_updated.connect(self._initial_load_data)
 
-    def show_report_pdf(self, report_type):
-        QMessageBox.information(self, "Raporlama", f"{report_type} Raporu (PDF) burada oluşturulacak.")
+    def _siparis_karti_penceresi_ac(self):
+        from pencereler import SiparisKartiPenceresi
+        self.siparis_karti_penceresi = SiparisKartiPenceresi(self.db_manager)
+        self.siparis_karti_penceresi.show()
+        self.siparis_karti_penceresi.data_updated.connect(self._initial_load_data)
 
-    def show_report(self, tab_name):
-        QMessageBox.information(self, "Raporlama", f"Raporlama Merkezi açılacak ve '{tab_name}' sekmesine gidilecek.")
+    def _cari_hareketler_penceresi_ac(self):
+        from pencereler import CariHareketlerPenceresi
+        self.cari_hareketler_penceresi = CariHareketlerPenceresi(self.db_manager)
+        self.cari_hareketler_penceresi.show()
+        self.cari_hareketler_penceresi.data_updated.connect(self._initial_load_data)
 
-    def show_critical_stock_warning(self):
-        # CriticalStockWarningPenceresi'nin PySide6 versiyonu burada çağrılacak.
-        # Şimdilik bir mesaj kutusu gösterelim.
-        QMessageBox.information(self, "Kritik Stok Uyarısı", "Kritik Stok Uyarısı penceresi burada açılacak.")
+    def _nitelik_yonetimi_penceresi_ac(self):
+        from pencereler import NitelikYonetimiPenceresi
+        self.nitelik_yonetimi_penceresi = NitelikYonetimiPenceresi(self.db_manager)
+        self.nitelik_yonetimi_penceresi.show()
+        self.nitelik_yonetimi_penceresi.data_updated.connect(self._initial_load_data)
 
-    def show_home_page(self):
-        self.set_status_message("Ana Sayfa gösteriliyor.")
+    def _toplu_veri_aktarim_penceresi_ac(self):
+        from pencereler import TopluVeriAktarimPenceresi
+        self.toplu_veri_aktarim_penceresi = TopluVeriAktarimPenceresi(self.db_manager, self.toplu_islem_service)
+        self.toplu_veri_aktarim_penceresi.show()
+        self.toplu_veri_aktarim_penceresi.data_updated.connect(self._initial_load_data)
 
-    def show_invoice_form(self, invoice_type):
+    def _rapor_olustur(self, rapor_tipi):
+        """Belirtilen tipte bir rapor oluşturur."""
+        try:
+            self.raporlama.rapor_olustur(rapor_tipi)
+            QMessageBox.information(self, "Rapor Oluşturuldu", f"{rapor_tipi.capitalize()} raporu başarıyla oluşturuldu.")
+        except Exception as e:
+            QMessageBox.warning(self, "Rapor Hatası", f"{rapor_tipi.capitalize()} raporu oluşturulurken bir hata oluştu: {e}")
+            logger.error(f"{rapor_tipi.capitalize()} raporu oluşturulurken hata: {e}")
+
+    def _yedekle(self):
         """
-        Yeni bir satış veya alış faturası oluşturma penceresini açar.
+        Veritabanı yedekleme işlevi. Artık doğrudan API üzerinden yedekleme beklenir.
         """
         try:
-            # FaturaPenceresi'ne fatura tipini gönderiyoruz (SATIŞ veya ALIŞ)
-            dialog = FaturaPenceresi(
-                parent=self, # Parent (ana uygulama)
-                db_manager=self.db, # Veritabanı yöneticisi (self.db olarak mevcut)
-                fatura_tipi=invoice_type, # 'SATIŞ' veya 'ALIŞ'
-                duzenleme_id=None, # Yeni fatura olduğu için None
-                yenile_callback=lambda: self.show_tab("Faturalar") # Fatura kaydedilince fatura listesini yenile
-            )
-            dialog.exec() # Modalı olarak göster
-
-            self.set_status_message(f"Yeni {invoice_type} faturası penceresi açıldı.")
+            # Kullanıcıya nereye yedekleneceğini sor
+            file_path, _ = QFileDialog.getSaveFileName(self, "Veritabanı Yedekle", "", "Yedek Dosyası (*.bak);;Tüm Dosyalar (*)")
+            if file_path:
+                self.db_manager.database_backup(file_path)
+                QMessageBox.information(self, "Yedekleme", "Veritabanı yedekleme isteği gönderildi. Sunucu tarafında kontrol edin.")
+                logger.info(f"Veritabanı yedekleme isteği gönderildi: {file_path}")
+        except NotImplementedError as e:
+            QMessageBox.warning(self, "Yedekleme Hatası", str(e))
+            logger.warning(f"Yedekleme hatası: {e}")
         except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Fatura penceresi açılırken bir hata oluştu:\n{e}")
-            self.set_status_message(f"Hata: Fatura penceresi açılamadı - {e}")
+            QMessageBox.critical(self, "Yedekleme Hatası", f"Veritabanı yedeklenirken bir hata oluştu: {e}")
+            logger.error(f"Veritabanı yedeklenirken hata: {e}")
 
-    def show_tab(self, page_name: str):
-        if page_name in self.pages:
-            # Eğer sayfa zaten açıksa, o sekmeye geç
-            self.tab_widget.setCurrentWidget(self.pages[page_name])
-            return
+    def _geri_yukle(self):
+        """
+        Veritabanı geri yükleme işlevi. Artık doğrudan API üzerinden geri yükleme beklenir.
+        """
+        try:
+            # Kullanıcıdan geri yüklenecek dosyayı seçmesini iste
+            file_path, _ = QFileDialog.getOpenFileName(self, "Veritabanı Geri Yükle", "", "Yedek Dosyası (*.bak);;Tüm Dosyalar (*)")
+            if file_path:
+                reply = QMessageBox.question(self, "Geri Yükleme Onayı",
+                                             "Mevcut veritabanı üzerine yazılacak. Devam etmek istiyor musunuz?",
+                                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.db_manager.database_restore(file_path)
+                    QMessageBox.information(self, "Geri Yükleme", "Veritabanı geri yükleme isteği gönderildi. Sunucu tarafında kontrol edin.")
+                    logger.info(f"Veritabanı geri yükleme isteği gönderildi: {file_path}")
+        except NotImplementedError as e:
+            QMessageBox.warning(self, "Geri Yükleme Hatası", str(e))
+            logger.warning(f"Geri yükleme hatası: {e}")
+        except Exception as e:
+            QMessageBox.critical(self, "Geri Yükleme Hatası", f"Veritabanı geri yüklenirken bir hata oluştu: {e}")
+            logger.error(f"Veritabanı geri yüklenirken hata: {e}")
 
-        widget = None
-        if page_name == "Ana Sayfa":
-            widget = AnaSayfa(self, self.db, self)
-        elif page_name == "Stok Yönetimi":
-            widget = StokYonetimiSayfasi(self, self.db, self)
-        elif page_name == "Müşteri Yönetimi":
-            widget = MusteriYonetimiSayfasi(self, self.db, self)
-        elif page_name == "Tedarikçi Yönetimi":
-            widget = TedarikciYonetimiSayfasi(self, self.db, self)
-        elif page_name == "Kasa/Banka":
-            widget = KasaBankaYonetimiSayfasi(self, self.db, self)
-        elif page_name == "Faturalar":
-            widget = FaturaListesiSayfasi(self, self.db, self)
-        elif page_name == "Sipariş Yönetimi":
-            widget = SiparisListesiSayfasi(self, self.db, self)
-        elif page_name == "Finansal İşlemler":
-            widget = FinansalIslemlerSayfasi(self, self.db, self)
-        elif page_name == "Gelir/Gider":
-            widget = GelirGiderSayfasi(self, self.db, self)
-        elif page_name == "Raporlama Merkezi":
-            widget = RaporlamaMerkeziSayfasi(self, self.db, self)
-
-        if widget:
-            self.pages[page_name] = widget
-            index = self.tab_widget.addTab(widget, page_name)
-            self.tab_widget.setCurrentIndex(index)
-            # Sayfa yüklendikten sonra listeyi yenileme (eğer varsa)
-            if hasattr(widget, 'stok_listesini_yenile'):
-                widget.stok_listesini_yenile()
-            elif hasattr(widget, 'musteri_listesini_yenile'):
-                widget.musteri_listesini_yenile()
-            elif hasattr(widget, 'tedarikci_listesini_yenile'):
-                widget.tedarikci_listesini_yenile()
-            elif hasattr(widget, 'hesap_listesini_yenile'):
-                widget.hesap_listesini_yenile()
-            elif hasattr(widget, 'fatura_listesini_yukle'):
-                widget.fatura_listesini_yukle()
-            elif hasattr(widget, 'siparis_listesini_yukle'):
-                widget.siparis_listesini_yukle()
-            elif hasattr(widget, 'gg_listesini_yukle'):
-                widget.gg_listesini_yukle()
-            elif hasattr(widget, 'raporu_olustur_ve_yenile'):
-                widget.raporu_olustur_ve_yenile()    
-            # self.app.set_status_message yerine doğrudan self.set_status_message kullan
-            self.set_status_message(f"'{page_name}' sekmesi açıldı.") # <-- Burası güncellendi
-        else:
-            QMessageBox.information(self, "Sekme Değiştir", f"'{page_name}' sekmesi henüz programa eklenmedi.")
-            # self.app.set_status_message yerine doğrudan self.set_status_message kullan
-            self.set_status_message(f"Hata: '{page_name}' sekmesi açılamadı.") # <-- Burası güncellendi
+    def _pdf_olusturma_islemi(self, data, filename="rapor.pdf"):
+        """
+        PDF oluşturma işlemi. Bu fonksiyon, artık veritabanına doğrudan erişmemelidir.
+        Raporlama sınıfı üzerinden veri almalı veya API'den PDF oluşturma hizmeti kullanmalıdır.
+        Şimdilik sadece örnek bir log mesajı bırakılmıştır.
+        """
+        logger.info(f"PDF oluşturma işlemi çağrıldı. Veri boyutu: {len(data)} - Dosya Adı: {filename}")
+        # Burada raporlama.py'deki Raporlama sınıfı kullanılmalı veya API'den bir PDF oluşturma endpoint'i çağrılmalıdır.
+        # Örneğin:
+        # self.raporlama.pdf_olustur(data, filename)
+        QMessageBox.information(self, "PDF Oluşturma", "PDF oluşturma işlevi entegrasyonu tamamlanmadı. Lütfen raporlama modülünü kontrol edin.")
 
 
-    def close_tab(self, index):
-        widget = self.tab_widget.widget(index)
-        if widget is not None:
-            page_name = self.tab_widget.tabText(index)
-            if page_name in self.pages:
-                del self.pages[page_name]
-            widget.deleteLater()
-            self.tab_widget.removeTab(index)
+    def _update_status_bar(self):
+        """Durum çubuğunu günceller."""
+        self.statusBar().showMessage("Uygulama hazır.")
 
-    def show_order_form(self, order_type):
-        QMessageBox.information(self, "Sipariş Oluştur", f"Yeni {order_type} sipariş formu burada açılacak.")
+    def _api_ayarlari_penceresi_ac(self):
+        """API Ayarları penceresini açar."""
+        from pencereler import APIAyarlariPenceresi # Döngüsel bağımlılığı önlemek için burada import edildi
+        self.api_ayarlari_penceresi = APIAyarlariPenceresi(self.config)
+        self.api_ayarlari_penceresi.api_url_updated.connect(self._handle_api_url_update)
+        self.api_ayarlari_penceresi.show()
 
-    def show_notification_details(self, event=None):
-        if not hasattr(self, 'current_notifications') or not self.current_notifications:
-            QMessageBox.information(self, "Bildirim Detayları", "Şu anda aktif bir bildirim bulunmuyor.")
-            return
-        # NotificationDetailsPenceresi'nin PySide6 versiyonu burada çağrılacak.
-        # Şimdilik bir mesaj kutusu gösterelim.
-        QMessageBox.information(self, "Bildirim Detayları", "Bildirim detayları penceresi burada açılacak.")
+    def _handle_api_url_update(self, new_api_url):
+        """API URL'si güncellendiğinde tetiklenir."""
+        self.config["api_base_url"] = new_api_url
+        save_config(self.config)
+        # Yeni API URL'si ile db_manager'ı yeniden başlat
+        try:
+            self.db_manager = OnMuhasebe(api_base_url=self.config["api_base_url"])
+            QMessageBox.information(self, "API Ayarları", "API URL'si güncellendi ve bağlantı yenilendi.")
+            logger.info(f"API URL'si güncellendi: {new_api_url}")
+            self._initial_load_data() # Verileri yeniden yükle
+        except Exception as e:
+            QMessageBox.critical(self, "API Bağlantı Hatası",
+                                 f"Yeni API adresine bağlanılamadı: {e}\n"
+                                 "Lütfen API sunucusunun çalıştığından ve doğru adreste olduğundan emin olun.")
+            logger.critical(f"API URL güncellemesi sonrası bağlantı hatası: {e}")
 
 
 if __name__ == "__main__":
-    setup_locale() 
-    
     app = QApplication(sys.argv)
-    
-    # --- GÜNCELLENMİŞ: Beyaz Tema Ayarları ---
-    app.setStyle("Fusion")
-
-    # Yeni, özel bir beyaz palet oluşturuyoruz
-    beyaz_palet = QPalette()
-
-    # Pencere arka planları için renkleri ayarla
-    beyaz_palet.setColor(QPalette.ColorRole.Window, QColor(255, 255, 255))        # Ana pencere arka planı (beyaz)
-    beyaz_palet.setColor(QPalette.ColorRole.WindowText, QColor(0, 0, 0))            # Ana yazı rengi (siyah)
-    
-    # Yazı giriş alanları (QLineEdit, QTextEdit vb.) için renkleri ayarla
-    beyaz_palet.setColor(QPalette.ColorRole.Base, QColor(255, 255, 255))           # Entry arka planı (beyaz)
-    beyaz_palet.setColor(QPalette.ColorRole.Text, QColor(0, 0, 0))                 # Entry yazı rengi (siyah)
-    beyaz_palet.setColor(QPalette.ColorRole.PlaceholderText, QColor(120, 120, 120)) # Placeholder yazı rengi (gri)
-
-    # Butonlar ve diğer arayüz elemanları için renkleri ayarla
-    beyaz_palet.setColor(QPalette.ColorRole.Button, QColor(240, 240, 240))         # Buton arka planı (hafif gri)
-    beyaz_palet.setColor(QPalette.ColorRole.ButtonText, QColor(0, 0, 0))           # Buton yazı rengi (siyah)
-    
-    # Vurgu rengi (örneğin seçili öğeler için)
-    beyaz_palet.setColor(QPalette.ColorRole.Highlight, QColor(0, 120, 215))       # Standart mavi
-    beyaz_palet.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255)) # Vurgulu yazı (beyaz)
-
-    # Uygulamaya yeni paletimizi tanıtıyoruz
-    app.setPalette(beyaz_palet)
-    # --- DEĞİŞİKLİK SONU ---
-    
-    # Kodun geri kalanı aynı
-    db_manager = OnMuhasebe(data_dir=data_dir)
-    
-    main_app_window = App(db_manager=db_manager)
-    main_app_window.show() 
-    
+    window = App()
+    window.show()
     sys.exit(app.exec())
