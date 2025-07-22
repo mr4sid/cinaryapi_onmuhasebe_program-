@@ -1,4 +1,4 @@
-# main.py
+# main.py dosyasının içeriği
 import sys
 import os
 import json
