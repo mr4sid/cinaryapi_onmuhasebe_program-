@@ -19,7 +19,6 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from veritabani import OnMuhasebe # OnMuhasebe sınıfının import edildiğinden emin olun
 from yardimcilar import DatePickerDialog, normalize_turkish_chars, setup_locale
 from config import API_BASE_URL
-from arayuz import Ui_MMusteriKartiPenceresi 
 # Logger kurulumu
 logger = logging.getLogger(__name__)
 # Eğer ana uygulama tarafından zaten yapılandırılmadıysa, basit bir konsol çıktısı için:

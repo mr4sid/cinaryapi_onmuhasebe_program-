@@ -13,15 +13,19 @@ from PySide6.QtWidgets import (
     QHeaderView, QMessageBox, QFrame, QComboBox, QLineEdit, QSizePolicy, QTabWidget, QMenu,QTableWidgetItem,QTableWidget)
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QFont, QBrush, QColor, QDoubleValidator
-
-# Yerel Uygulama Modülleri
-# OnMuhasebe sınıfı veritabanı.py dosyasından geliyor.
-# TURKISH_FONT_NORMAL, TURKISH_FONT_BOLD değişkenleri veritabanı.py'de tanımlanmış.
-from veritabani import TURKISH_FONT_NORMAL, TURKISH_FONT_BOLD, OnMuhasebe
+from veritabani import OnMuhasebe
 from yardimcilar import DatePickerDialog, normalize_turkish_chars, setup_locale
-
 # pencereler.py'deki PySide6 sınıflarını import et
-from pencereler import CariHesapEkstresiPenceresi, TedarikciSecimDialog, UrunKartiPenceresi, SiparisPenceresi
+from pencereler import CariHesapEkstresiPenceresi, TedarikciSecimDialog, StokKartiPenceresi, SiparisPenceresi
+
+# Logger kurulumu
+logger = logging.getLogger(__name__) # Bu satırın var olduğundan emin olun
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
 class CriticalStockWarningPenceresi(QDialog):
     def __init__(self, critical_stocks, parent=None):
@@ -83,6 +87,36 @@ class CriticalStockWarningPenceresi(QDialog):
             font.setBold(True)
             item_durum.setFont(font)
             self.table.setItem(i, 3, item_durum)
+
+class Raporlama:
+    def __init__(self, db_manager):
+        """
+        Raporlama işlevlerini yöneten sınıf.
+        API ile iletişim kurmak için db_manager'ı kullanır.
+        """
+        self.db = db_manager
+        logger.info("Raporlama sınıfı başlatıldı.")
+
+    def rapor_olustur(self, rapor_tipi):
+        """
+        Belirtilen rapor tipine göre veri çeker ve raporlama işlemini başlatır.
+        Bu metod, API entegrasyonu tamamlandıkça doldurulacaktır.
+        """
+        logger.info(f"'{rapor_tipi}' raporu oluşturma isteği alındı (placeholder).")
+        # Örnek olarak, bir rapor türüne göre API'den veri çekme başlangıcı:
+        try:
+            if rapor_tipi == "musteri":
+                # Örneğin: musteri_verileri = self.db.musteri_listesi_al()
+                # Bu verilerle bir Excel veya PDF raporu oluşturulabilir.
+                pass # Şimdilik sadece placeholder
+            elif rapor_tipi == "stok":
+                # Örneğin: stok_verileri = self.db.stok_listesi_al()
+                pass # Şimdilik sadece placeholder
+            # Diğer rapor tipleri için buraya mantık eklenecektir.
+            return True, f"'{rapor_tipi}' raporu için placeholder işlemi başarılı."
+        except Exception as e:
+            logger.error(f"Rapor oluşturulurken hata: {e}")
+            return False, f"Rapor oluşturulurken hata oluştu: {e}"
 
 class NotificationDetailsPenceresi(QDialog):
     def __init__(self, bildirim, parent=None):
