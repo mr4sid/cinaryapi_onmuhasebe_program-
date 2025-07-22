@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from .. import semalar, modeller
 from ..veritabani import get_db
 
@@ -135,126 +135,123 @@ def delete_marka(marka_id: int, db: Session = Depends(get_db)):
 class UrunGrubuCreate(modeller.UrunGrubuBase):
     id: Optional[int] = None
 
-@router.post("/urun_gruplari", response_model=modeller.UrunGrubuBase)
-def create_urun_grubu(urun_grubu: UrunGrubuCreate, db: Session = Depends(get_db)):
-    db_urun_grubu = db.query(semalar.UrunGruplari).filter(semalar.UrunGruplari.grup_adi == urun_grubu.grup_adi).first()
-    if db_urun_grubu:
-        raise HTTPException(status_code=400, detail="Bu ürün grubu adı zaten mevcut.")
-    db_urun_grubu = semalar.UrunGruplari(grup_adi=urun_grubu.grup_adi)
+# --- Ürün Grubu Endpoint'leri ---
+@router.post("/urun_gruplari", response_model=modeller.UrunGrubu)
+def urun_grubu_olustur(urun_grubu: modeller.UrunGrubuCreate, db: Session = Depends(get_db)):
+    db_urun_grubu = semalar.UrunGrubu(grup_adi=urun_grubu.grup_adi)
     db.add(db_urun_grubu)
     db.commit()
     db.refresh(db_urun_grubu)
     return db_urun_grubu
 
-@router.get("/urun_gruplari", response_model=List[modeller.UrunGrubuBase])
-def read_urun_gruplari(db: Session = Depends(get_db)):
-    """
-    Tüm ürün gruplarını listeler.
-    """
-    return db.query(semalar.UrunGruplari).order_by(semalar.UrunGruplari.grup_adi).all()
+@router.get("/urun_gruplari", response_model=List[modeller.UrunGrubu])
+def urun_gruplarini_listele(db: Session = Depends(get_db)):
+    return db.query(semalar.UrunGrubu).all()
 
-@router.put("/urun_gruplari/{grup_id}", response_model=modeller.UrunGrubuBase)
-def update_urun_grubu(grup_id: int, urun_grubu: UrunGrubuCreate, db: Session = Depends(get_db)):
-    db_urun_grubu = db.query(semalar.UrunGruplari).filter(semalar.UrunGruplari.id == grup_id).first()
-    if db_urun_grubu is None:
-        raise HTTPException(status_code=404, detail="Ürün grubu bulunamadı")
-    db_urun_grubu.grup_adi = urun_grubu.grup_adi
+@router.put("/urun_gruplari/{grup_id}", response_model=modeller.UrunGrubu)
+def urun_grubu_guncelle(grup_id: int, urun_grubu: modeller.UrunGrubuUpdate, db: Session = Depends(get_db)):
+    db_urun_grubu = db.query(semalar.UrunGrubu).filter(semalar.UrunGrubu.id == grup_id).first()
+    if not db_urun_grubu:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ürün grubu bulunamadı.")
+
+    for key, value in urun_grubu.model_dump(exclude_unset=True).items():
+        setattr(db_urun_grubu, key, value)
+
     db.commit()
     db.refresh(db_urun_grubu)
     return db_urun_grubu
 
-@router.delete("/urun_gruplari/{grup_id}", status_code=204)
-def delete_urun_grubu(grup_id: int, db: Session = Depends(get_db)):
-    db_urun_grubu = db.query(semalar.UrunGruplari).filter(semalar.UrunGruplari.id == grup_id).first()
-    if db_urun_grubu is None:
-        raise HTTPException(status_code=404, detail="Ürün grubu bulunamadı")
+@router.delete("/urun_gruplari/{grup_id}")
+def urun_grubu_sil(grup_id: int, db: Session = Depends(get_db)):
+    db_urun_grubu = db.query(semalar.UrunGrubu).filter(semalar.UrunGrubu.id == grup_id).first()
+    if not db_urun_grubu:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ürün grubu bulunamadı.")
+
     db.delete(db_urun_grubu)
     db.commit()
-    return
+    return {"message": "Ürün grubu başarıyla silindi."}
 
 # ==================== ÜRÜN BİRİMİ ENDPOINT'LERİ ====================
 
 class UrunBirimiCreate(modeller.UrunBirimiBase):
     id: Optional[int] = None
 
-@router.post("/urun_birimleri", response_model=modeller.UrunBirimiBase)
-def create_urun_birimi(urun_birimi: UrunBirimiCreate, db: Session = Depends(get_db)):
-    db_urun_birimi = db.query(semalar.UrunBirimleri).filter(semalar.UrunBirimleri.birim_adi == urun_birimi.birim_adi).first()
-    if db_urun_birimi:
-        raise HTTPException(status_code=400, detail="Bu ürün birimi adı zaten mevcut.")
-    db_urun_birimi = semalar.UrunBirimleri(birim_adi=urun_birimi.birim_adi)
+# --- Ürün Birimi Endpoint'leri ---
+@router.post("/urun_birimleri", response_model=modeller.UrunBirimi)
+def urun_birimi_olustur(urun_birimi: modeller.UrunBirimiCreate, db: Session = Depends(get_db)):
+    db_urun_birimi = semalar.UrunBirimi(birim_adi=urun_birimi.birim_adi)
     db.add(db_urun_birimi)
     db.commit()
     db.refresh(db_urun_birimi)
     return db_urun_birimi
 
-@router.get("/urun_birimleri", response_model=List[modeller.UrunBirimiBase])
-def read_urun_birimleri(db: Session = Depends(get_db)):
-    """
-    Tüm ürün birimlerini listeler.
-    """
-    return db.query(semalar.UrunBirimleri).order_by(semalar.UrunBirimleri.birim_adi).all()
+@router.get("/urun_birimleri", response_model=List[modeller.UrunBirimi])
+def urun_birimlerini_listele(db: Session = Depends(get_db)):
+    return db.query(semalar.UrunBirimi).all()
 
-@router.put("/urun_birimleri/{birim_id}", response_model=modeller.UrunBirimiBase)
-def update_urun_birimi(birim_id: int, urun_birimi: UrunBirimiCreate, db: Session = Depends(get_db)):
-    db_urun_birimi = db.query(semalar.UrunBirimleri).filter(semalar.UrunBirimleri.id == birim_id).first()
-    if db_urun_birimi is None:
-        raise HTTPException(status_code=404, detail="Ürün birimi bulunamadı")
-    db_urun_birimi.birim_adi = urun_birimi.birim_adi
+@router.put("/urun_birimleri/{birim_id}", response_model=modeller.UrunBirimi)
+def urun_birimi_guncelle(birim_id: int, urun_birimi: modeller.UrunBirimiUpdate, db: Session = Depends(get_db)):
+    db_urun_birimi = db.query(semalar.UrunBirimi).filter(semalar.UrunBirimi.id == birim_id).first()
+    if not db_urun_birimi:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ürün birimi bulunamadı.")
+
+    for key, value in urun_birimi.model_dump(exclude_unset=True).items():
+        setattr(db_urun_birimi, key, value)
+
     db.commit()
     db.refresh(db_urun_birimi)
     return db_urun_birimi
 
-@router.delete("/urun_birimleri/{birim_id}", status_code=204)
-def delete_urun_birimi(birim_id: int, db: Session = Depends(get_db)):
-    db_urun_birimi = db.query(semalar.UrunBirimleri).filter(semalar.UrunBirimleri.id == birim_id).first()
-    if db_urun_birimi is None:
-        raise HTTPException(status_code=404, detail="Ürün birimi bulunamadı")
+@router.delete("/urun_birimleri/{birim_id}")
+def urun_birimi_sil(birim_id: int, db: Session = Depends(get_db)):
+    db_urun_birimi = db.query(semalar.UrunBirimi).filter(semalar.UrunBirimi.id == birim_id).first()
+    if not db_urun_birimi:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ürün birimi bulunamadı.")
+
     db.delete(db_urun_birimi)
     db.commit()
-    return
+    return {"message": "Ürün birimi başarıyla silindi."}
 
 # ==================== ÜLKE ENDPOINT'LERİ ====================
 
 class UlkeCreate(modeller.UlkeBase):
     id: Optional[int] = None
 
-@router.post("/ulkeler", response_model=modeller.UlkeBase)
-def create_ulke(ulke: UlkeCreate, db: Session = Depends(get_db)):
-    db_ulke = db.query(semalar.UrunUlkeleri).filter(semalar.UrunUlkeleri.ulke_adi == ulke.ulke_adi).first()
-    if db_ulke:
-        raise HTTPException(status_code=400, detail="Bu ülke adı zaten mevcut.")
-    db_ulke = semalar.UrunUlkeleri(ulke_adi=ulke.ulke_adi)
+# --- Ülke Endpoint'leri ---
+@router.post("/ulkeler", response_model=modeller.Ulke)
+def ulke_olustur(ulke: modeller.UlkeCreate, db: Session = Depends(get_db)):
+    db_ulke = semalar.Ulke(ulke_adi=ulke.ulke_adi)
     db.add(db_ulke)
     db.commit()
     db.refresh(db_ulke)
     return db_ulke
 
-@router.get("/ulkeler", response_model=List[modeller.UlkeBase])
-def read_ulkeler(db: Session = Depends(get_db)):
-    """
-    Tüm ülkeleri (menşe) listeler.
-    """
-    return db.query(semalar.UrunUlkeleri).order_by(semalar.UrunUlkeleri.ulke_adi).all()
+@router.get("/ulkeler", response_model=List[modeller.Ulke])
+def ulkeleri_listele(db: Session = Depends(get_db)):
+    return db.query(semalar.Ulke).all()
 
-@router.put("/ulkeler/{ulke_id}", response_model=modeller.UlkeBase)
-def update_ulke(ulke_id: int, ulke: UlkeCreate, db: Session = Depends(get_db)):
-    db_ulke = db.query(semalar.UrunUlkeleri).filter(semalar.UrunUlkeleri.id == ulke_id).first()
-    if db_ulke is None:
-        raise HTTPException(status_code=404, detail="Ülke bulunamadı")
-    db_ulke.ulke_adi = ulke.ulke_adi
+@router.put("/ulkeler/{ulke_id}", response_model=modeller.Ulke)
+def ulke_guncelle(ulke_id: int, ulke: modeller.UlkeUpdate, db: Session = Depends(get_db)):
+    db_ulke = db.query(semalar.Ulke).filter(semalar.Ulke.id == ulke_id).first()
+    if not db_ulke:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ülke bulunamadı.")
+
+    for key, value in ulke.model_dump(exclude_unset=True).items():
+        setattr(db_ulke, key, value)
+
     db.commit()
     db.refresh(db_ulke)
     return db_ulke
 
-@router.delete("/ulkeler/{ulke_id}", status_code=204)
-def delete_ulke(ulke_id: int, db: Session = Depends(get_db)):
-    db_ulke = db.query(semalar.UrunUlkeleri).filter(semalar.UrunUlkeleri.id == ulke_id).first()
-    if db_ulke is None:
-        raise HTTPException(status_code=404, detail="Ülke bulunamadı")
+@router.delete("/ulkeler/{ulke_id}")
+def ulke_sil(ulke_id: int, db: Session = Depends(get_db)):
+    db_ulke = db.query(semalar.Ulke).filter(semalar.Ulke.id == ulke_id).first()
+    if not db_ulke:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ülke bulunamadı.")
+
     db.delete(db_ulke)
     db.commit()
-    return
+    return {"message": "Ülke başarıyla silindi."}
 
 @router.get("/musteriler", response_model=List[modeller.MusteriBase])
 def read_musteri_listesi(db: Session = Depends(get_db)):

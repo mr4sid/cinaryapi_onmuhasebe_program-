@@ -4,11 +4,15 @@ import os
 import json
 import logging
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QMessageBox, QFileDialog, 
+    QApplication, QMainWindow, QMessageBox, QFileDialog,
     QWidget, QMenuBar, QStatusBar)
 from PySide6.QtGui import QAction
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt, QDate, Signal
+
+# Tema için eklenen importlar
+from PySide6.QtGui import QPalette, QColor # BU SATIRIN EKLENDİĞİNDEN EMİN OLUN
+from PySide6.QtCore import Qt 
 
 # Kendi modüllerimiz
 from arayuz import AnaSayfa # Artık AnaSayfa'yı doğruca içe aktarıyoruz
@@ -249,7 +253,8 @@ class App(QMainWindow):
         self.actionCari_Hareketler.triggered.connect(self._cari_hareketler_penceresi_ac)
         self.actionNitelik_Y_netimi.triggered.connect(self._nitelik_yonetimi_penceresi_ac)
         self.actionToplu_Veri_Aktar_m.triggered.connect(self._toplu_veri_aktarim_penceresi_ac)
-
+        self.actionFatura_Kart.triggered.connect(lambda: self.show_invoice_form("SATIŞ")) # Yeni metod çağrıldı
+        self.action_rsiparis.triggered.connect(lambda: self.show_order_form("SATIŞ_SIPARIS")) # Yeni metod çağrıldı
         # Raporlar menüsü bağlantıları
         self.actionM_teri_Raporu.triggered.connect(lambda: self._rapor_olustur("musteri"))
         self.actionTedarik_i_Raporu.triggered.connect(lambda: self._rapor_olustur("tedarikci"))
@@ -268,6 +273,36 @@ class App(QMainWindow):
 
         # Durum çubuğunu güncelle
         self._update_status_bar()
+
+    def show_invoice_form(self, fatura_tipi, duzenleme_id=None, initial_data=None):
+        """Fatura oluşturma/düzenleme penceresini açar."""
+        from pencereler import FaturaPenceresi # Bu import burada yapılmalı
+        self.fatura_penceresi = FaturaPenceresi(
+            self, # parent
+            self.db_manager,
+            self, # app_ref
+            fatura_tipi=fatura_tipi, # BURADA fatura_tipi zaten gönderiliyor
+            duzenleme_id=duzenleme_id,
+            yenile_callback=self._initial_load_data,
+            initial_data=initial_data
+        )
+        self.fatura_penceresi.show()
+        logger.info(f"Fatura penceresi açıldı. Tip: {fatura_tipi}, ID: {duzenleme_id}")
+
+    def show_order_form(self, siparis_tipi, siparis_id_duzenle=None, initial_data=None):
+        """Sipariş oluşturma/düzenleme penceresini açar."""
+        from pencereler import SiparisPenceresi # Bu import burada yapılmalı
+        self.siparis_penceresi = SiparisPenceresi(
+            self, # parent
+            self.db_manager,
+            self, # app_ref
+            siparis_tipi=siparis_tipi,
+            siparis_id_duzenle=siparis_id_duzenle,
+            yenile_callback=self._initial_load_data, # Sipariş kaydedilince ana ekranı yenile
+            initial_data=initial_data
+        )
+        self.siparis_penceresi.show()
+        logger.info(f"Sipariş penceresi açıldı. Tip: {siparis_tipi}, ID: {siparis_id_duzenle}")
 
     # --- App Sınıfının Metodları ---
     def _initialize_db_manager(self):
@@ -354,7 +389,7 @@ class App(QMainWindow):
         # FaturaPenceresi'nin init'i parent, db_manager, fatura_tipi, duzenleme_id, yenile_callback alıyor.
         # Varsayılan olarak SATIŞ faturası açabiliriz.
         self.fatura_karti_penceresi = FaturaPenceresi(self, self.db_manager, fatura_tipi="SATIŞ", yenile_callback=self._initial_load_data)
-        self.fatura_karti_parti_penceresi.show() # Corrected from self.fatura_karti_penceresi to self.fatura_karti_parti_penceresi
+        self.fatura_karti_penceresi.show()
 
     def _siparis_karti_penceresi_ac(self):
         from pencereler import SiparisPenceresi # SiparisPenceresi pencereler.py içinde
@@ -363,9 +398,6 @@ class App(QMainWindow):
 
     def _cari_hareketler_penceresi_ac(self):
         from pencereler import CariHesapEkstresiPenceresi # CariHesapEkstresiPenceresi
-        # CariHesapEkstresiPenceresi doğrudan cari_id, cari_tip ve pencere_basligi bekler.
-        # Menüden açıldığında belirli bir cari ID'si olmadığı için genel bir liste açılması gerekecek.
-        # Şimdilik bir uyarı mesajı ile placeholder olarak bırakalım veya doğrudan bir cari seçim diyalogu açabiliriz.
         QMessageBox.information(self, "Bilgi", "Cari Hareketler penceresi doğrudan açılamıyor. Lütfen önce bir cari seçimi yapın veya ilgili cari ekstresi üzerinden erişin.")
 
     def _nitelik_yonetimi_penceresi_ac(self):
@@ -462,6 +494,27 @@ class App(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    # Açık tema ayarları
+    app.setStyle("Fusion") # Fusion stili, çapraz platformlarda daha tutarlı ve modern bir görünüm sağlar
+    palette = QPalette() #
+    palette.setColor(QPalette.Window, QColor(240, 240, 240)) # Ana pencere arkaplan rengi
+    palette.setColor(QPalette.WindowText, QColor(0, 0, 0)) # Pencere metin rengi
+    palette.setColor(QPalette.Base, QColor(255, 255, 255)) # Giriş kutuları, listeler vb. arkaplan rengi
+    palette.setColor(QPalette.AlternateBase, QColor(230, 230, 230)) # Alternatif satır arkaplan rengi
+    palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255)) # Tooltip arkaplan rengi
+    palette.setColor(QPalette.ToolTipText, QColor(0, 0, 0)) # Tooltip metin rengi
+    palette.setColor(QPalette.Text, QColor(0, 0, 0)) # Genel metin rengi
+    palette.setColor(QPalette.Button, QColor(200, 200, 200)) # Buton arkaplan rengi
+    palette.setColor(QPalette.ButtonText, QColor(0, 0, 0)) # Buton metin rengi
+    palette.setColor(QPalette.BrightText, QColor(255, 0, 0)) # Parlak metin (nadiren kullanılır)
+    palette.setColor(QPalette.Link, QColor(42, 130, 218)) # Link rengi
+    palette.setColor(QPalette.Highlight, QColor(42, 130, 218)) # Seçili öğelerin arkaplan rengi
+    palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255)) # Seçili öğelerin metin rengi
+    app.setPalette(palette) # Uygulamaya paleti uygula
+    # app.setStyleSheet("QMenuBar { background-color: rgb(230, 230, 230); color: black; }") # Menü çubuğunu da özelleştirmek isterseniz
+    # Bu satır isteğe bağlı, eğer varsayılan Fusion teması menü çubuğunu istediğiniz gibi yapmazsa kullanabilirsiniz.
+
     window = App()
     window.show()
     sys.exit(app.exec())

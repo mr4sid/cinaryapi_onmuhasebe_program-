@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr,Field
 from typing import Optional, List
 from datetime import date
 
@@ -209,3 +209,86 @@ class CariHareketBase(OrmConfig):
     tutar: float
     referans_tip: Optional[str] = None
     kasa_banka_adi: Optional[str] = None
+
+# Sirket Bilgileri Modelleri (api/rotalar/sistem.py için)
+class SirketBilgileriBase(BaseModel):
+    sirket_adi: str
+    adres: Optional[str] = None
+    telefon: Optional[str] = None
+    email: Optional[EmailStr] = None
+    vergi_dairesi: Optional[str] = None
+    vergi_no: Optional[str] = None
+    ticaret_sicil_no: Optional[str] = None
+
+class SirketBilgileri(SirketBilgileriBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+class SirketBilgileriUpdate(BaseModel):
+    sirket_adi: Optional[str] = None
+    adres: Optional[str] = None
+    telefon: Optional[str] = None
+    email: Optional[EmailStr] = None
+    vergi_dairesi: Optional[str] = None
+    vergi_no: Optional[str] = None
+    ticaret_sicil_no: Optional[str] = None
+
+# Kullanıcı Kimlik Doğrulama ve Bilgileri Modelleri (api/rotalar/dogrulama.py için)
+class KullaniciLogin(BaseModel):
+    username: str
+    password: str
+
+class KullaniciBilgileri(BaseModel):
+    id: int
+    username: str
+    rol: str
+
+    class Config:
+        from_attributes = True    
+
+# Urun Grubu Modelleri
+class UrunGrubuBase(BaseModel):
+    grup_adi: str
+
+class UrunGrubuCreate(UrunGrubuBase):
+    pass
+
+class UrunGrubuUpdate(UrunGrubuBase):
+    grup_adi: Optional[str] = None # Güncelleme için isteğe bağlı
+
+class UrunGrubu(UrunGrubuBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+# Urun Birimi Modelleri
+class UrunBirimiBase(BaseModel):
+    birim_adi: str
+
+class UrunBirimiCreate(UrunBirimiBase):
+    pass
+
+class UrunBirimiUpdate(UrunBirimiBase):
+    birim_adi: Optional[str] = None
+
+class UrunBirimi(UrunBirimiBase):
+    id: int
+    class Config:
+        from_attributes = True
+
+# Ulke Modelleri
+class UlkeBase(BaseModel):
+    ulke_adi: str
+
+class UlkeCreate(UlkeBase):
+    pass
+
+class UlkeUpdate(UlkeBase):
+    ulke_adi: Optional[str] = None
+
+class Ulke(UlkeBase):
+    id: int
+    class Config:
+        from_attributes = True        

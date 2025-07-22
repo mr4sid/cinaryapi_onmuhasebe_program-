@@ -1,10 +1,13 @@
+import locale
 from PySide6.QtWidgets import (
-    QDialog, QWidget, QVBoxLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit, 
-    QTextEdit, QPushButton, QMessageBox, QTabWidget, QGroupBox, QComboBox, 
-    QFileDialog, QSizePolicy, QTreeWidget, QTreeWidgetItem, QAbstractItemView, 
-    QHeaderView, QMenu, QFrame, QApplication, QCheckBox,QProgressBar)
+    QApplication, QMainWindow, QMessageBox, QFileDialog,
+    QWidget, QMenuBar, QStatusBar, QDialog, QPushButton, QVBoxLayout,
+    QHBoxLayout, QGridLayout, QLabel, QLineEdit, QComboBox,
+    QTreeWidget, QTreeWidgetItem, QAbstractItemView, QHeaderView, QTextEdit,
+    QCheckBox, QFrame, QTableWidget, QTableWidgetItem, QGroupBox,
+    QMenu, QTabWidget,QSizePolicy, QProgressBar )
 from PySide6.QtGui import QFont, QPixmap, QImage, QDoubleValidator, QIntValidator, QBrush, QColor
-from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtCore import Qt, QDate, QTimer, Signal, Slot
 import requests
 from datetime import datetime, date, timedelta
 import os
@@ -107,9 +110,6 @@ def format_and_validate_numeric_input(line_edit: QLineEdit, decimals: int):
         pass
 
 def setup_date_entry(parent_app, entry_widget):
-    # PySide6'da tarih girişleri için doğrudan bir validator yoktur.
-    # Genellikle QDateEdit kullanılır veya custom validator yazılır.
-    # Şimdilik sadece formatlamayı zorunlu kılabiliriz.
     pass
 
 class SiparisPenceresi(QDialog):
@@ -180,6 +180,72 @@ class SiparisPenceresi(QDialog):
         if self.yenile_callback:
             self.yenile_callback()
 
+    def _siparis_yukle(self):
+        # Sipariş bilgileri mevcutsa yükle
+        if self.siparis_bilgileri:
+            self.ui.deTarih.setDate(QDate.fromString(self.siparis_bilgileri["tarih"], "yyyy-MM-dd"))
+            self.ui.txtBelgeNo.setText(self.siparis_bilgileri["belge_no"])
+            self.ui.txtAciklama.setText(self.siparis_bilgileri["aciklama"])
+            self.ui.lblToplamTutar.setText(f"{self.siparis_bilgileri.get('toplam_tutar', 0.0):.2f} {self.app_ref.ui.lblParaBirimi.text()}")
+
+            # Cari bilgilerini API'den çek ve ComboBox'ı ID ile ayarla
+            if self.siparis_bilgileri.get("cari_id"):
+                cari_id = self.siparis_bilgileri["cari_id"]
+                # Bu kısımda artık musteri_adi_getir_by_id kullanılmıyor.
+                # Cari listesini alıp, ID'ye göre ComboBox'ı ayarlamamız daha sağlıklı.
+                # Ancak burada doğrudan cari_adi'nı UI'da gösterebilmek için de API çağrısı yapabiliriz.
+                try:
+                    if self.siparis_tipi == "SATIŞ_SIPARIS":
+                        cari_data = self.db_manager.musteri_getir_by_id(cari_id)
+                    else: # ALIS_SIPARIS
+                        cari_data = self.db_manager.tedarikci_getir_by_id(cari_id)
+
+                    if cari_data:
+                        cari_ad = cari_data.get("ad_soyad", "Bilinmeyen Cari")
+                        # ComboBox'ı metin yerine doğrudan ID'ye göre ayarlayalım
+                        # Bu, cmbCari'nin doldurulmuş olduğunu varsayar
+                        index = self.ui.cmbCari.findData(cari_id)
+                        if index != -1:
+                            self.ui.cmbCari.setCurrentIndex(index)
+                        else:
+                            # Eğer cari combobox'ta yoksa, hata veya varsayılan gösterim
+                            self.ui.cmbCari.setCurrentText(cari_ad) # Geçici olarak sadece adını göster
+                            logger.warning(f"Sipariş yüklenirken Cari ID {cari_id} ComboBox'ta bulunamadı.")
+                except Exception as e:
+                    logger.error(f"Sipariş için cari bilgileri yüklenirken hata: {e}")
+                    self.ui.cmbCari.setCurrentText("Yükleme Hatası") # Hata durumunda
+
+            # Sipariş kalemlerini yükle
+            kalemler = self.siparis_bilgileri.get("siparis_kalemleri", [])
+            self.ui.tblKalemler.setRowCount(len(kalemler))
+            for row, kalem in enumerate(kalemler):
+                urun_id = kalem.get("urun_id")
+                # Stok adını API'den çekmeliyiz, artık db_manager.stok_adi_getir_by_id yok.
+                urun_adi = "Yükleniyor..."
+                try:
+                    urun_data = self.db_manager.stok_getir_by_id(urun_id)
+                    if urun_data:
+                        urun_adi = urun_data.get("ad", "Bilinmeyen Ürün")
+                except Exception as e:
+                    logger.error(f"Sipariş kalemi için ürün bilgisi yüklenirken hata: {e}")
+                    urun_adi = "Hata"
+
+                self.ui.tblKalemler.setItem(row, 0, QTableWidgetItem(urun_adi))
+                self.ui.tblKalemler.setItem(row, 1, QTableWidgetItem(str(kalem.get("miktar", 0))))
+                self.ui.tblKalemler.setItem(row, 2, QTableWidgetItem(f"{kalem.get('birim_fiyat', 0.0):.2f}"))
+                self.ui.tblKalemler.setItem(row, 3, QTableWidgetItem(f"{kalem.get('iskonto_orani', 0.0):.2f}%"))
+                self.ui.tblKalemler.setItem(row, 4, QTableWidgetItem(f"{kalem.get('kdv_orani', 0.0):.2f}%"))
+                self.ui.tblKalemler.setItem(row, 5, QTableWidgetItem(f"{kalem.get('ara_toplam', 0.0):.2f}"))
+                self.ui.tblKalemler.setItem(row, 6, QTableWidgetItem(f"{kalem.get('kdv_tutari', 0.0):.2f}"))
+                self.ui.tblKalemler.setItem(row, 7, QTableWidgetItem(f"{kalem.get('toplam_tutar', 0.0):.2f}"))
+
+                # Ürün ID'sini öğeye bağla (gerektiğinde kullanılmak üzere)
+                item_urun_id = QTableWidgetItem()
+                item_urun_id.setData(Qt.UserRole, urun_id)
+                self.ui.tblKalemler.setItem(row, self.ui.tblKalemler.columnCount() - 1, item_urun_id) # Genişleyen sütun
+
+            self.ui.tblKalemler.resizeColumnsToContents()
+
 class CariHesapEkstresiPenceresi(QDialog):
     def __init__(self, parent_app, db_manager, cari_id, cari_tip, pencere_basligi, parent_list_refresh_func=None):
         super().__init__(parent_app)
@@ -225,7 +291,6 @@ class CariHesapEkstresiPenceresi(QDialog):
 
         # Set default date range and load data
         today = date.today()
-        # Use QDate for date manipulation for consistency with QCalendarWidget
         start_date = today - timedelta(days=3 * 365) if self.cari_tip == "TEDARIKCI" else today - timedelta(days=6 * 30)
         self.bas_tarih_entry.setText(start_date.strftime('%Y-%m-%d'))
         self.bit_tarih_entry.setText(today.strftime('%Y-%m-%d'))
@@ -248,6 +313,30 @@ class CariHesapEkstresiPenceresi(QDialog):
             self._siparisleri_yukle()
         elif selected_tab_text == "Hesap Hareketleri":
             self.ekstreyi_yukle()
+
+    def _yukle_cari_bilgileri(self):
+        try:
+            cari_adi = "Bilinmiyor"
+            cari_telefon = ""
+            
+            if self.cari_tipi == "MUSTERI":
+                cari_data = self.db_manager.musteri_getir_by_id(self.cari_id) #
+                if cari_data:
+                    cari_adi = cari_data.get("ad_soyad", "Bilinmeyen Müşteri") #
+                    cari_telefon = cari_data.get("telefon", "") #
+                
+            elif self.cari_tipi == "TEDARIKCI":
+                cari_data = self.db_manager.tedarikci_getir_by_id(self.cari_id) #
+                if cari_data:
+                    cari_adi = cari_data.get("ad_soyad", "Bilinmeyen Tedarikçi") #
+                    cari_telefon = cari_data.get("telefon", "") #
+            
+            self.ui.lblCariAdi.setText(cari_adi)
+            self.ui.lblCariTelefon.setText(cari_telefon)
+            self.setWindowTitle(f"{cari_adi} - Cari Hesap Ekstresi") # Pencere başlığını da güncelle
+        except Exception as e:
+            logger.error(f"Cari bilgileri yüklenirken hata oluştu: {e}")
+            QMessageBox.warning(self, "Hata", f"Cari bilgileri yüklenirken bir hata oluştu: {e}")
 
     def _create_hesap_hareketleri_tab(self):
         parent_frame = self.hesap_hareketleri_tab
@@ -1264,10 +1353,10 @@ class FaturaPenceresi(QDialog):
     CARI_TIP_MUSTERI = "MUSTERI"
     CARI_TIP_TEDARIKCI = "TEDARIKCI"
 
-    def __init__(self, parent=None, db_manager=None, fatura_tipi=None, duzenleme_id=None, yenile_callback=None, initial_data=None):
+    def __init__(self, parent=None, db_manager=None, app_ref=None, fatura_tipi=None, duzenleme_id=None, yenile_callback=None, initial_data=None):
         super().__init__(parent)
         
-        self.app = parent # Ana uygulamaya erişim için
+        self.app = app_ref  # Ana uygulamaya erişim için
         self.db = db_manager # Veritabanı yöneticisi artık doğru şekilde alınıyor
         self.yenile_callback = yenile_callback
         self.duzenleme_id = duzenleme_id
@@ -1602,7 +1691,7 @@ class FaturaPenceresi(QDialog):
         footer_layout.addWidget(self.genel_iskonto_degeri_e, 1, 1, Qt.AlignLeft)
         
         self.lbl_uygulanan_genel_iskonto = QLabel("Uygulanan Genel İskonto: 0,00 TL", footer_groupbox)
-        self.lbl_uygulanan_genel_iskonto.setFont(QFont("Segoe UI", 9, QFont.Italic))
+        self.lbl_uygulanan_genel_iskonto.setFont(QFont("Segoe UI", 9, QFont.StyleItalic))
         footer_layout.addWidget(self.lbl_uygulanan_genel_iskonto, 2, 0, 1, 2, Qt.AlignLeft)
 
         # Toplamlar (daha büyük fontlarla)

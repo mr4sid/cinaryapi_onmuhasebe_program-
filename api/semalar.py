@@ -187,8 +187,45 @@ class GelirSiniflandirma(Base):
     id = Column(Integer, primary_key=True, index=True)
     siniflandirma_adi = Column(String, unique=True, nullable=False)
 
-
 class GiderSiniflandirma(Base):
     __tablename__ = "gider_siniflandirma"
     id = Column(Integer, primary_key=True, index=True)
     siniflandirma_adi = Column(String, unique=True, nullable=False)    
+
+# Sirket Modeli (api/rotalar/sistem.py için)
+class Sirket(Base):
+    __tablename__ = "sirketler"
+    id = Column(Integer, primary_key=True, index=True)
+    sirket_adi = Column(String, index=True, unique=True, nullable=False)
+    adres = Column(String)
+    telefon = Column(String)
+    email = Column(String)
+    vergi_dairesi = Column(String)
+    vergi_no = Column(String)
+    ticaret_sicil_no = Column(String)
+
+# Kullanıcı Modeli (api/rotalar/dogrulama.py için)
+class Kullanici(Base):
+    __tablename__ = "kullanicilar"
+    id = Column(Integer, primary_key=True, index=True)
+    kullanici_adi = Column(String, unique=True, index=True, nullable=False)
+    sifre = Column(String, nullable=False) # Gerçekte hash'lenmiş şifre olmalı
+    rol = Column(String, default="USER") # ADMIN, MANAGER, SALES, USER gibi roller
+
+# Ürün Grubu Modeli
+class UrunGrubu(Base):
+    __tablename__ = "urun_gruplari"
+    id = Column(Integer, primary_key=True, index=True)
+    grup_adi = Column(String, unique=True, index=True, nullable=False)
+
+# Ürün Birimi Modeli
+class UrunBirimi(Base):
+    __tablename__ = "urun_birimleri"
+    id = Column(Integer, primary_key=True, index=True)
+    birim_adi = Column(String, unique=True, index=True, nullable=False)
+
+# Ülke Modeli
+class Ulke(Base):
+    __tablename__ = "ulkeler"
+    id = Column(Integer, primary_key=True, index=True)
+    ulke_adi = Column(String, unique=True, index=True, nullable=False)    
