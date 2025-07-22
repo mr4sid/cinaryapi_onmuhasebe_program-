@@ -1691,7 +1691,7 @@ class FaturaPenceresi(QDialog):
         footer_layout.addWidget(self.genel_iskonto_degeri_e, 1, 1, Qt.AlignLeft)
         
         self.lbl_uygulanan_genel_iskonto = QLabel("Uygulanan Genel İskonto: 0,00 TL", footer_groupbox)
-        self.lbl_uygulanan_genel_iskonto.setFont(QFont("Segoe UI", 9, QFont.StyleItalic))
+        self.lbl_uygulanan_genel_iskonto.setFont(QFont("Segoe UI", 9, italic=True))
         footer_layout.addWidget(self.lbl_uygulanan_genel_iskonto, 2, 0, 1, 2, Qt.AlignLeft)
 
         # Toplamlar (daha büyük fontlarla)

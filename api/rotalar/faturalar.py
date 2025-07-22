@@ -437,3 +437,44 @@ def read_fatura_by_id(fatura_id: int, db: Session = Depends(get_db)):
     fatura_model.guncelleyen_kul_adi = guncelleyen_kul_adi
     
     return fatura_model
+
+@router.get("/son_fatura_no") # fatura_id yol parametresi olmadan
+def sonraki_fatura_no_getir(fatura_tipi: str, db: Session = Depends(get_db)):
+    """Belirtilen fatura tipi için son fatura numarasını getirir ve bir sonraki numarayı önerir."""
+    # Son fatura numarasını veritabanından çekin
+    # Örnek: "SATIŞ" tipi faturalar için "SF00001", "ALIŞ" için "AF00001" gibi
+    prefix_map = {
+        "SATIŞ": "SF",
+        "ALIŞ": "AF",
+        "SATIŞ İADE": "SI",
+        "ALIŞ İADE": "AI",
+        "DEVİR GİRİŞ": "DG"
+    }
+    prefix = prefix_map.get(fatura_tipi, "XX") # Bilinmeyen tip için varsayılan prefix
+
+    # Veritabanından bu prefix ile başlayan en büyük fatura numarasını bulun
+    # Örneğin: SELECT fatura_no FROM faturalar WHERE fatura_no LIKE 'SF%' ORDER BY fatura_no DESC LIMIT 1;
+    last_fatura_no = db.query(semalar.Fatura.fatura_no). \
+        filter(semalar.Fatura.fatura_no.like(f"{prefix}%")). \
+        order_by(semalar.Fatura.fatura_no.desc()).first()
+
+    if last_fatura_no:
+        last_no_str = last_fatura_no[0]
+        try:
+            # Sayısal kısmı al (prefix'ten sonraki kısım)
+            numeric_part = int(last_no_str[len(prefix):])
+            next_numeric_part = numeric_part + 1
+            next_fatura_no = f"{prefix}{next_numeric_part:09d}" # 9 basamaklı sıfır dolgulu
+        except ValueError:
+            # Eğer fatura no formatı beklenenden farklıysa
+            next_fatura_no = f"{prefix}000000001"
+    else:
+        next_fatura_no = f"{prefix}000000001"
+
+    return {"next_no": next_fatura_no}
+
+def fatura_kalemlerini_getir(fatura_id: int, db: Session = Depends(get_db)):
+    """Belirtilen faturanın kalemlerini döndürür."""
+    kalemler = db.query(semalar.FaturaKalemi).filter(semalar.FaturaKalemi.fatura_id == fatura_id).all()
+    # Modeller.FaturaKalemi Pydantic modeline dönüştürerek döndürün.
+    return [modeller.FaturaKalemi.model_validate(kalem) for kalem in kalemler]

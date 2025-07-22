@@ -289,6 +289,11 @@ class App(QMainWindow):
         self.fatura_penceresi.show()
         logger.info(f"Fatura penceresi açıldı. Tip: {fatura_tipi}, ID: {duzenleme_id}")
 
+    def set_status_message(self, message):
+        """Durum çubuğuna mesaj yazar."""
+        self.statusBar().showMessage(message)
+        logger.info(f"Durum Mesajı: {message}")
+
     def show_order_form(self, siparis_tipi, siparis_id_duzenle=None, initial_data=None):
         """Sipariş oluşturma/düzenleme penceresini açar."""
         from pencereler import SiparisPenceresi # Bu import burada yapılmalı

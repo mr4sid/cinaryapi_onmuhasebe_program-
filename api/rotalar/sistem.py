@@ -7,26 +7,22 @@ from .. import semalar # semalar.py'den modelleri içe aktarıyoruz
 from .. import modeller # Pydantic modellerini içe aktarıyoruz
 from ..veritabani import get_db # veritabani.py'den get_db bağımlılığını içe aktarıyoruz
 
-# Örnek veritabanı sorguları (Bunlar gerçek veritabanı işlemlerini içerecektir)
-# Bu fonksiyonlar, veritabanı işlemlerinin yapılacağı yerlerdir.
-# Şimdilik placeholder olarak duracak, daha sonra gerçek sorguları yazacağız.
-
 # -- Varsayılan Değerler --
 def get_perakende_musteri_id_from_db(db: Session):
     # Gerçek uygulamada, veritabanından ID'si veya kodu 'PERAKENDE' olan müşteriyi bulmalısınız.
-    # Örneğin: db.query(semalar.Musteri).filter(semalar.Musteri.kod == "PERAKENDE").first()
-    # Şu an için sabit bir ID dönelim (örneğin ID'si 1 olan müşteri)
-    musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == 1).first() # ID 1'i perakende varsayıyoruz
+    # Örneğin: musteri = db.query(semalar.Musteri).filter(semalar.Musteri.kod == "PERAKENDE").first()
+    # Şu an için basitçe ID'si 1 olan müşteriyi varsayıyoruz.
+    musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == 1).first() 
     if musteri:
         return {"id": musteri.id}
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Perakende müşteri bulunamadı.")
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Perakende musteri bulunamadi.")
 
 def get_genel_tedarikci_id_from_db(db: Session):
     # Gerçek uygulamada, veritabanından ID'si veya kodu 'GENEL' olan tedarikçiyi bulmalısınız.
-    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == 1).first() # ID 1'i genel tedarikçi varsayıyoruz
+    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == 1).first() 
     if tedarikci:
         return {"id": tedarikci.id}
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Genel tedarikçi bulunamadı.")
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Genel tedarikci bulunamadi.")
 
 def get_varsayilan_kasa_banka_from_db(db: Session, odeme_turu: str):
     # Ödeme türüne göre varsayılan kasa/banka hesabını veritabanından çek.
@@ -94,14 +90,6 @@ router = APIRouter(
     tags=["Sistem ve Varsayılanlar"]
 )
 
-@router.get("/defaults/perakende_musteri/id")
-def get_perakende_musteri_id_endpoint(db: Session = Depends(get_db)):
-    return get_perakende_musteri_id_from_db(db)
-
-@router.get("/defaults/genel_tedarikci/id")
-def get_genel_tedarikci_id_endpoint(db: Session = Depends(get_db)):
-    return get_genel_tedarikci_id_from_db(db)
-
 @router.get("/varsayilan_kasa_banka/{odeme_turu}")
 def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, db: Session = Depends(get_db)):
     return get_varsayilan_kasa_banka_from_db(db, odeme_turu)
@@ -128,3 +116,4 @@ def login_for_access_token(user: modeller.KullaniciLogin, db: Session = Depends(
         )
     # Gerçek uygulamada burada JWT token oluşturulur ve döndürülür
     return {"access_token": "fake-jwt-token", "token_type": "bearer", "user": authenticated_user}
+
