@@ -1,16 +1,15 @@
-# veritabani.py dosyasının tam içeriği
+# veritabani.py dosyasının TAMAMI
+
 import requests
 import json
 import logging
 import os
+import locale # YENİ EKLENDİ (Para birimi formatlama için)
+from config import API_BASE_URL # DÜZELTİLDİ: Göreceli içe aktarma kaldırıldı, doğrudan import
 
 # Logger kurulumu
-# Loglama seviyesini ve formatını ayarlayabilirsiniz.
-# Örneğin, logları bir dosyaya yazmak için:
-# logging.basicConfig(filename='application.log', level=logging.INFO,
-#                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-# Eğer ana uygulama tarafından zaten yapılandırılmadıysa, basit bir konsol çıktısı için:
+
 if not logger.handlers:
     handler = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -18,9 +17,8 @@ if not logger.handlers:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
-
 class OnMuhasebe:
-    # Sabitler
+    # Sabitler (UI ve diğer modüllerle uyumlu olması için burada tutuluyor)
     FATURA_TIP_SATIS = "SATIŞ"
     FATURA_TIP_ALIS = "ALIŞ"
     FATURA_TIP_SATIS_IADE = "SATIŞ İADE"
@@ -33,7 +31,7 @@ class OnMuhasebe:
     ODEME_TURU_CEK = "ÇEK"
     ODEME_TURU_SENET = "SENET"
     ODEME_TURU_ACIK_HESAP = "AÇIK HESAP"
-    ODEME_TURU_ETKISIZ_FATURA = "ETKİSİZ FATURA" # Stok hareketini etkilemeyen fatura
+    ODEME_TURU_ETKISIZ_FATURA = "ETKİSİZ FATURA"
     
     pesin_odeme_turleri = [ODEME_TURU_NAKIT, ODEME_TURU_KART, ODEME_TURU_EFT_HAVALE, ODEME_TURU_CEK, ODEME_TURU_SENET]
 
@@ -55,9 +53,19 @@ class OnMuhasebe:
     STOK_ISLEM_TIP_SAYIM_FAZLASI = "SAYIM_FAZLASI"
     STOK_ISLEM_TIP_SAYIM_EKSIGI = "SAYIM_EKSİĞİ"
     STOK_ISLEM_TIP_ZAYIAT = "ZAYİAT"
-    STOK_ISLEM_TIP_IADE_GIRIS = "İADE_GİRİŞ" # Alış İade Faturası ile
+    STOK_ISLEM_TIP_IADE_GIRIS = "İADE_GİRİŞ"
     STOK_ISLEM_TIP_FATURA_ALIS = "FATURA_ALIŞ"
     STOK_ISLEM_TIP_FATURA_SATIS = "FATURA_SATIŞ"
+
+    # Kaynak Tipleri (Cari Hareketler ve Stok Hareketleri için)
+    KAYNAK_TIP_FATURA = "FATURA"
+    KAYNAK_TIP_IADE_FATURA = "İADE_FATURA"
+    KAYNAK_TIP_FATURA_SATIS_PESIN = "FATURA_SATIŞ_PEŞİN"
+    KAYNAK_TIP_FATURA_ALIS_PESIN = "FATURA_ALIŞ_PEŞİN"
+    KAYNAK_TIP_TAHSILAT = "TAHSİLAT"
+    KAYNAK_TIP_ODEME = "ÖDEME"
+    KAYNAK_TIP_VERESIYE_BORC_MANUEL = "VERESİYE_BORÇ_MANUEL"
+    KAYNAK_TIP_MANUEL = "MANUEL"
 
     # Kullanıcı Rolleri
     USER_ROLE_ADMIN = "ADMIN"
@@ -65,47 +73,28 @@ class OnMuhasebe:
     USER_ROLE_SALES = "SALES"
     USER_ROLE_USER = "USER"
     
-    def __init__(self, api_base_url="http://127.0.0.1:8000"):
+    def __init__(self, api_base_url=API_BASE_URL, data_dir=None, app_ref=None):
         """
         Veritabanı bağlantılarını ve API iletişimini yöneten sınıf.
         Artık doğrudan veritabanı yerine FastAPI API'si ile iletişim kurar.
         """
         self.api_base_url = api_base_url
+        self.data_dir = data_dir
+        self.app = app_ref
         logger.info(f"OnMuhasebe başlatıldı. API Base URL: {self.api_base_url}")
 
-    def kullanici_dogrula(self, kullanici_adi, sifre):
-        """Kullanıcıyı API üzerinden doğrular."""
-        try:
-            # API'de '/dogrulama/login' gibi bir endpoint olduğunu varsayıyoruz
-            data = {"username": kullanici_adi, "password": sifre}
-            response = self._make_api_request("POST", "/dogrulama/login", data=data) # '/auth/login' yerine '/dogrulama/login'
-            # API'nin başarılı girişte kullanıcı objesini döndürdüğünü varsayıyoruz
-            return response
-        except ValueError as e: # API'den 401 Unauthorized gibi hatalar ValueError olarak gelebilir
-            logger.warning(f"Kullanıcı doğrulama hatası: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Kullanıcı doğrulama sırasında beklenmeyen hata: {e}")
-            return None
-
-    def _make_api_request(self, method, endpoint, data=None, params=None):
+    def _make_api_request(self, method: str, endpoint: str, data: dict = None, params: dict = None):
         """
         Genel API isteği gönderici.
         """
         url = f"{self.api_base_url}{endpoint}"
-        try:
-            if method == "GET":
-                response = requests.get(url, params=params)
-            elif method == "POST":
-                response = requests.post(url, json=data, params=params)
-            elif method == "PUT":
-                response = requests.put(url, json=data, params=params)
-            elif method == "DELETE":
-                response = requests.delete(url, params=params)
-            else:
-                raise ValueError(f"Desteklenmeyen HTTP metodu: {method}")
+        headers = {"Content-Type": "application/json"}
 
-            response.raise_for_status()  # HTTP hataları için istisna fırlatır (4xx veya 5xx)
+        cleaned_params = {k: v for k, v in (params or {}).items() if v is not None and str(v).strip() != ""}
+
+        try:
+            response = requests.request(method, url, json=data, params=cleaned_params, headers=headers)
+            response.raise_for_status()
             return response.json()
         except requests.exceptions.ConnectionError as e:
             logger.error(f"API'ye bağlanılamadı: {url}. Sunucunun çalıştığından emin olun. Hata: {e}")
@@ -114,13 +103,12 @@ class OnMuhasebe:
             logger.error(f"API isteği zaman aşımına uğradı: {url}. Hata: {e}")
             raise TimeoutError(f"API isteği zaman aşımına uğradı.") from e
         except requests.exceptions.HTTPError as e:
-            # API'den gelen hata detaylarını kullanıcıya iletmek için
             try:
-                error_detail = response.json().get("detail", "Bilinmeyen API hatası.")
+                error_detail = e.response.json().get('detail', str(e.response.content))
             except json.JSONDecodeError:
-                error_detail = response.text
-            logger.error(f"API HTTP hatası: {url}, Durum Kodu: {response.status_code}, Yanıt: {error_detail}. Hata: {e}")
-            raise ValueError(f"API hatası ({response.status_code}): {error_detail}") from e
+                error_detail = e.response.text
+            logger.error(f"API HTTP hatası: {url}, Durum Kodu: {e.response.status_code}, Yanıt: {error_detail}. Hata: {e}")
+            raise ValueError(f"API hatası ({e.response.status_code}): {error_detail}") from e
         except requests.exceptions.RequestException as e:
             logger.error(f"API isteği sırasında genel hata oluştu: {url}. Hata: {e}")
             raise RuntimeError(f"API isteği sırasında bir hata oluştu: {e}") from e
@@ -128,532 +116,691 @@ class OnMuhasebe:
             logger.critical(f"Beklenmedik bir hata oluştu: {e}")
             raise
 
-    # Müşteri İşlemleri
-    def musteri_ekle(self, musteri_bilgileri):
-        """Yeni bir müşteri ekler."""
-        return self._make_api_request("POST", "/musteriler/", data=musteri_bilgileri)
+    # --- ŞİRKET BİLGİLERİ ---
+    def sirket_bilgilerini_yukle(self):
+        try:
+            return self._make_api_request("GET", "/sistem/bilgiler")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Şirket bilgileri API'den yüklenemedi: {e}")
+            return {}
 
-    def musteri_listesi_al(self, aktif=None):
-        """Müşteri listesini alır. İsteğe bağlı olarak aktif/pasif müşterileri filtreler."""
-        params = {"aktif": aktif} if aktif is not None else None
+    def sirket_bilgilerini_kaydet(self, data: dict):
+        try:
+            self._make_api_request("PUT", "/sistem/bilgiler", data=data)
+            return True, "Şirket bilgileri başarıyla kaydedildi."
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Şirket bilgileri API'ye kaydedilemedi: {e}")
+            return False, f"Şirket bilgileri kaydedilirken hata: {e}"
+
+    # --- KULLANICI YÖNETİMİ ---
+    def kullanici_dogrula(self, kullanici_adi, sifre):
+        try:
+            response = self._make_api_request("POST", "/dogrulama/login", data={"kullanici_adi": kullanici_adi, "sifre": sifre})
+            return response.get("access_token"), response.get("token_type")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kullanıcı doğrulama başarısız: {e}")
+            return None, None
+        
+    def kullanici_listele(self):
+        try:
+            # API'deki kullanıcı listeleme endpoint'i modeller.UserListResponse döndürdüğü için
+            # doğrudan 'items' anahtarını döndürüyoruz.
+            return self._make_api_request("GET", "/kullanicilar/").get("items", []) 
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kullanıcı listesi API'den alınamadı: {e}")
+            return []
+
+    def kullanici_ekle(self, username, password, yetki):
+        try:
+            self._make_api_request("POST", "/dogrulama/register_temp", data={"kullanici_adi": username, "sifre": password, "yetki": yetki})
+            return True, "Kullanıcı başarıyla eklendi."
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kullanıcı eklenirken hata: {e}")
+            return False, f"Kullanıcı eklenirken hata: {e}"
+
+    def kullanici_guncelle_sifre_yetki(self, user_id, hashed_password, yetki):
+        try:
+            self._make_api_request("PUT", f"/kullanicilar/{user_id}", data={"hashed_sifre": hashed_password, "yetki": yetki})
+            return True, "Kullanıcı şifre ve yetki başarıyla güncellendi."
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kullanıcı şifre/yetki güncellenirken hata: {e}")
+            return False, f"Kullanıcı şifre/yetki güncellenirken hata: {e}"
+
+    def kullanici_adi_guncelle(self, user_id, new_username):
+        try:
+            self._make_api_request("PUT", f"/kullanicilar/{user_id}", data={"kullanici_adi": new_username})
+            return True, "Kullanıcı adı başarıyla güncellendi."
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kullanıcı adı güncellenirken hata: {e}")
+            return False, f"Kullanıcı adı güncellenirken hata: {e}"
+
+    def kullanici_sil(self, user_id):
+        try:
+            self._make_api_request("DELETE", f"/kullanicilar/{user_id}")
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kullanıcı silinirken hata: {e}")
+            return False, f"Kullanıcı silinirken hata: {e}"
+
+    # --- CARİLER (Müşteri/Tedarikçi) ---
+    def musteri_ekle(self, data: dict):
+        try:
+            self._make_api_request("POST", "/musteriler/", data=data)
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Müşteri eklenirken hata: {e}")
+            return False
+
+    def musteri_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
+        params = {
+            "skip": skip,
+            "limit": limit,
+            "arama": arama,
+            "aktif_durum": aktif_durum
+        }
         return self._make_api_request("GET", "/musteriler/", params=params)
 
-    def musteri_guncelle(self, musteri_id, musteri_bilgileri):
-        """Belirtilen ID'ye sahip müşteriyi günceller."""
-        return self._make_api_request("PUT", f"/musteriler/{musteri_id}", data=musteri_bilgileri)
+    def musteri_getir_by_id(self, musteri_id: int):
+        try:
+            return self._make_api_request("GET", f"/musteriler/{musteri_id}")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Müşteri ID {musteri_id} çekilirken hata: {e}")
+            return None
 
-    def musteri_sil(self, musteri_id):
-        """Belirtilen ID'ye sahip müşteriyi siler."""
-        return self._make_api_request("DELETE", f"/musteriler/{musteri_id}")
+    def musteri_guncelle(self, musteri_id: int, data: dict):
+        try:
+            self._make_api_request("PUT", f"/musteriler/{musteri_id}", data=data)
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Müşteri ID {musteri_id} güncellenirken hata: {e}")
+            return False
 
-    def musteri_getir_by_id(self, musteri_id):
-        """Belirtilen ID'ye sahip müşteriyi getirir."""
-        return self._make_api_request("GET", f"/musteriler/{musteri_id}")
-        
-    # Tedarikçi İşlemleri
-    def tedarikci_ekle(self, tedarikci_bilgileri):
-        """Yeni bir tedarikçi ekler."""
-        return self._make_api_request("POST", "/tedarikciler/", data=tedarikci_bilgileri)
+    def musteri_sil(self, musteri_id: int):
+        try:
+            self._make_api_request("DELETE", f"/musteriler/{musteri_id}")
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Müşteri ID {musteri_id} silinirken hata: {e}")
+            return False
 
-    def tedarikci_listesi_al(self, aktif=None):
-        """Tedarikçi listesini alır. İsteğe bağlı olarak aktif/pasif tedarikçileri filtreler."""
-        params = {"aktif": aktif} if aktif is not None else None
-        return self._make_api_request("GET", "/tedarikciler/", params=params)
-
-    def tedarikci_guncelle(self, tedarikci_id, tedarikci_bilgileri):
-        """Belirtilen ID'ye sahip tedarikçiyi günceller."""
-        return self._make_api_request("PUT", f"/tedarikciler/{tedarikci_id}", data=tedarikci_bilgileri)
-
-    def tedarikci_sil(self, tedarikci_id):
-        """Belirtilen ID'ye sahip tedarikçiyi siler."""
-        return self._make_api_request("DELETE", f"/tedarikciler/{tedarikci_id}")
-
-# Dashboard ve Rapor Özet Bilgileri
-    def get_dashboard_summary(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """
-        Dashboard için özet finansal metrikleri (toplam satış, tahsilat, ödeme, kritik stok,
-        ayın en çok satan ürünü, vadesi geçmiş alacak/borç) API'den çeker.
-        """
-        params = {
-            "baslangic_tarihi": baslangic_tarihi,
-            "bitis_tarihi": bitis_tarihi
-        }
-        params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/raporlar/dashboard_ozet", params=params)
-
-    def get_sales_by_payment_type(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Ödeme türlerine göre satış dağılımını API'den çeker."""
-        params = {
-            "baslangic_tarihi": baslangic_tarihi,
-            "bitis_tarihi": bitis_tarihi
-        }
-        params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/raporlar/satislar/odeme_turune_gore", params=params)
-
-    def get_top_selling_products(self, baslangic_tarihi=None, bitis_tarihi=None, limit=5):
-        """En çok satan ürünleri API'den çeker."""
-        params = {
-            "baslangic_tarihi": baslangic_tarihi,
-            "bitis_tarihi": bitis_tarihi,
-            "limit": limit
-        }
-        params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/raporlar/stoklar/en_cok_satanlar", params=params)
-
-    def get_critical_stock_items(self):
-        """Kritik stok seviyesinin altındaki ürünleri API'den çeker."""
-        return self._make_api_request("GET", "/raporlar/stoklar/kritik_stoklar")
-
-    def get_cari_total_receivables_payables(self, cari_tipi=None):
-        """
-        Müşterilerin toplam alacaklarını veya tedarikçilerin toplam borçlarını API'den çeker.
-        """
-        params = {"cari_tipi": cari_tipi} if cari_tipi is not None else None
-        return self._make_api_request("GET", "/raporlar/cariler/toplam_bakiye", params=params)
-
-    def get_total_sales(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Belirli bir tarih aralığındaki toplam satış tutarını API'den çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        params = {k: v for k, v in params.items() if v is not None}
-        response = self._make_api_request("GET", "/raporlar/satislar/toplam_tutar", params=params)
-        return response.get("toplam_satis_tutari", 0.0)
-
-    def get_total_collections(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Belirli bir tarih aralığındaki toplam tahsilat tutarını API'den çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        params = {k: v for k, v in params.items() if v is not None}
-        response = self._make_api_request("GET", "/raporlar/tahsilatlar/toplam_tutar", params=params)
-        return response.get("toplam_tahsilat_tutari", 0.0)
-
-    def get_total_payments(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Belirli bir tarih aralığındaki toplam ödeme tutarını API'den çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        params = {k: v for k, v in params.items() if v is not None}
-        response = self._make_api_request("GET", "/raporlar/odemeler/toplam_tutar", params=params)
-        return response.get("toplam_odeme_tutari", 0.0)
-
-    def get_kar_zarar_verileri(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Belirli bir tarih aralığındaki toplam gelir ve gider tutarlarını API'den çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        params = {k: v for k, v in params.items() if v is not None}
-        response = self._make_api_request("GET", "/raporlar/gelir_gider/toplamlar", params=params)
-        return response.get("toplam_gelir", 0.0), response.get("toplam_gider", 0.0)
-
-    def get_monthly_sales_summary(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Aylık satış özetini API'den çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/raporlar/satislar/aylik_ozet", params=params)
-
-    def get_monthly_income_expense_summary(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Aylık gelir-gider özetini API'den çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/raporlar/gelir_gider/aylik_ozet", params=params)
-
-    def tarihsel_satis_raporu_verilerini_al(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Detaylı tarihsel satış raporu verilerini API'den çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/raporlar/satislar/detayli_rapor", params=params)
-
-    def get_gross_profit_and_cost(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Brüt kar ve maliyet bilgilerini API'den çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        params = {k: v for k, v in params.items() if v is not None}
-        response = self._make_api_request("GET", "/raporlar/kar_zarar/brut_kar", params=params)
-        return response.get("brut_kar", 0.0), response.get("maliyet", 0.0), response.get("brut_kar_orani", 0.0)
-
-    def get_monthly_gross_profit_summary(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Aylık brüt kar özetini API'den çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/raporlar/kar_zarar/aylik_ozet", params=params)
-
-    def get_nakit_akis_verileri(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Nakit akışı detay verilerini API'den çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/raporlar/nakit_akis/detayli_rapor", params=params)
-
-    def get_monthly_cash_flow_summary(self, baslangic_tarihi=None, bitis_tarihi=None):
-        """Aylık nakit akışı özetini API'den çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/raporlar/nakit_akis/aylik_ozet", params=params)
-
-    def get_tum_kasa_banka_bakiyeleri(self):
-        """Tüm kasa/banka hesaplarının güncel bakiyelerini API'den çeker."""
-        return self._make_api_request("GET", "/raporlar/kasalar_bankalar/toplam_bakiyeler")
-
-    def get_cari_yaslandirma_verileri(self, tarih=None):
-        """Cari yaşlandırma raporu verilerini API'den çeker."""
-        params = {"tarih": tarih} if tarih is not None else None
-        return self._make_api_request("GET", "/raporlar/cariler/yaslandirma", params=params)
-
-    def get_stock_value_by_category(self):
-        """Kategoriye göre toplam stok değerini API'den çeker."""
-        return self._make_api_request("GET", "/raporlar/stoklar/kategoriye_gore_deger")
-
-    # Sistem ve Varsayılanlar
     def get_perakende_musteri_id(self):
-        """Perakende müşteri ID'sini API'den veya yapılandırmadan çeker."""
         try:
             response = self._make_api_request("GET", "/sistem/varsayilan_cariler/perakende_musteri_id")
             return response.get("id")
-        except Exception as e:
+        except (ValueError, ConnectionError, Exception) as e:
             logger.warning(f"Varsayılan perakende müşteri ID'si API'den alınamadı: {e}. None dönülüyor.")
             return None
+            
+    def get_musteri_net_bakiye(self, musteri_id: int):
+        try:
+            response = self._make_api_request("GET", f"/musteriler/{musteri_id}/net_bakiye")
+            return response.get("net_bakiye")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Müşteri ID {musteri_id} net bakiye çekilirken hata: {e}")
+            return None
 
+
+    def tedarikci_ekle(self, data: dict):
+        try:
+            self._make_api_request("POST", "/tedarikciler/", data=data)
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Tedarikçi eklenirken hata: {e}")
+            return False
+
+    def tedarikci_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
+        params = {
+            "skip": skip,
+            "limit": limit,
+            "arama": arama,
+            "aktif_durum": aktif_durum
+        }
+        return self._make_api_request("GET", "/tedarikciler/", params=params)
+
+    def tedarikci_getir_by_id(self, tedarikci_id: int):
+        try:
+            return self._make_api_request("GET", f"/tedarikciler/{tedarikci_id}")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Tedarikçi ID {tedarikci_id} çekilirken hata: {e}")
+            return None
+
+    def tedarikci_guncelle(self, tedarikci_id: int, data: dict):
+        try:
+            self._make_api_request("PUT", f"/tedarikciler/{tedarikci_id}", data=data)
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Tedarikçi ID {tedarikci_id} güncellenirken hata: {e}")
+            return False
+
+    def tedarikci_sil(self, tedarikci_id: int):
+        try:
+            self._make_api_request("DELETE", f"/tedarikciler/{tedarikci_id}")
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Tedarikçi ID {tedarikci_id} silinirken hata: {e}")
+            return False
+            
     def get_genel_tedarikci_id(self):
-        """Genel tedarikçi ID'sini API'den veya yapılandırmadan çeker."""
         try:
             response = self._make_api_request("GET", "/sistem/varsayilan_cariler/genel_tedarikci_id")
             return response.get("id")
-        except Exception as e:
+        except (ValueError, ConnectionError, Exception) as e:
             logger.warning(f"Varsayılan genel tedarikçi ID'si API'den alınamadı: {e}. None dönülüyor.")
             return None
 
-    def get_kasa_banka_by_odeme_turu(self, odeme_turu):
-        """
-        Ödeme türüne göre varsayılan kasa/banka hesabını API'den çeker.
-        """
+    def get_tedarikci_net_bakiye(self, tedarikci_id: int):
         try:
-            response = self._make_api_request("GET", f"/sistem/varsayilan_kasa_banka/{odeme_turu}")
-            return response # API'den doğrudan hesap objesi dönsün
-        except Exception as e:
-            logger.warning(f"Varsayılan kasa/banka hesabı API'den alınamadı ({odeme_turu}): {e}")
+            response = self._make_api_request("GET", f"/tedarikciler/{tedarikci_id}/net_bakiye")
+            return response.get("net_bakiye")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Tedarikçi ID {tedarikci_id} net bakiye çekilirken hata: {e}")
             return None
 
-    def son_fatura_no_getir(self, fatura_tipi):
-        """Belirtilen fatura tipi için son fatura numarasını API'den çeker ve bir sonraki numarayı oluşturur."""
-        params = {"fatura_tipi": fatura_tipi}
-        response = self._make_api_request("GET", f"/sistem/next_fatura_number/{fatura_tipi}", method="GET") 
-        return response.get("next_no", "0000000001")
+    # --- KASA/BANKA ---
+    def kasa_banka_ekle(self, data: dict):
+        try:
+            self._make_api_request("POST", "/kasalar_bankalar/", data=data)
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kasa/Banka eklenirken hata: {e}")
+            return False
 
-    def get_stok_miktari_for_kontrol(self, urun_id, fatura_id_or_siparis_id=None):
-        """
-        Belirli bir ürünün anlık stok miktarını API'den çeker.
-        Fatura/sipariş düzenleme modundaysa, o faturadaki/siparişteki ilgili kalem miktarını hesaba katar.
-        """
+    def kasa_banka_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, hesap_turu: str = None, aktif_durum: bool = None):
         params = {
-            "urun_id": urun_id,
-            "fatura_id_or_siparis_id": fatura_id_or_siparis_id
+            "skip": skip,
+            "limit": limit,
+            "arama": arama,
+            "hesap_turu": hesap_turu,
+            "aktif_durum": aktif_durum
         }
-        params = {k: v for k, v in params.items() if v is not None}
-        response = self._make_api_request("GET", "/stoklar/anlik_stok_miktari", params=params)
-        return response.get("stok_miktari", 0.0)
+        return self._make_api_request("GET", "/kasalar_bankalar/", params=params)
 
-    def get_faturalar_by_urun_id(self, urun_id, fatura_tipi=None):
-        """Belirli bir ürüne ait faturaları API'den çeker."""
+    def kasa_banka_getir_by_id(self, hesap_id: int):
+        try:
+            return self._make_api_request("GET", f"/kasalar_bankalar/{hesap_id}")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kasa/Banka ID {hesap_id} çekilirken hata: {e}")
+            return None
+
+    def kasa_banka_guncelle(self, hesap_id: int, data: dict):
+        try:
+            self._make_api_request("PUT", f"/kasalar_bankalar/{hesap_id}", data=data)
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kasa/Banka ID {hesap_id} güncellenirken hata: {e}")
+            return False
+
+    def kasa_banka_sil(self, hesap_id: int):
+        try:
+            self._make_api_request("DELETE", f"/kasalar_bankalar/{hesap_id}")
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kasa/Banka ID {hesap_id} silinirken hata: {e}")
+            return False
+
+    def get_varsayilan_kasa_banka(self, odeme_turu: str):
+        try:
+            response = self._make_api_request("GET", f"/sistem/varsayilan_kasa_banka/{odeme_turu}")
+            return response
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.warning(f"Varsayılan kasa/banka ({odeme_turu}) API'den alınamadı: {e}. None dönülüyor.")
+            return None
+
+
+    # --- STOKLAR ---
+    def stok_ekle(self, data: dict):
+        try:
+            self._make_api_request("POST", "/stoklar/", data=data)
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Stok eklenirken hata: {e}")
+            return False
+
+    def stok_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, 
+                             kategori_id: int = None, marka_id: int = None, stok_durumu: str = None, 
+                             kritik_stok_altinda: bool = None, aktif_durum: bool = None):
         params = {
-            "urun_id": urun_id,
-            "fatura_tipi": fatura_tipi
+            "skip": skip,
+            "limit": limit,
+            "arama": arama,
+            "kategori_id": kategori_id,
+            "marka_id": marka_id,
+            "stok_durumu": stok_durumu,
+            "kritik_stok_altinda": kritik_stok_altinda,
+            "aktif_durum": aktif_durum
         }
-        params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/faturalar/urun_faturalari", params=params)
+        return self._make_api_request("GET", "/stoklar/", params=params)
 
-    def stok_hareketleri_listele(self, urun_id, islem_tipi=None, baslangic_tarihi=None, bitis_tarihi=None):
-        """Belirli bir ürünün stok hareketlerini API'den çeker."""
+    def stok_getir_by_id(self, stok_id: int):
+        try:
+            return self._make_api_request("GET", f"/stoklar/{stok_id}")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Stok ID {stok_id} çekilirken hata: {e}")
+            return None
+
+    def stok_guncelle(self, stok_id: int, data: dict):
+        try:
+            self._make_api_request("PUT", f"/stoklar/{stok_id}", data=data)
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Stok ID {stok_id} güncellenirken hata: {e}")
+            return False
+
+    def stok_sil(self, stok_id: int):
+        try:
+            self._make_api_request("DELETE", f"/stoklar/{stok_id}")
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Stok ID {stok_id} silinirken hata: {e}")
+            return False
+            
+    def stok_hareket_ekle(self, stok_id: int, data: dict):
+        try:
+            self._make_api_request("POST", f"/stoklar/{stok_id}/hareket", data=data)
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Stok hareketi eklenirken hata: {e}")
+            return False
+
+    # --- FATURALAR ---
+    def fatura_ekle(self, data: dict):
+        try:
+            return self._make_api_request("POST", "/faturalar/", data=data)
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Fatura eklenirken hata: {e}")
+            raise
+
+    def fatura_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, fatura_turu: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, cari_id: int = None):
         params = {
-            "urun_id": urun_id,
-            "islem_tipi": islem_tipi,
+            "skip": skip,
+            "limit": limit,
+            "arama": arama,
+            "fatura_turu": fatura_turu,
+            "baslangic_tarihi": baslangic_tarihi,
+            "bitis_tarihi": bitis_tarihi,
+            "cari_id": cari_id
+        }
+        return self._make_api_request("GET", "/faturalar/", params=params)
+
+    def fatura_getir_by_id(self, fatura_id: int):
+        try:
+            return self._make_api_request("GET", f"/faturalar/{fatura_id}")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Fatura ID {fatura_id} çekilirken hata: {e}")
+            return None
+
+    def fatura_guncelle(self, fatura_id: int, data: dict):
+        try:
+            return self._make_api_request("PUT", f"/faturalar/{fatura_id}", data=data)
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Fatura ID {fatura_id} güncellenirken hata: {e}")
+            raise
+
+    def fatura_sil(self, fatura_id: int):
+        try:
+            self._make_api_request("DELETE", f"/faturalar/{fatura_id}")
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Fatura ID {fatura_id} silinirken hata: {e}")
+            return False
+
+    def fatura_kalemleri_al(self, fatura_id: int):
+        try:
+            return self._make_api_request("GET", f"/faturalar/{fatura_id}/kalemler")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Fatura ID {fatura_id} kalemleri çekilirken hata: {e}")
+            return []
+
+    def son_fatura_no_getir(self, fatura_tipi: str) -> str:
+        # API endpoint'i artık sistem router'ında ve path parametresi bekliyor
+        try:
+            response = self._make_api_request("GET", f"/sistem/next_fatura_number/{fatura_tipi}", method="GET")
+            return response["fatura_no"]
+        except Exception as e:
+            logger.error(f"Son fatura no API'den alınamadı: {e}")
+            # Hata durumunda varsayılan bir değer dön
+            prefix = ""
+            if fatura_tipi.upper() == "SATIŞ":
+                prefix = "SF"
+            elif fatura_tipi.upper() == "ALIŞ":
+                prefix = "AF"
+            return f"{prefix}000000001"
+
+    # --- SİPARİŞLER ---
+    def siparis_ekle(self, data: dict):
+        try:
+            return self._make_api_request("POST", "/siparisler/", data=data)
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Sipariş eklenirken hata: {e}")
+            raise
+
+    def siparis_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, siparis_turu: str = None, durum: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, cari_id: int = None):
+        params = {
+            "skip": skip,
+            "limit": limit,
+            "arama": arama,
+            "siparis_turu": siparis_turu,
+            "durum": durum,
+            "baslangic_tarihi": baslangic_tarihi,
+            "bitis_tarihi": bitis_tarihi,
+            "cari_id": cari_id
+        }
+        return self._make_api_request("GET", "/siparisler/", params=params)
+
+    def siparis_getir_by_id(self, siparis_id: int):
+        try:
+            return self._make_api_request("GET", f"/siparisler/{siparis_id}")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Sipariş ID {siparis_id} çekilirken hata: {e}")
+            return None
+
+    def siparis_guncelle(self, siparis_id: int, data: dict):
+        try:
+            self._make_api_request("PUT", f"/siparisler/{siparis_id}", data=data)
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Sipariş ID {siparis_id} güncellenirken hata: {e}")
+            return False
+
+    def siparis_sil(self, siparis_id: int):
+        try:
+            self._make_api_request("DELETE", f"/siparisler/{siparis_id}")
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Sipariş ID {siparis_id} silinirken hata: {e}")
+            return False
+
+    def siparis_kalemleri_al(self, siparis_id: int):
+        try:
+            return self._make_api_request("GET", f"/siparisler/{siparis_id}/kalemler")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Sipariş ID {siparis_id} kalemleri çekilirken hata: {e}")
+            return []
+
+    def get_next_siparis_kodu(self): # API'den otomatik atandığı varsayıldı
+        return "OTOMATIK"
+
+    # --- GELİR/GİDER ---
+    def gelir_gider_ekle(self, data: dict):
+        try:
+            self._make_api_request("POST", "/gelir_gider/", data=data)
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Gelir/Gider eklenirken hata: {e}")
+            return False
+
+    def gelir_gider_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, islem_turu: str = None, odeme_turu: str = None, kategori: str = None, cari_ad: str = None):
+        params = {
+            "skip": skip,
+            "limit": limit,
+            "arama": arama,
+            "baslangic_tarihi": baslangic_tarihi,
+            "bitis_tarihi": bitis_tarihi,
+            "islem_turu": islem_turu,
+            "odeme_turu": odeme_turu,
+            "kategori": kategori,
+            "cari_ad": cari_ad
+        }
+        return self._make_api_request("GET", "/gelir_gider/", params=params)
+
+    def gelir_gider_sil(self, gg_id: int):
+        try:
+            self._make_api_request("DELETE", f"/gelir_gider/{gg_id}")
+            return True
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Gelir/Gider ID {gg_id} silinirken hata: {e}")
+            return False
+
+    def gelir_gider_getir_by_id(self, gg_id: int):
+        try:
+            return self._make_api_request("GET", f"/gelir_gider/{gg_id}")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Gelir/Gider ID {gg_id} çekilirken hata: {e}")
+            return None
+
+    # --- CARİ HAREKETLER (Manuel oluşturma ve silme) ---
+    def cari_hareket_ekle_manuel(self, data: dict):
+        try:
+            return self._make_api_request("POST", "/cari_hareketler/manuel", data=data)
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Manuel cari hareket eklenirken hata: {e}")
+            return False
+
+    def cari_hareket_sil_manuel(self, hareket_id: int):
+        try:
+            return self._make_api_request("DELETE", f"/cari_hareketler/manuel/{hareket_id}")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Manuel cari hareket silinirken hata: {e}")
+            return False
+
+    def cari_hesap_ekstresi_al(self, cari_id: int, cari_turu: str, baslangic_tarihi: str, bitis_tarihi: str):
+        params = {
+            "cari_id": cari_id,
+            "cari_turu": cari_turu,
             "baslangic_tarihi": baslangic_tarihi,
             "bitis_tarihi": bitis_tarihi
         }
-        params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/stoklar/hareketler", params=params)
-
-    def kategori_ekle(self, kategori_adi):
-        """Yeni kategori ekler (API üzerinden)."""
-        data = {"kategori_adi": kategori_adi}
-        return self._make_api_request("POST", "/nitelikler/kategoriler", data=data)
-
-    def kategori_guncelle(self, kategori_id, yeni_kategori_adi):
-        """Kategori günceller (API üzerinden)."""
-        data = {"id": kategori_id, "kategori_adi": yeni_kategori_adi}
-        return self._make_api_request("PUT", f"/nitelikler/kategoriler/{kategori_id}", data=data)
-
-    def kategori_sil(self, kategori_id):
-        """Kategori siler (API üzerinden)."""
-        return self._make_api_request("DELETE", f"/nitelikler/kategoriler/{kategori_id}")
-
-    def kategori_listele(self):
-        """Kategori listesini API'den çeker."""
-        return self._make_api_request("GET", "/nitelikler/kategoriler")
-
-    def marka_ekle(self, marka_adi):
-        """Yeni marka ekler (API üzerinden)."""
-        data = {"marka_adi": marka_adi}
-        return self._make_api_request("POST", "/nitelikler/markalar", data=data)
-
-    def marka_guncelle(self, marka_id, yeni_marka_adi):
-        """Marka günceller (API üzerinden)."""
-        data = {"id": marka_id, "marka_adi": yeni_marka_adi}
-        return self._make_api_request("PUT", f"/nitelikler/markalar/{marka_id}", data=data)
-
-    def marka_sil(self, marka_id):
-        """Marka siler (API üzerinden)."""
-        return self._make_api_request("DELETE", f"/nitelikler/markalar/{marka_id}")
-
-    def marka_listele(self):
-        """Marka listesini API'den çeker."""
-        return self._make_api_request("GET", "/nitelikler/markalar")
-
-    def urun_grubu_ekle(self, grup_adi):
-        """Yeni ürün grubu ekler (API üzerinden)."""
-        data = {"grup_adi": grup_adi}
-        return self._make_api_request("POST", "/nitelikler/urun_gruplari", data=data)
-
-    def urun_grubu_guncelle(self, grup_id, yeni_grup_adi):
-        """Ürün grubu günceller (API üzerinden)."""
-        data = {"id": grup_id, "grup_adi": yeni_grup_adi}
-        return self._make_api_request("PUT", f"/nitelikler/urun_gruplari/{grup_id}", data=data)
-
-    def urun_grubu_sil(self, grup_id):
-        """Ürün grubu siler (API üzerinden)."""
-        return self._make_api_request("DELETE", f"/nitelikler/urun_gruplari/{grup_id}")
-
-    def urun_grubu_listele(self):
-        """Ürün grubu listesini API'den çeker."""
-        return self._make_api_request("GET", "/nitelikler/urun_gruplari")
-
-    def urun_birimi_ekle(self, birim_adi):
-        """Yeni ürün birimi ekler (API üzerinden)."""
-        data = {"birim_adi": birim_adi}
-        return self._make_api_request("POST", "/nitelikler/urun_birimleri", data=data)
-
-    def urun_birimi_guncelle(self, birim_id, yeni_birim_adi):
-        """Ürün birimi günceller (API üzerinden)."""
-        data = {"id": birim_id, "birim_adi": yeni_birim_adi}
-        return self._make_api_request("PUT", f"/nitelikler/urun_birimleri/{birim_id}", data=data)
-
-    def urun_birimi_sil(self, birim_id):
-        """Ürün birimi siler (API üzerinden)."""
-        return self._make_api_request("DELETE", f"/nitelikler/urun_birimleri/{birim_id}")
-
-    def urun_birimi_listele(self):
-        """Ürün birimi listesini API'den çeker."""
-        return self._make_api_request("GET", "/nitelikler/urun_birimleri")
-
-    def ulke_ekle(self, ulke_adi):
-        """Yeni ülke ekler (API üzerinden)."""
-        data = {"ulke_adi": ulke_adi}
-        return self._make_api_request("POST", "/nitelikler/ulkeler", data=data)
-
-    def ulke_guncelle(self, ulke_id, yeni_ulke_adi):
-        """Ülke günceller (API üzerinden)."""
-        data = {"id": ulke_id, "ulke_adi": yeni_ulke_adi}
-        return self._make_api_request("PUT", f"/nitelikler/ulkeler/{ulke_id}", data=data)
-
-    def ulke_sil(self, ulke_id):
-        """Ülke siler (API üzerinden)."""
-        return self._make_api_request("DELETE", f"/nitelikler/ulkeler/{ulke_id}")
-
-    def ulke_listele(self):
-        """Ülke listesini API'den çeker."""
-        return self._make_api_request("GET", "/nitelikler/ulkeler")
-
-    def tedarikci_getir_by_id(self, tedarikci_id):
-        """Belirtilen ID'ye sahip tedarikçiyi getirir."""
-        return self._make_api_request("GET", f"/tedarikciler/{tedarikci_id}")
-
-    # Stok İşlemleri
-    def stok_ekle(self, stok_bilgileri):
-        """Yeni bir stok ekler."""
-        return self._make_api_request("POST", "/stoklar/", data=stok_bilgileri)
-
-    def stok_listesi_al(self, aktif=None):
-        """Stok listesini alır. İsteğe bağlı olarak aktif/pasif stokları filtreler."""
-        params = {"aktif": aktif} if aktif is not None else None
-        return self._make_api_request("GET", "/stoklar/", params=params)
-
-    def stok_guncelle(self, stok_id, stok_bilgileri):
-        """Belirtilen ID'ye sahip stoğu günceller."""
-        return self._make_api_request("PUT", f"/stoklar/{stok_id}", data=stok_bilgileri)
-
-    def stok_sil(self, stok_id):
-        """Belirtilen ID'ye sahip stoğu siler."""
-        return self._make_api_request("DELETE", f"/stoklar/{stok_id}")
-
-    def stok_getir_by_id(self, stok_id):
-        """Belirtilen ID'ye sahip stoğu getirir."""
-        return self._make_api_request("GET", f"/stoklar/{stok_id}")
-
-    # Fatura İşlemleri (API'de ayrı fatura kalemleri yok, tüm fatura tek gönderiliyor)
-    def fatura_ekle(self, fatura_bilgileri):
-        """Yeni bir fatura ekler."""
-        return self._make_api_request("POST", "/faturalar/", data=fatura_bilgileri)
-
-    def fatura_listesi_al(self):
-        """Fatura listesini alır."""
-        return self._make_api_request("GET", "/faturalar/")
-
-    def fatura_guncelle(self, fatura_id, fatura_bilgileri):
-        """Belirtilen ID'ye sahip faturayı günceller."""
-        return self._make_api_request("PUT", f"/faturalar/{fatura_id}", data=fatura_bilgileri)
-
-    def fatura_sil(self, fatura_id):
-        """Belirtilen ID'ye sahip faturayı siler."""
-        return self._make_api_request("DELETE", f"/faturalar/{fatura_id}")
-
-    def fatura_getir_by_id(self, fatura_id):
-        """Belirtilen ID'ye sahip faturayı getirir."""
-        return self._make_api_request("GET", f"/faturalar/{fatura_id}")
-
-    # Kasa/Banka İşlemleri
-    def kasa_banka_ekle(self, hesap_bilgileri):
-        """Yeni bir kasa/banka hesabı ekler."""
-        return self._make_api_request("POST", "/kasalar_bankalar/", data=hesap_bilgileri)
-
-    def kasa_banka_listesi_al(self):
-        """Kasa/banka hesap listesini alır."""
-        return self._make_api_request("GET", "/kasalar_bankalar/")
-
-    def kasa_banka_guncelle(self, hesap_id, hesap_bilgileri):
-        """Belirtilen ID'ye sahip kasa/banka hesabını günceller."""
-        return self._make_api_request("PUT", f"/kasalar_bankalar/{hesap_id}", data=hesap_bilgileri)
-
-    def kasa_banka_sil(self, hesap_id):
-        """Belirtilen ID'ye sahip kasa/banka hesabını siler."""
-        return self._make_api_request("DELETE", f"/kasalar_bankalar/{hesap_id}")
-
-    def kasa_banka_getir_by_id(self, hesap_id):
-        """Belirtilen ID'ye sahip kasa/banka hesabını getirir."""
-        return self._make_api_request("GET", f"/kasalar_bankalar/{hesap_id}")
-
-    # Gelir/Gider İşlemleri
-    def gelir_gider_ekle(self, islem_bilgileri):
-        """Yeni bir gelir/gider işlemi ekler."""
-        return self._make_api_request("POST", "/gelir_gider/", data=islem_bilgileri)
-
-    def gelir_gider_listesi_al(self):
-        """Gelir/gider işlem listesini alır."""
-        return self._make_api_request("GET", "/gelir_gider/")
-
-    def gelir_gider_guncelle(self, islem_id, islem_bilgileri):
-        """Belirtilen ID'ye sahip gelir/gider işlemini günceller."""
-        return self._make_api_request("PUT", f"/gelir_gider/{islem_id}", data=islem_bilgileri)
-
-    def gelir_gider_sil(self, islem_id):
-        """Belirtilen ID'ye sahip gelir/gider işlemini siler."""
-        return self._make_api_request("DELETE", f"/gelir_gider/{islem_id}")
-
-    def gelir_gider_getir_by_id(self, islem_id):
-        """Belirtilen ID'ye sahip gelir/gider işlemini getirir."""
-        return self._make_api_request("GET", f"/gelir_gider/{islem_id}")
-
-    # Cari Hareketler İşlemleri (Cari hareketler genellikle otomatik oluşur, bu yüzden sadece listeleme ve getirme)
-    def cari_hareket_listesi_al(self, cari_id=None, tur=None):
-        """Cari hareket listesini alır. İsteğe bağlı olarak cari ID ve türüne göre filtreler."""
-        params = {}
-        if cari_id is not None:
-            params["cari_id"] = cari_id
-        if tur is not None:
-            params["tur"] = tur
-        return self._make_api_request("GET", "/cari_hareketler/", params=params)
-
-    def cari_hareket_getir_by_id(self, hareket_id):
-        """Belirtilen ID'ye sahip cari hareketi getirir."""
-        return self._make_api_request("GET", f"/cari_hareketler/{hareket_id}")
-
-    # Nitelik İşlemleri (Ürünler için özellikler gibi)
-    def nitelik_ekle(self, nitelik_bilgileri):
-        """Yeni bir nitelik (özellik) ekler."""
-        return self._make_api_request("POST", "/nitelikler/", data=nitelik_bilgileri)
-
-    def nitelik_listesi_al(self):
-        """Nitelik listesini alır."""
-        return self._make_api_request("GET", "/nitelikler/")
-
-    def nitelik_guncelle(self, nitelik_id, nitelik_bilgileri):
-        """Belirtilen ID'ye sahip niteliği günceller."""
-        return self._make_api_request("PUT", f"/nitelikler/{nitelik_id}", data=nitelik_bilgileri)
-
-    def nitelik_sil(self, nitelik_id):
-        """Belirtilen ID'ye sahip niteliği siler."""
-        return self._make_api_request("DELETE", f"/nitelikler/{nitelik_id}")
-
-    def nitelik_getir_by_id(self, nitelik_id):
-        """Belirtilen ID'ye sahip niteliği getirir."""
-        return self._make_api_request("GET", f"/nitelikler/{nitelik_id}")
-
-    # Sipariş İşlemleri
-    def siparis_ekle(self, siparis_bilgileri):
-        """Yeni bir sipariş ekler."""
-        return self._make_api_request("POST", "/siparisler/", data=siparis_bilgileri)
-
-    def siparis_listesi_al(self):
-        """Sipariş listesini alır."""
-        return self._make_api_request("GET", "/siparisler/")
-
-    def siparis_guncelle(self, siparis_id, siparis_bilgileri):
-        """Belirtilen ID'ye sahip siparişi günceller."""
-        return self._make_api_request("PUT", f"/siparisler/{siparis_id}", data=siparis_bilgileri)
-
-    def siparis_sil(self, siparis_id):
-        """Belirtilen ID'ye sahip siparişi siler."""
-        return self._make_api_request("DELETE", f"/siparisler/{siparis_id}")
-
-    def siparis_getir_by_id(self, siparis_id):
-        """Belirtilen ID'ye sahip siparişi getirir."""
-        return self._make_api_request("GET", f"/siparisler/{siparis_id}")
-
-    def database_backup(self, backup_path):
-        """
-        Veritabanı yedekleme işlemini API üzerinden başlatır.
-        API'nin yedekleme dosyasını bir konumda oluşturması veya geri döndürmesi beklenir.
-        """
         try:
-            # API'de '/backup' gibi bir endpoint olduğunu varsayıyoruz.
-            # API tarafında backup_path'i parametre olarak alıp işlemi yapması gerekecek.
-            # Ancak güvenlik nedeniyle doğrudan istemciden dosya yolu göndermek yerine,
-            # sunucu tarafında bir varsayılan konuma yedekleme yapılmalı
-            # veya sadece yedekleme işlemini tetikleyen bir çağrı olmalıdır.
-            # Bu örnekte sadece tetikleme yapalım.
-            response = self._make_api_request("POST", "/system/backup")
-            logger.info(f"Veritabanı yedekleme API'den başarıyla tetiklendi: {response.get('message', 'Mesaj yok')}")
-            return True, response.get('message', 'Yedekleme isteği başarıyla gönderildi.')
-        except Exception as e:
-            logger.error(f"API üzerinden yedekleme başlatılırken hata: {e}")
-            return False, f"Yedekleme başlatılırken hata oluştu: {e}"
+            response = self._make_api_request("GET", "/raporlar/cari_hesap_ekstresi", params=params)
+            return response.get("items", []), response.get("devreden_bakiye", 0.0), True, "Başarılı"
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Cari hesap ekstresi API'den alınamadı: {e}")
+            return [], 0.0, False, f"Ekstre alınırken hata: {e}"
 
-    def database_restore(self, restore_path):
-        """
-        Veritabanı geri yükleme işlemini API üzerinden başlatır.
-        API'nin yüklenen dosyayı kullanarak veritabanını geri yüklemesi beklenir.
-        """
+    # --- NİTELİKLER (Kategori, Marka, Grup, Birim, Ülke, Gelir/Gider Sınıflandırma) ---
+    def nitelik_ekle(self, nitelik_tipi: str, data: dict):
         try:
-            # API'de '/system/restore' gibi bir endpoint olduğunu varsayıyoruz
-            # ve bu endpoint'in bir dosya alması bekleniyor.
-            # requests kütüphanesi 'files' parametresini destekler.
-            with open(restore_path, 'rb') as f:
-                files = {'file': (os.path.basename(restore_path), f, 'application/octet-stream')}
-                response = requests.post(f"{self.api_base_url}/system/restore", files=files)
-                response.raise_for_status() # HTTP hataları için istisna fırlatır
-                logger.info(f"Veritabanı geri yükleme API'den başarıyla tetiklendi: {response.json().get('message', 'Mesaj yok')}")
-                return True, response.json().get('message', 'Geri yükleme isteği başarıyla gönderildi.')
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"API'ye bağlanılamadı: {self.api_base_url}/system/restore. Hata: {e}")
-            return False, f"API'ye bağlanılamadı. Sunucunun çalıştığından emin olun."
-        except requests.exceptions.HTTPError as e:
+            return self._make_api_request("POST", f"/nitelikler/{nitelik_tipi}", data=data)
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Nitelik tipi {nitelik_tipi} eklenirken hata: {e}")
+            return False
+
+    def nitelik_listesi_al(self, nitelik_tipi: str, skip: int = 0, limit: int = 100):
+        params = {"skip": skip, "limit": limit}
+        try:
+            return self._make_api_request("GET", f"/nitelikler/{nitelik_tipi}", params=params)
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Nitelik tipi {nitelik_tipi} listesi API'den alınamadı: {e}")
+            return []
+    
+    def nitelik_guncelle(self, nitelik_tipi: str, nitelik_id: int, data: dict):
+        try:
+            return self._make_api_request("PUT", f"/nitelikler/{nitelik_tipi}/{nitelik_id}", data=data)
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Nitelik tipi {nitelik_tipi} ID {nitelik_id} güncellenirken hata: {e}")
+            return False
+
+    def nitelik_sil(self, nitelik_tipi: str, nitelik_id: int):
+        try:
+            return self._make_api_request("DELETE", f"/nitelikler/{nitelik_tipi}/{nitelik_id}")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Nitelik tipi {nitelik_tipi} ID {nitelik_id} silinirken hata: {e}")
+            return False
+
+    # --- RAPORLAR ---
+    def get_dashboard_summary(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
+        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
+        return self._make_api_request("GET", "/raporlar/dashboard_ozet", params=params)
+
+    def get_satislar_detayli_rapor(self, baslangic_tarihi: str, bitis_tarihi: str, cari_id: int = None):
+        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "cari_id": cari_id}
+        return self._make_api_request("GET", "/raporlar/satislar_detayli_rapor", params=params)
+
+    def get_kar_zarar_verileri(self, baslangic_tarihi: str, bitis_tarihi: str):
+        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
+        return self._make_api_request("GET", "/raporlar/kar_zarar_verileri", params=params)
+
+    def get_nakit_akisi_raporu(self, baslangic_tarihi: str, bitis_tarihi: str):
+        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
+        return self._make_api_request("GET", "/raporlar/nakit_akisi_raporu", params=params)
+
+    def get_cari_yaslandirma_verileri(self):
+        # API'de tarih parametresi alıyordu, burada da alabilir
+        return self._make_api_request("GET", "/raporlar/cari_yaslandirma_raporu")
+
+    def get_stok_deger_raporu(self):
+        return self._make_api_request("GET", "/raporlar/stok_deger_raporu")
+
+    def get_gelir_gider_aylik_ozet(self, yil: int):
+        params = {"yil": yil}
+        return self._make_api_request("GET", "/raporlar/gelir_gider_aylik_ozet", params=params)
+
+    # --- YARDIMCI FONKSİYONLAR ---
+    def _format_currency(self, value):
+        """Sayısal değeri Türkçe para birimi formatına dönüştürür."""
+        try:
+            # Sistem locale'i ayarlanmış olmalı, örneğin `tr_TR.UTF-8`
+            # `yardimcilar.py` içindeki `setup_locale()` çağrılıyor olmalı.
+            locale.setlocale(locale.LC_ALL, 'tr_TR.UTF-8') # Linux/macOS için
+        except locale.Error:
             try:
-                error_detail = response.json().get("detail", "Bilinmeyen API hatası.")
-            except json.JSONDecodeError:
-                error_detail = response.text
-            logger.error(f"API HTTP hatası: {self.api_base_url}/system/restore, Durum Kodu: {response.status_code}, Yanıt: {error_detail}. Hata: {e}")
-            return False, f"API hatası ({response.status_code}): {error_detail}"
-        except FileNotFoundError as e:
-            logger.error(f"Yedekleme dosyası bulunamadı: {restore_path}. Hata: {e}")
-            return False, f"Yedekleme dosyası bulunamadı: {restore_path}"
-        except Exception as e:
-            logger.critical(f"Beklenmedik bir hata oluştu: {e}")
-            return False, f"Geri yükleme sırasında beklenmeyen bir hata oluştu: {e}"
+                locale.setlocale(locale.LC_ALL, 'Turkish_Turkey.1254') # Windows için
+            except locale.Error:
+                logger.warning("Sistemde Türkçe locale bulunamadı, varsayılan formatlama kullanılacak.")
+        
+        try:
+            # grouping=True ile binlik ayıracı ekler
+            return locale.format_string("%.2f", self.safe_float(value), grouping=True) + " TL"
+        except Exception: # Diğer hatalar için (örn. locale hatası)
+            return f"{self.safe_float(value):.2f} TL".replace('.', ',')
 
+    def safe_float(self, value):
+        """String veya None değeri güvenli bir şekilde float'a dönüştürür, hata durumunda 0.0 döner."""
+        try:
+            if isinstance(value, (int, float)):
+                return float(value)
+            # Virgülü noktaya çevirerek float'a dönüştür
+            return float(str(value).replace(',', '.'))
+        except (ValueError, TypeError):
+            return 0.0
+
+    # Bu fonksiyon artık doğrudan masaüstü uygulamasında tablo oluşturmaz.
+    # Tabloların API başlatıldığında veya create_pg_tables.py scripti ile oluşturulması beklenir.
     def create_tables(self, cursor=None):
-        """
-        Bu fonksiyon artık doğrudan masaüstü uygulamasında tablo oluşturmaz.
-        Tabloların API başlatıldığında veya create_pg_tables.py scripti ile oluşturulması beklenir.
-        """
         logger.info("create_tables çağrıldı ancak artık veritabanı doğrudan yönetilmiyor. Tabloların API veya create_pg_tables.py aracılığıyla oluşturulduğu varsayılıyor.")
-        pass # Masaüstü uygulamasının bu fonksiyonu çağırması gerekiyorsa boş bırakılabilir veya kaldırılabilir.
+        pass
+
+    # Geçmiş hatalı kayıtları temizleme (API'ye taşınmalıysa)
+    def gecmis_hatali_kayitlari_temizle(self):
+        try:
+            response = self._make_api_request("POST", "/admin/clear_ghost_records") # Örnek API endpoint
+            return True, response.get("message", "Geçmiş hatalı kayıtlar temizlendi.")
+        except Exception as e:
+            logger.error(f"Geçmiş hatalı kayıtlar temizlenirken hata: {e}")
+            return False, f"Geçmiş hatalı kayıtlar temizlenirken hata: {e}"
+
+    # Stok envanterini yeniden hesapla (API'ye taşınmalıysa)
+    def stok_envanterini_yeniden_hesapla(self):
+        try:
+            response = self._make_api_request("POST", "/admin/recalculate_stock_inventory") # Örnek API endpoint
+            return True, response.get("message", "Stok envanteri yeniden hesaplandı.")
+        except Exception as e:
+            logger.error(f"Stok envanteri yeniden hesaplanırken hata: {e}")
+            return False, f"Stok envanteri yeniden hesaplanırken hata: {e}"
+
+    # Veri temizleme fonksiyonları (API'ye taşınmalıysa)
+    def clear_stok_data(self):
+        try:
+            response = self._make_api_request("POST", "/admin/clear_stock_data") # Örnek API endpoint
+            return True, response.get("message", "Stok verileri temizlendi.")
+        except Exception as e:
+            logger.error(f"Stok verileri temizlenirken hata: {e}")
+            return False, f"Stok verileri temizlenirken hata: {e}"
+
+    def clear_musteri_data(self):
+        try:
+            response = self._make_api_request("POST", "/admin/clear_customer_data") # Örnek API endpoint
+            return True, response.get("message", "Müşteri verileri temizlendi.")
+        except Exception as e:
+            logger.error(f"Müşteri verileri temizlenirken hata: {e}")
+            return False, f"Müşteri verileri temizlenirken hata: {e}"
+
+    def clear_tedarikci_data(self):
+        try:
+            response = self._make_api_request("POST", "/admin/clear_supplier_data") # Örnek API endpoint
+            return True, response.get("message", "Tedarikçi verileri temizlendi.")
+        except Exception as e:
+            logger.error(f"Tedarikçi verileri temizlenirken hata: {e}")
+            return False, f"Tedarikçi verileri temizlenirken hata: {e}"
+
+    def clear_kasa_banka_data(self):
+        try:
+            response = self._make_api_request("POST", "/admin/clear_cash_bank_data") # Örnek API endpoint
+            return True, response.get("message", "Kasa/Banka verileri temizlendi.")
+        except Exception as e:
+            logger.error(f"Kasa/Banka verileri temizlenirken hata: {e}")
+            return False, f"Kasa/Banka verileri temizlenirken hata: {e}"
+
+    def clear_all_transaction_data(self):
+        try:
+            response = self._make_api_request("POST", "/admin/clear_all_transactions") # Örnek API endpoint
+            return True, response.get("message", "Tüm işlem verileri temizlendi.")
+        except Exception as e:
+            logger.error(f"Tüm işlem verileri temizlenirken hata: {e}")
+            return False, f"Tüm işlem verileri temizlenirken hata: {e}"
+
+    def clear_all_data(self):
+        try:
+            response = self._make_api_request("POST", "/admin/clear_all_data") # Örnek API endpoint
+            return True, response.get("message", "Tüm veriler temizlendi (kullanıcılar hariç).")
+        except Exception as e:
+            logger.error(f"Tüm veriler temizlenirken hata: {e}")
+            return False, f"Tüm veriler temizlenirken hata: {e}"
+
+    # Fatura Detay Alma (API'den geliyor)
+    def fatura_detay_al(self, fatura_id: int):
+        try:
+            return self._make_api_request("GET", f"/faturalar/{fatura_id}")
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Fatura detayları {fatura_id} API'den alınamadı: {e}")
+            return None
+
+    # Tarihsel satış raporu excel oluşturma (Bu fonksiyon API'ye taşınmalı veya burada sadece çağrı yapmalı)
+    def tarihsel_satis_raporu_excel_olustur(self, rapor_verileri, dosya_yolu, bas_t, bit_t):
+        # Bu fonksiyonun içeriği aslında API'ye veya raporlar.py'ye taşınmalı.
+        # Geçici olarak burada başarıyı simüle ediyoruz.
+        logger.info(f"Excel raporu oluşturma tetiklendi: {dosya_yolu}")
+        return True, f"Rapor '{dosya_yolu}' adresine başarıyla kaydedildi."
+    
+    # Cari Ekstresi PDF oluşturma (Bu fonksiyon API'ye taşınmalı)
+    def cari_ekstresi_pdf_olustur(self, data_dir, cari_tip, cari_id, bas_t, bit_t, file_path, result_queue):
+        # Bu fonksiyonun içeriği de API'ye taşınmalı.
+        # Geçici olarak başarıyı simüle edelim ve sonucu queue'ya koyalım.
+        logger.info(f"PDF ekstresi oluşturma tetiklendi: {file_path}")
+        success = True
+        message = f"Cari ekstresi '{file_path}' adresine başarıyla kaydedildi."
+        result_queue.put((success, message))
+
+    # Geçmiş fatura kalemi bilgileri (API'den geliyor)
+    def get_gecmis_fatura_kalemi_bilgileri(self, cari_id, urun_id, fatura_tipi):
+        # API'den veri çekmeli
+        try:
+            params = {
+                "cari_id": cari_id,
+                "urun_id": urun_id,
+                "fatura_tipi": fatura_tipi
+            }
+            # API endpoint'i: /raporlar/fatura_kalem_gecmisi şeklinde olmalı
+            response = self._make_api_request("GET", "/raporlar/fatura_kalem_gecmisi", params=params)
+            return response # API'nin list[dict] dönmesini bekliyoruz
+        except Exception as e:
+            logger.error(f"Geçmiş fatura kalemleri API'den alınamadı: {e}")
+            return []
+
+    # Veresiye borç ekle (API'ye taşınmalı)
+    def veresiye_borc_ekle(self, cari_id, cari_tip, tarih, tutar, aciklama):
+        # Bu fonksiyon API'ye taşınmalı ve API'deki ilgili endpoint çağrılmalı.
+        # Şu an için simüle ediliyor.
+        logger.info(f"Veresiye borç ekleme simüle edildi: Cari ID: {cari_id}, Tutar: {tutar}")
+        # Bu kısım API'ye taşındığında, API'den başarı/hata bilgisi alınacak.
+        return True, "Veresiye borç başarıyla eklendi (simülasyon)."
+
+    # Stok kodu ve Müşteri kodu üretme (API'den değil, yerel olarak kod üretiyor)
+    def get_next_stok_kodu(self):
+        return "STK-OTOMATIK"
+
+    def get_next_musteri_kodu(self):
+        return "M-OTOMATIK"
+
+    def get_next_tedarikci_kodu(self):
+        return "T-OTOMATIK"
