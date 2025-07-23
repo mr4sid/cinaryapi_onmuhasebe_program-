@@ -1904,20 +1904,25 @@ class FaturaPenceresi(QDialog):
             self.tum_urunler_cache = urunler
             self.urun_map_filtrelenmis.clear()
 
-            self.urun_arama_list_widget.clear()
+            # Hata veren urun_arama_list_widget yerine doğru isimlendirilmiş urun_arama_sonuclari_tree kullanıldı
+            self.urun_arama_sonuclari_tree.clear()
             for urun in urunler:
                 item_text = f"{urun.get('kod', '')} - {urun.get('ad', '')} ({urun.get('miktar', 0):.2f} {urun.get('birim', {}).get('ad', '')})"
-                item = QListWidgetItem(item_text)
-                item.setData(Qt.UserRole, urun["id"])
-                self.urun_arama_list_widget.addItem(item)
+                item = QTreeWidgetItem(self.urun_arama_sonuclari_tree) # QTreeWidgetItem doğrudan QTreeWidget'a eklenir
+                item.setText(0, item_text) # İlk sütun için metin
+                item.setData(0, Qt.UserRole, urun["id"]) # ID'yi UserRole olarak sakla
+                # Diğer sütunları da burada ayarlamanız gerekebilir, örneğin item.setText(1, urun["kod"])
             
-            self.urun_arama_list_widget.hide()
+            # urun_arama_list_widget yerine urun_arama_sonuclari_tree kullanıldı
+            # QTreeWidget'ın .hide() metodu yoktur, bunun yerine setVisible(False) kullanılır.
+            self.urun_arama_sonuclari_tree.setVisible(False) # QTreeWidget'ı gizle
+            
+            self.app.set_status_message(f"{len(urunler)} ürün API'den önbelleğe alındı.")
 
         except Exception as e:
             logger.error(f"Ürün listesi yüklenirken hata oluştu: {e}", exc_info=True)
-            # Hata mesajı düzeltildi: 3. argüman kaldırıldı
             self.app.set_status_message(f"Hata: Ürünler yüklenemedi. Detay: {e}", "red")
-
+            
     def _delayed_stok_yenile(self):
         if hasattr(self, '_delayed_timer') and self._delayed_timer.isActive():
             self._delayed_timer.stop()

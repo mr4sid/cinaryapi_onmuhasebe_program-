@@ -114,13 +114,15 @@ class TedarikciListResponse(BaseModel):
 # Kasa/Banka Modelleri
 class KasaBankaBase(BaseModel):
     hesap_adi: str
-    tip: KasaBankaTipiEnum
-    bakiye: Optional[float] = 0.0
-    para_birimi: Optional[str] = "TL"
+    kod: Optional[str] = None 
+    tip: str
+    bakiye: float # Optional ve varsayılan değer kaldırıldı
+    para_birimi: str 
     banka_adi: Optional[str] = None
     sube_adi: Optional[str] = None
     hesap_no: Optional[str] = None
     varsayilan_odeme_turu: Optional[str] = None
+
 class KasaBankaCreate(KasaBankaBase):
     pass
 

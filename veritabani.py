@@ -451,21 +451,17 @@ class OnMuhasebe:
             logger.error(f"Fatura ID {fatura_id} kalemleri çekilirken hata: {e}")
             return []
 
-    def son_fatura_no_getir(self, fatura_tipi: str) -> str:
-        # API endpoint'i artık sistem router'ında ve path parametresi bekliyor
+    def son_fatura_no_getir(self, fatura_turu):
+        # API'den veri çekmeli
         try:
-            response = self._make_api_request("GET", f"/sistem/next_fatura_number/{fatura_tipi}", method="GET")
-            return response["fatura_no"]
+            # Parametreyi doğrudan endpoint URL'ine ekliyoruz
+            endpoint_url = f"/sistem/next_fatura_number/{fatura_turu}"
+            response = self._make_api_request(method='GET', endpoint=endpoint_url) # params kaldırıldı
+            return response.get("fatura_no", "HATA")
         except Exception as e:
             logger.error(f"Son fatura no API'den alınamadı: {e}")
-            # Hata durumunda varsayılan bir değer dön
-            prefix = ""
-            if fatura_tipi.upper() == "SATIŞ":
-                prefix = "SF"
-            elif fatura_tipi.upper() == "ALIŞ":
-                prefix = "AF"
-            return f"{prefix}000000001"
-
+            return "HATA"
+        
     # --- SİPARİŞLER ---
     def siparis_ekle(self, data: dict):
         try:

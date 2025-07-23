@@ -4,7 +4,7 @@ from typing import List, Optional
 from .. import semalar, modeller
 from ..veritabani import get_db
 from datetime import date # Tarih tipi için import
-
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 router = APIRouter(
     prefix="/kasalar_bankalar",
     tags=["Kasa ve Banka Hesapları"]
@@ -65,22 +65,45 @@ def create_kasa_banka(hesap: modeller.KasaBankaCreate, db: Session = Depends(get
     """
     Yeni bir kasa/banka hesabı oluşturur.
     """
-    db_hesap = semalar.KasaBanka(
-        hesap_adi=hesap.hesap_adi,
-        bakiye=hesap.bakiye,
-        tip=hesap.tip,
-        hesap_no=hesap.hesap_no,
-        banka_adi=hesap.banka_adi,
-        sube_adi=hesap.sube_adi,
-        para_birimi=hesap.para_birimi,
-        acilis_tarihi=hesap.acilis_tarihi,
-        varsayilan_odeme_turu=hesap.varsayilan_odeme_turu
-    )
-    db.add(db_hesap)
-    db.commit()
-    db.refresh(db_hesap)
-    return db_hesap
+    print(f"DEBUG: create_kasa_banka - Gelen hesap verisi: {hesap.dict()}") # Debug print
 
+    try:
+        db_hesap = semalar.KasaBanka(
+            hesap_adi=hesap.hesap_adi,
+            kod=hesap.kod,
+            tip=hesap.tip,
+            bakiye=hesap.bakiye if hesap.bakiye is not None else 0.0, # None gelirse default değer ata
+            para_birimi=hesap.para_birimi if hesap.para_birimi is not None else "TL", # None gelirse default değer ata
+            banka_adi=hesap.banka_adi,
+            sube_adi=hesap.sube_adi,
+            hesap_no=hesap.hesap_no,
+            varsayilan_odeme_turu=hesap.varsayilan_odeme_turu
+        )
+        print(f"DEBUG: create_kasa_banka - Oluşturulan db_hesap objesi: {db_hesap.__dict__}") # Debug print
+
+        db.add(db_hesap)
+        print("DEBUG: create_kasa_banka - db.add() başarılı.") # Debug print
+
+        db.commit()
+        print("DEBUG: create_kasa_banka - db.commit() başarılı.") # Debug print
+
+        db.refresh(db_hesap)
+        print("DEBUG: create_kasa_banka - db.refresh() başarılı.") # Debug print
+
+        return db_hesap
+    except IntegrityError:
+        db.rollback()
+        print(f"ERROR: create_kasa_banka - IntegrityError: Kod zaten kullanılıyor: {hesap.kod}") # Debug print
+        raise HTTPException(status_code=400, detail=f"'{hesap.kod}' kodu zaten kullanılıyor. Lütfen farklı bir kod deneyin.")
+    except SQLAlchemyError as e: # SQLAlchemy'ye özgü hataları yakala
+        db.rollback()
+        print(f"ERROR: create_kasa_banka - SQLAlchemyError: {str(e)}") # Debug print
+        raise HTTPException(status_code=500, detail=f"Veritabanı işlemi sırasında hata oluştu: {str(e)}")
+    except Exception as e: # Diğer tüm beklenmedik hataları yakala
+        db.rollback()
+        print(f"ERROR: create_kasa_banka - Genel Hata: {str(e)}") # Debug print
+        raise HTTPException(status_code=500, detail=f"Kasa/Banka hesabı oluşturulurken beklenmedik bir hata oluştu: {str(e)}")
+        
 # --- VERİ GÜNCELLEME (UPDATE) ---
 @router.put("/{hesap_id}", response_model=modeller.KasaBankaBase)
 def update_kasa_banka(hesap_id: int, hesap: modeller.KasaBankaCreate, db: Session = Depends(get_db)):

@@ -1,13 +1,15 @@
 # api/semalar.py dosyasının TAMAMI
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text, Enum
+from sqlalchemy import (
+    Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text, Enum,
+    create_engine, and_ # 'and_' koşulları için eklendi
+)
 from sqlalchemy.orm import relationship, declarative_base, sessionmaker
-from sqlalchemy import create_engine
+from sqlalchemy.sql.elements import foreign # 'foreign' doğru yerden import edildi
 from datetime import datetime
 import enum
 
 from .veritabani import Base # Base objesi api.veritabani'ndan alınır
-
 # Enum tanımları
 class FaturaTuruEnum(str, enum.Enum):
     SATIS = "SATIŞ"
@@ -106,7 +108,15 @@ class Musteri(Base):
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
 
-    cari_hareketler = relationship("CariHareket", primaryjoin="Musteri.id == CariHareket.cari_id and CariHareket.cari_turu == 'MUSTERI'", back_populates="musteri_iliski", cascade="all, delete-orphan")
+    cari_hareketler = relationship(
+        "CariHareket",
+        primaryjoin=and_(
+            Musteri.id == foreign(CariHareket.cari_id), # foreign() ile açıkça belirtildi
+            CariHareket.cari_turu == 'MUSTERI'
+        ),
+        back_populates="musteri_iliski",
+        cascade="all, delete-orphan"
+    )
     faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ İADE'])", back_populates="musteri_fatura", cascade="all, delete-orphan")
     siparisler = relationship("Siparis", foreign_keys="[Siparis.cari_id]", primaryjoin="Musteri.id == Siparis.cari_id and Siparis.siparis_turu == 'SATIŞ_SIPARIS'", back_populates="musteri_siparis", cascade="all, delete-orphan")
 
@@ -124,7 +134,15 @@ class Tedarikci(Base):
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
 
-    cari_hareketler = relationship("CariHareket", primaryjoin="Tedarikci.id == CariHareket.cari_id and CariHareket.cari_turu == 'TEDARIKCI'", back_populates="tedarikci_iliski", cascade="all, delete-orphan")
+    cari_hareketler = relationship(
+        "CariHareket",
+        primaryjoin=and_(
+            Tedarikci.id == foreign(CariHareket.cari_id), # foreign() ile açıkça belirtildi
+            CariHareket.cari_turu == 'TEDARIKCI'
+        ),
+        back_populates="tedarikci_iliski",
+        cascade="all, delete-orphan"
+    )
     faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])", back_populates="tedarikci_fatura", cascade="all, delete-orphan")
     siparisler = relationship("Siparis", foreign_keys="[Siparis.cari_id]", primaryjoin="Tedarikci.id == Siparis.cari_id and Siparis.siparis_turu == 'ALIŞ_SIPARIS'", back_populates="tedarikci_siparis", cascade="all, delete-orphan")
 
@@ -135,7 +153,7 @@ class KasaBanka(Base):
     id = Column(Integer, primary_key=True, index=True)
     hesap_adi = Column(String, index=True)
     kod = Column(String, unique=True, index=True, nullable=True)
-    tip = Column(Enum(KasaBankaTipiEnum), default=KasaBankaTipiEnum.KASA)
+    tip = Column(String, default="KASA")
     bakiye = Column(Float, default=0.0)
     para_birimi = Column(String, default="TL")
     banka_adi = Column(String, nullable=True)
@@ -325,8 +343,22 @@ class CariHareket(Base):
     olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
-    musteri_iliski = relationship("Musteri", foreign_keys=[cari_id], primaryjoin="CariHareket.cari_id == Musteri.id and CariHareket.cari_turu == 'MUSTERI'", viewonly=True)
-    tedarikci_iliski = relationship("Tedarikci", foreign_keys=[cari_id], primaryjoin="CariHareket.cari_id == Tedarikci.id and CariHareket.cari_turu == 'TEDARIKCI'", viewonly=True)
+    musteri_iliski = relationship(
+        "Musteri",
+        primaryjoin=and_(
+            CariHareket.cari_id == foreign(Musteri.id), # foreign() ile açıkça belirtildi
+            CariHareket.cari_turu == 'MUSTERI'
+        ),
+        viewonly=True
+    )
+    tedarikci_iliski = relationship(
+        "Tedarikci",
+        primaryjoin=and_(
+            CariHareket.cari_id == foreign(Tedarikci.id), # foreign() ile açıkça belirtildi
+            CariHareket.cari_turu == 'TEDARIKCI'
+        ),
+        viewonly=True
+    )
     kasa_banka_hesabi = relationship("KasaBanka", backref="cari_hareketler_iliski")
 
 class KasaBankaHareket(Base):
