@@ -142,6 +142,8 @@ class SiparisPenceresi(QDialog):
         if self.yenile_callback:
             self.yenile_callback()
 
+# pencereler.py dosyasındaki CariHesapEkstresiPenceresi sınıfının TAMAMI
+
 class CariHesapEkstresiPenceresi(QDialog):
     def __init__(self, parent_app, db_manager, cari_id, cari_tip, pencere_basligi, parent_list_refresh_func=None):
         super().__init__(parent_app)
@@ -203,7 +205,7 @@ class CariHesapEkstresiPenceresi(QDialog):
         elif selected_tab_text == "Hesap Hareketleri":
             self.ekstreyi_yukle()
 
-    def _yukle_cari_bilgileri(self): # Bu metod UI'da kullanılmıyor gibi görünüyor, kaldırılabilir
+    def _yukle_cari_bilgileri(self):
         try:
             cari_adi = "Bilinmiyor"
             cari_telefon = ""
@@ -220,8 +222,6 @@ class CariHesapEkstresiPenceresi(QDialog):
                     cari_adi = cari_data.get("ad", "Bilinmeyen Tedarikçi")
                     cari_telefon = cari_data.get("telefon", "")
             
-            # self.ui.lblCariAdi.setText(cari_adi) # self.ui tanımlı değil
-            # self.ui.lblCariTelefon.setText(cari_telefon) # self.ui tanımlı değil
             self.setWindowTitle(f"{cari_adi} - Cari Hesap Ekstresi")
         except Exception as e:
             logger.error(f"Cari bilgileri yüklenirken hata oluştu: {e}")
@@ -273,15 +273,15 @@ class CariHesapEkstresiPenceresi(QDialog):
                 'cari_id': self.cari_id,
                 'cari_turu': self.cari_tip
             }
-            siparisler_data_response = self.db.siparis_listesi_al(**params)
-            siparisler_data = siparisler_data_response.get("items", [])
+            siparisler_data_response = self.db.siparis_listesi_al(**params) 
+            siparisler_data = siparisler_data_response.get("items", []) 
 
             for siparis in siparisler_data:
                 item_qt = QTreeWidgetItem(self.siparisler_tree)
                 item_qt.setData(0, Qt.UserRole, siparis.get('id', -1))
 
-                tarih_obj = datetime.strptime(siparis.get('tarih'), '%Y-%m-%d').date() if siparis.get('tarih') else None
-                teslimat_tarihi_obj = datetime.strptime(siparis.get('teslimat_tarihi'), '%Y-%m-%d').date() if siparis.get('teslimat_tarihi') else None
+                tarih_obj = datetime.strptime(str(siparis.get('tarih')), '%Y-%m-%d').date() if siparis.get('tarih') else None
+                teslimat_tarihi_obj = datetime.strptime(str(siparis.get('teslimat_tarihi')), '%Y-%m-%d').date() if siparis.get('teslimat_tarihi') else None
                 
                 formatted_tarih = tarih_obj.strftime('%d.%m.%Y') if isinstance(tarih_obj, date) else '-'
                 formatted_teslimat_tarihi = teslimat_tarihi_obj.strftime('%d.%m.%Y') if isinstance(teslimat_tarihi_obj, date) else '-'
@@ -315,7 +315,7 @@ class CariHesapEkstresiPenceresi(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Hata", f"Siparişler yüklenirken hata: {e}")
             logging.error(f"Cari Hesap Ekstresi - Siparişler yükleme hatası: {e}", exc_info=True)
-        self.app.set_status_message(f"{self.cari_ad_gosterim} için {len(siparisler_data)} sipariş listelendi.")
+        self.app.set_status_message(f"{self.cari_ad_gosterim} için {len(siparisler_data)} sipariş listelendi.", "blue")
 
     def _on_siparis_double_click(self, item, column):
         siparis_id = item.data(0, Qt.UserRole)
@@ -555,8 +555,23 @@ class CariHesapEkstresiPenceresi(QDialog):
         
         try:
             hesaplar_response = self.db.kasa_banka_listesi_al()
-            hesaplar = hesaplar_response.get("items", [])
-            
+            # API'den gelen yanıtın dict içinde 'items' anahtarı olup olmadığını kontrol et
+            if isinstance(hesaplar_response, dict) and "items" in hesaplar_response:
+                hesaplar = hesaplar_response["items"]
+            elif isinstance(hesaplar_response, list):
+                hesaplar = hesaplar_response
+                # Hata mesajı düzeltildi: 3. argüman kaldırıldı
+                self.app.set_status_message("Uyarı: Kasa/Banka listesi API yanıtı beklenen formatta değil. Doğrudan liste olarak işleniyor.", "orange")
+            else:
+                hesaplar = []
+                # Hata mesajı düzeltildi: 3. argüman kaldırıldı
+                self.app.set_status_message("Hata: Kasa/Banka listesi API'den alınamadı veya formatı geçersiz.", "red")
+                logging.error(f"Kasa/Banka listesi API'den beklenen formatta gelmedi: {type(hesaplar_response)} - {hesaplar_response}", exc_info=True)
+                self.ot_kasa_banka_combo.addItem("Hesap Yok", None)
+                self.ot_kasa_banka_combo.setEnabled(False)
+                return
+
+
             if hesaplar:
                 for h in hesaplar:
                     display_text = f"{h.get('hesap_adi')} ({h.get('tip')}) - Bakiye: {self.db._format_currency(h.get('bakiye', 0.0))}"
@@ -566,12 +581,15 @@ class CariHesapEkstresiPenceresi(QDialog):
                         display_text += f" ({h.get('hesap_no')})"
                     self.kasa_banka_map[display_text] = h.get('id')
                     self.ot_kasa_banka_combo.addItem(display_text, h.get('id'))
+                self.ot_kasa_banka_combo.setCurrentIndex(0)
                 self.ot_kasa_banka_combo.setEnabled(True)
             else:
+                self.ot_kasa_banka_combo.clear()
                 self.ot_kasa_banka_combo.addItem("Hesap Yok", None)
                 self.ot_kasa_banka_combo.setEnabled(False)
-            
-            self._ot_odeme_tipi_degisince()
+
+            # Hata mesajı düzeltildi: 3. argüman kaldırıldı
+            self.app.set_status_message(f"{len(hesaplar)} kasa/banka hesabı API'den yüklendi.", "blue")
 
         except Exception as e:
             QMessageBox.critical(self, "Hata", f"Kasa/Banka hesapları yüklenirken hata: {e}")
@@ -618,6 +636,7 @@ class CariHesapEkstresiPenceresi(QDialog):
                 cari_detail = self.db.tedarikci_getir_by_id(self.cari_id)
             
             if not cari_detail:
+                # Hata mesajı düzeltildi: 3. argüman kaldırıldı
                 self.app.set_status_message(f"Hata: Cari bilgiler yüklenemedi. ID {self.cari_id} bulunamadı.", "red")
                 return
 
@@ -638,8 +657,6 @@ class CariHesapEkstresiPenceresi(QDialog):
                 bakiye_metni = f"<b style='color: blue;'>{bakiye_metni}</b>"
             self.lbl_ozet_net_bakiye.setText(bakiye_metni)
 
-            # Bu bilgiler API'den veya _load_initial_data içinde hesaplanıp gelmeli.
-            # Şimdilik varsayılan değerlerle devam ediyor.
             self.lbl_donem_basi_bakiye.setText(self.db._format_currency(0.0))
             self.lbl_toplam_borc_hareketi.setText(self.db._format_currency(0.0))
             self.lbl_toplam_alacak_hareketi.setText(self.db._format_currency(0.0))
@@ -647,10 +664,12 @@ class CariHesapEkstresiPenceresi(QDialog):
             self.lbl_vadesi_gelmis.setText(self.db._format_currency(0.0))
             self.lbl_vadesi_gelecek.setText(self.db._format_currency(0.0))
             
+            # Hata mesajı düzeltildi: 3. argüman kaldırıldı
             self.app.set_status_message("Cari özet bilgileri güncellendi.", "green")
 
         except Exception as e:
             logger.error(f"Cari özet bilgileri yüklenirken hata oluştu: {e}", exc_info=True)
+            # Hata mesajı düzeltildi: 3. argüman kaldırıldı
             self.app.set_status_message(f"Hata: Cari özet bilgileri yüklenemedi. Detay: {e}", "red")
 
     def _cari_bilgileri_guncelle(self):
@@ -663,6 +682,7 @@ class CariHesapEkstresiPenceresi(QDialog):
                     dialog = YeniMusteriEklePenceresi(self, self.db, self._ozet_ve_liste_yenile, musteri_duzenle=cari_data, app_ref=self.app)
                     dialog.exec()
                 else:
+                    # Hata mesajı düzeltildi: 3. argüman kaldırıldı
                     self.app.set_status_message(f"Hata: Müşteri bilgileri yüklenemedi. ID {self.cari_id} bulunamadı.", "red")
                     return
             elif self.cari_tip == "TEDARIKCI":
@@ -672,13 +692,16 @@ class CariHesapEkstresiPenceresi(QDialog):
                     dialog = YeniTedarikciEklePenceresi(self, self.db, self._ozet_ve_liste_yenile, tedarikci_duzenle=cari_data, app_ref=self.app)
                     dialog.exec()
                 else:
+                    # Hata mesajı düzeltildi: 3. argüman kaldırıldı
                     self.app.set_status_message(f"Hata: Tedarikçi bilgileri yüklenemedi. ID {self.cari_id} bulunamadı.", "red")
                     return
             
+            # Hata mesajı düzeltildi: 3. argüman kaldırıldı
             self.app.set_status_message(f"{self.cari_tip} kartı açıldı.", "blue")
 
         except Exception as e:
             logger.error(f"Cari bilgiler güncellenmek üzere yüklenirken hata oluştu: {e}", exc_info=True)
+            # Hata mesajı düzeltildi: 3. argüman kaldırıldı
             self.app.set_status_message(f"Hata: Cari bilgiler yüklenemedi. Detay: {e}", "red")
 
     def _ozet_ve_liste_yenile(self):
@@ -750,25 +773,25 @@ class CariHesapEkstresiPenceresi(QDialog):
         else:
             try:
                 tutar_f = float(tutar_str)
-                # Bu metod API'ye taşınmalı.
                 data = {
                     "cari_id": self.cari_id,
                     "cari_turu": self.cari_tip,
                     "tarih": date.today().strftime('%Y-%m-%d'),
                     "tutar": tutar_f,
                     "aciklama": not_str,
-                    "islem_turu": "VERESİYE_BORÇ", # API'nin beklediği tip
+                    "islem_turu": "VERESİYE_BORÇ",
                     "islem_yone": "BORC",
-                    "kaynak": "MANUEL"
+                    "kaynak": self.db.KAYNAK_TIP_VERESIYE_BORC_MANUEL
                 }
-                success, message = self.db.cari_hareket_ekle_manuel(data) # Yeni API çağrısı
+                success = self.db.cari_hareket_ekle_manuel(data)
+
                 if success:
-                    QMessageBox.information(self, "Başarılı", message)
+                    QMessageBox.information(self, "Başarılı", "Veresiye borç başarıyla eklendi.")
                     self.borc_tutar_entry.clear()
                     self.borc_not_entry.clear()
                     self._ozet_ve_liste_yenile()
                 else:
-                    QMessageBox.critical(self, "Hata", message)
+                    QMessageBox.critical(self, "Hata", "Veresiye borç eklenirken hata.")
             except Exception as e:
                 QMessageBox.critical(self, "Hata", f"Veresiye borç eklenirken hata: {e}")
                 logging.error(f"Hızlı veresiye borç kaydetme hatası: {e}", exc_info=True)
@@ -787,7 +810,7 @@ class CariHesapEkstresiPenceresi(QDialog):
                 file_path, bekleme_penceresi
             )).start()
         else:
-            self.app.set_status_message("Excel'e aktarma iptal edildi.")
+            self.app.set_status_message("Excel'e aktarma iptal edildi.", "blue")
 
     def pdf_aktar(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Cari Hesap Ekstresini PDF'e Kaydet", 
@@ -797,9 +820,8 @@ class CariHesapEkstresiPenceresi(QDialog):
             bekleme_penceresi = BeklemePenceresi(self, message="Ekstre PDF'e aktarılıyor, lütfen bekleyiniz...")
             
             result_queue = multiprocessing.Queue()
-            # db.cari_ekstresi_pdf_olustur'un beklediği parametreler kontrol edildi
             pdf_process = multiprocessing.Process(target=self.db.cari_ekstresi_pdf_olustur, args=(
-                # self.db.data_dir, # `db_name` veya `data_dir` yerine API'den veri alınmalı
+                self.db.data_dir,
                 self.cari_tip,
                 self.cari_id,
                 self.bas_tarih_entry.text(),
@@ -813,33 +835,31 @@ class CariHesapEkstresiPenceresi(QDialog):
             self.app.process_queue_timer.timeout.connect(lambda: self._check_pdf_process_completion(result_queue, pdf_process, bekleme_penceresi))
             self.app.process_queue_timer.start(100)
         else:
-            self.app.set_status_message("PDF'e aktarma iptal edildi.")
+            self.app.set_status_message("PDF'e aktarma iptal edildi.", "blue")
 
     def _check_pdf_process_completion(self, result_queue, pdf_process, bekleme_penceresi):
         if not result_queue.empty():
             success, message = result_queue.get()
-            bekleme_penceresi.kapat()
+            bekleme_penceresi.close()
             self.app.process_queue_timer.stop()
 
             if success:
                 QMessageBox.information(self, "Başarılı", message)
-                self.app.set_status_message(message)
+                self.app.set_status_message(message, "green")
             else:
                 QMessageBox.critical(self, "Hata", message)
-                self.app.set_status_message(f"Ekstre PDF'e aktarılırken hata: {message}", "red") # Renk argümanı eklendi
+                self.app.set_status_message(f"Ekstre PDF'e aktarılırken hata: {message}", "red")
             pdf_process.join()
             
         elif not pdf_process.is_alive():
-            bekleme_penceresi.kapat()
+            bekleme_penceresi.close()
             self.app.process_queue_timer.stop()
             QMessageBox.critical(self, "Hata", "PDF işlemi beklenmedik şekilde sonlandı.")
-            self.app.set_status_message("PDF işlemi beklenmedik şekilde sonlandı.", "red") # Renk argümanı eklendi
+            self.app.set_status_message("PDF işlemi beklenmedik şekilde sonlandı.", "red")
             pdf_process.join()
 
     def _generate_ekstre_excel_threaded(self, cari_tip, cari_id, bas_t, bit_t, dosya_yolu, bekleme_penceresi):
-        # local_db_manager artık API tabanlı olduğu için conn.close() gereksiz
-        # ve API'den veri çekme mantığına uygun hale getirildi.
-        local_db_manager = self.db.__class__(api_base_url=self.db.api_base_url, app_ref=self.app) # `app_ref` de geçilmeli
+        local_db_manager = self.db.__class__(api_base_url=self.db.api_base_url, app_ref=self.app)
         
         success = False
         message = ""
@@ -865,7 +885,7 @@ class CariHesapEkstresiPenceresi(QDialog):
             message = f"Rapor Excel'e aktarılırken bir hata oluştu:\n{e}"
             logging.error(f"Excel export thread error: {e}", exc_info=True)
         finally:
-            self.app.set_status_message(message)
+            self.app.set_status_message(message, "blue" if success else "red")
             self.app.after(0, bekleme_penceresi.kapat)
             self.app.after(0, lambda: QMessageBox.information(self, "Excel Aktarım", message) if success else QMessageBox.critical(self, "Excel Aktarım Hatası", message))
 
@@ -939,7 +959,7 @@ class CariHesapEkstresiPenceresi(QDialog):
             display_islem_tipi = hareket['islem_turu']
             display_ref_gosterim = hareket['fatura_no'] if hareket.get('fatura_no') else (hareket.get('kaynak') or '-')
 
-            if hareket.get('kaynak') in (self.db.KAYNAK_TIP_FATURA, self.db.KAYNAK_TIP_IADE_FATURA, self.db.KAYNAK_TIP_FATURA_SATIS_PESIN, self.db.KAYNAK_TIP_FATURA_ALIS_PESIN):
+            if hareket.get('kaynak') in (self.db.KAYNAK_TIP_FATURA, self.db.KAYNAK_TIP_IADE_FATURA):
                 if hareket.get('fatura_turu') == self.db.FATURA_TIP_SATIS:
                     display_islem_tipi = "Satış Faturası"
                 elif hareket.get('fatura_turu') == self.db.FATURA_TIP_ALIS:
@@ -967,7 +987,7 @@ class CariHesapEkstresiPenceresi(QDialog):
 
             self.hareket_detay_map[hareket['id']] = hareket
 
-            if hareket.get('kaynak') in (self.db.KAYNAK_TIP_FATURA, self.db.KAYNAK_TIP_IADE_FATURA, self.db.KAYNAK_TIP_FATURA_SATIS_PESIN, self.db.KAYNAK_TIP_FATURA_ALIS_PESIN):
+            if hareket.get('kaynak') in (self.db.KAYNAK_TIP_FATURA, self.db.KAYNAK_TIP_IADE_FATURA):
                 if hareket.get('odeme_turu') in self.db.pesin_odeme_turleri:
                     for col_idx in range(self.ekstre_tree.columnCount()):
                         item_qt.setBackground(col_idx, QBrush(QColor("lightgray")))
@@ -983,7 +1003,7 @@ class CariHesapEkstresiPenceresi(QDialog):
                 for col_idx in range(self.ekstre_tree.columnCount()):
                     item_qt.setForeground(col_idx, QBrush(QColor("green")))
 
-        self.app.set_status_message(f"{self.cari_ad_gosterim} için {len(hareketler_listesi)} hareket yüklendi.", "green")
+        self.app.set_status_message(f"{self.cari_ad_gosterim} için {len(hareketler_listesi)} hareket yüklendi.", "blue")
 
     def _show_context_menu(self, pos):
         item = self.ekstre_tree.itemAt(pos)
@@ -1039,16 +1059,17 @@ class CariHesapEkstresiPenceresi(QDialog):
                 if ref_tip in [self.db.KAYNAK_TIP_FATURA, self.db.KAYNAK_TIP_IADE_FATURA, self.db.KAYNAK_TIP_FATURA_SATIS_PESIN, self.db.KAYNAK_TIP_FATURA_ALIS_PESIN]:
                     success = self.db.fatura_sil(ref_id)
                     message = f"Fatura {fatura_no} başarıyla silindi."
-                elif ref_tip in [self.db.KAYNAK_TIP_TAHSILAT, self.db.KAYNAK_TIP_ODEME]:
-                    success = self.db.gelir_gider_sil(hareket_id)
-                    message = f"İşlem ID {hareket_id} başarıyla silindi."
-                elif ref_tip == self.db.KAYNAK_TIP_VERESIYE_BORC_MANUEL:
-                    success = self.db.cari_hareket_sil_manuel(hareket_id) # Yeni API çağrısı
-                    message = f"Manuel veresiye borç ID {hareket_id} başarıyla silindi."
                 else:
-                    QMessageBox.critical(self, "Hata", f"{ref_tip} türündeki hareket doğrudan silinemiyor. API desteği gerekli.")
-                    return
-                
+                    if ref_tip in [self.db.KAYNAK_TIP_TAHSILAT, self.db.KAYNAK_TIP_ODEME]:
+                        success = self.db.gelir_gider_sil(hareket_id)
+                    elif ref_tip == self.db.KAYNAK_TIP_VERESIYE_BORC_MANUEL:
+                        success = self.db.cari_hareket_sil_manuel(hareket_id)
+                        if not success:
+                            QMessageBox.critical(self, "Hata", f"{ref_tip} türündeki hareket silinemiyor. API desteği gerekli olabilir.")
+                    else:
+                         QMessageBox.critical(self, "Hata", f"İşlem tipi ({ref_tip}) silinemiyor. API desteği gerekli.")
+                         return
+
                 if success:
                     QMessageBox.information(self, "Başarılı", message)
                     self._ozet_ve_liste_yenile()
@@ -1072,7 +1093,7 @@ class CariHesapEkstresiPenceresi(QDialog):
                 QMessageBox.critical(self, "Hata", f"Silinirken hata: {error_detail}")
                 logging.error(f"Cari Ekstresi silme hatası: {error_detail}", exc_info=True)
         else:
-            self.app.set_status_message("Silme işlemi iptal edildi.", "orange")
+            self.app.set_status_message("Silme işlemi iptal edildi.", "blue")
 
     def secili_islemi_guncelle(self):
         selected_items = self.ekstre_tree.selectedItems()
@@ -1134,7 +1155,7 @@ class CariHesapEkstresiPenceresi(QDialog):
                                  f"Referans ID: {hareket_id}")
         else:
             QMessageBox.information(self, "Detay", "Bu işlem tipi için detay görüntüleme mevcut değil.")
-
+            
 class FaturaGuncellemePenceresi(QDialog):
     def __init__(self, parent, db_manager, fatura_id_duzenle, yenile_callback_liste=None):
         super().__init__(parent)

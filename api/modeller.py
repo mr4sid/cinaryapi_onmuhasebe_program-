@@ -1,3 +1,5 @@
+# api/modeller.py dosyasının TAMAMI
+
 from __future__ import annotations # Model referans sorunlarını çözmek için
 
 from pydantic import BaseModel, EmailStr, Field
@@ -6,7 +8,7 @@ from typing import List, Optional, Literal
 
 # Enumların string değerlerini kullanmak için
 from .semalar import (
-    FaturaTuruEnum, OdemeTuruEnum, CariTipiEnum, IslemYoneEnum, # IslemYoneEnum burada doğru import ediliyor
+    FaturaTuruEnum, OdemeTuruEnum, CariTipiEnum, IslemYoneEnum,
     KasaBankaTipiEnum, StokIslemTipiEnum, SiparisTuruEnum, SiparisDurumEnum,
     KaynakTipEnum
 )
@@ -108,6 +110,7 @@ class TedarikciListResponse(BaseModel):
     items: List[TedarikciRead]
     total: int
 
+
 # Kasa/Banka Modelleri
 class KasaBankaBase(BaseModel):
     hesap_adi: str
@@ -118,7 +121,6 @@ class KasaBankaBase(BaseModel):
     sube_adi: Optional[str] = None
     hesap_no: Optional[str] = None
     varsayilan_odeme_turu: Optional[str] = None
-
 class KasaBankaCreate(KasaBankaBase):
     pass
 
@@ -136,6 +138,7 @@ class KasaBankaRead(KasaBankaBase):
 class KasaBankaListResponse(BaseModel):
     items: List[KasaBankaRead]
     total: int
+
 
 # Stok Modelleri
 class StokBase(BaseModel):
@@ -341,6 +344,9 @@ class SiparisRead(SiparisBase):
 class SiparisListResponse(BaseModel):
     items: List[SiparisRead]
     total: int
+
+class NextSiparisNoResponse(BaseModel): # YENİ EKLENDİ
+    siparis_no: str
 
 
 # Gelir/Gider Modelleri
