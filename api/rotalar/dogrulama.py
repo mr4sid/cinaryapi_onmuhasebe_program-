@@ -1,51 +1,60 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import Optional, Dict, Any
+from .. import modeller, semalar
+from ..veritabani import get_db
+from passlib.context import CryptContext # Yeni import
 
-from .. import semalar # semalar.py'den SQLAlchemy modellerini içe aktarıyoruz
-from .. import modeller # Pydantic modellerini içe aktarıyoruz
-from ..veritabani import get_db # veritabani.py'den get_db bağımlılığını içe aktarıyoruz
+router = APIRouter(prefix="/dogrulama", tags=["Kimlik Doğrulama"])
 
-router = APIRouter(
-    prefix="/dogrulama",
-    tags=["Kimlik Doğrulama"]
-)
+# Şifre hash'leme bağlamını tanımla
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def authenticate_user(db: Session, user_login_data: modeller.KullaniciLogin):
-    """
-    Kullanıcı adı ve şifreyi doğrular.
-    Gerçek uygulamada, bu fonksiyonun daha karmaşık bir doğrulama (örn: şifre hash'leme, veritabanı sorgusu) içermesi gerekir.
-    """
-    # Örnek Kullanıcı Doğrulama (GEÇİCİ VE GÜVENLİ DEĞİL!)
-    # Gerçek uygulamada:
-    # 1. Kullanıcıyı veritabanından kullanıcı adına göre çek.
-    # 2. Çekilen kullanıcının hash'lenmiş şifresi ile girilen şifreyi doğrula.
-    #    (örn: bcrypt.checkpw(password.encode('utf-8'), hashed_password))
+# Şifreyi hash'lemek için yardımcı fonksiyon
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
 
-    user_db = db.query(semalar.Kullanici).filter(semalar.Kullanici.kullanici_adi == user_login_data.username).first()
+# Şifreyi doğrulamak için yardımcı fonksiyon
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
-    if not user_db:
-        return None # Kullanıcı bulunamadı
+@router.post("/login", response_model=modeller.Token)
+def authenticate_user(user_login: modeller.UserLogin, db: Session = Depends(get_db)):
+    # Kullanıcı adı ile veritabanında kullanıcıyı bul
+    user = db.query(semalar.Kullanici).filter(semalar.Kullanici.kullanici_adi == user_login.kullanici_adi).first()
 
-    # Şifre kontrolü (GEÇİCİ: gerçek uygulamada hash kontrolü olmalı)
-    if user_login_data.password == user_db.sifre: # Varsayılan olarak semalar.py'de sifre alanı düz metin olarak tutuluyorsa
-        # Kullanıcı bilgilerini bir dict olarak döndürüyoruz (UI tarafından beklendiği gibi)
-        return {"id": user_db.id, "username": user_db.kullanici_adi, "rol": user_db.rol}
-
-    return None # Şifre yanlış
-
-@router.post("/login", response_model=modeller.KullaniciBilgileri) # response_model eklendi
-def login_for_access_token(user_login_data: modeller.KullaniciLogin, db: Session = Depends(get_db)):
-    """
-    Kullanıcı adı ve şifre ile giriş yapar ve kullanıcı bilgilerini döndürür.
-    """
-    authenticated_user_info = authenticate_user(db, user_login_data)
-    if not authenticated_user_info:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Hatalı kullanıcı adı veya şifre",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    # Gerçek uygulamada burada JWT token oluşturulur ve döndürülür.
-    # Şu an için UI'dan beklendiği gibi doğrudan kullanıcı bilgilerini döndürüyoruz.
-    return authenticated_user_info
+    
+    # Girilen şifreyi hash'lenmiş şifre ile doğrula
+    if not verify_password(user_login.sifre, user.hashed_sifre):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Hatalı kullanıcı adı veya şifre",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Başarılı olursa basit bir token (şimdilik kullanıcı adını döndürelim)
+    # Gerçek bir uygulamada burada JWT (JSON Web Token) oluşturulur
+    return {"access_token": user.kullanici_adi, "token_type": "bearer"}
+
+# Geçici kullanıcı oluşturma (GELİŞTİRME AMAÇLI, ÜRETİMDE KULLANILMAMALI!)
+@router.post("/register_temp", response_model=modeller.UserRead)
+def register_temporary_user(user_create: modeller.UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(semalar.Kullanici).filter(semalar.Kullanici.kullanici_adi == user_create.kullanici_adi).first()
+    if db_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kullanıcı adı zaten mevcut")
+    
+    hashed_password = hash_password(user_create.sifre)
+    db_user = semalar.Kullanici(
+        kullanici_adi=user_create.kullanici_adi,
+        hashed_sifre=hashed_password,
+        aktif=True # Yeni kullanıcılar varsayılan olarak aktif
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user

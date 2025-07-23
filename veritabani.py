@@ -328,7 +328,7 @@ class OnMuhasebe:
     def son_fatura_no_getir(self, fatura_tipi):
         """Belirtilen fatura tipi için son fatura numarasını API'den çeker ve bir sonraki numarayı oluşturur."""
         params = {"fatura_tipi": fatura_tipi}
-        response = self._make_api_request("GET", "/faturalar/son_fatura_no", params=params)
+        response = self._make_api_request("GET", f"/sistem/next_fatura_number/{fatura_tipi}", method="GET") 
         return response.get("next_no", "0000000001")
 
     def get_stok_miktari_for_kontrol(self, urun_id, fatura_id_or_siparis_id=None):

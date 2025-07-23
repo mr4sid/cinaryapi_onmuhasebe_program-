@@ -1,81 +1,109 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from .. import semalar, modeller
+from sqlalchemy import func
+from .. import modeller, semalar
 from ..veritabani import get_db
 
-router = APIRouter(
-    prefix="/tedarikciler",
-    tags=["Tedarikçiler"]
-)
+router = APIRouter(prefix="/tedarikciler", tags=["Tedarikçiler"])
 
-# --- VERİ OKUMA (READ) ---
+# Cari net bakiyeyi hesaplayan yardımcı fonksiyon (Müşteriler dosyasındaki ile aynı)
+# Bu fonksiyonu ortak bir yere taşıyıp import etmek daha temiz bir çözüm olabilir.
+# Ancak şimdilik kopyalayarak ilerliyoruz.
+def calculate_cari_net_bakiye(db: Session, cari_id: int, cari_turu: str) -> float:
+    alacak_toplami = db.query(func.sum(semalar.CariHareket.tutar)).filter(
+        semalar.CariHareket.cari_id == cari_id,
+        semalar.CariHareket.cari_turu == cari_turu,
+        semalar.CariHareket.islem_yone == "ALACAK"
+    ).scalar() or 0.0
 
-@router.get("/", response_model=List[modeller.TedarikciBase])
-def read_tedarikciler(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """
-    Tüm tedarikçileri listeler.
-    """
-    tedarikciler = db.query(semalar.Tedarikci).order_by(semalar.Tedarikci.ad).offset(skip).limit(limit).all()
-    return tedarikciler
+    borc_toplami = db.query(func.sum(semalar.CariHareket.tutar)).filter(
+        semalar.CariHareket.cari_id == cari_id,
+        semalar.CariHareket.cari_turu == cari_turu,
+        semalar.CariHareket.islem_yone == "BORC"
+    ).scalar() or 0.0
 
-@router.get("/{tedarikci_id}", response_model=modeller.TedarikciBase)
-def read_tedarikci(tedarikci_id: int, db: Session = Depends(get_db)):
-    """
-    Belirli bir ID'ye sahip tek bir tedarikçiyi döndürür.
-    """
-    db_tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id).first()
-    if db_tedarikci is None:
-        raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
-    return db_tedarikci
+    net_bakiye = alacak_toplami - borc_toplami
+    return net_bakiye
 
-# --- YENİ EKLENDİ: VERİ OLUŞTURMA (CREATE) ---
-@router.post("/", response_model=modeller.TedarikciBase)
+@router.post("/", response_model=modeller.TedarikciRead)
 def create_tedarikci(tedarikci: modeller.TedarikciCreate, db: Session = Depends(get_db)):
-    """
-    Yeni bir tedarikçi oluşturur. Kodun benzersizliğini kontrol eder.
-    """
-    db_tedarikci_check = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.tedarikci_kodu == tedarikci.tedarikci_kodu).first()
-    if db_tedarikci_check:
-        raise HTTPException(status_code=400, detail=f"'{tedarikci.tedarikci_kodu}' tedarikçi kodu zaten kullanılıyor.")
-
-    # Pydantic modelini doğrudan SQLAlchemy modeline dönüştürüyoruz
-    db_tedarikci = semalar.Tedarikci(**tedarikci.dict())
-
+    db_tedarikci = semalar.Tedarikci(**tedarikci.model_dump())
     db.add(db_tedarikci)
     db.commit()
     db.refresh(db_tedarikci)
     return db_tedarikci
 
-# --- YENİ EKLENDİ: VERİ GÜNCELLEME (UPDATE) ---
-@router.put("/{tedarikci_id}", response_model=modeller.TedarikciBase)
-def update_tedarikci(tedarikci_id: int, tedarikci: modeller.TedarikciCreate, db: Session = Depends(get_db)):
-    """
-    Mevcut bir tedarikçinin bilgilerini günceller.
-    """
+@router.get("/", response_model=modeller.TedarikciListResponse)
+def read_tedarikciler(
+    skip: int = 0,
+    limit: int = 100,
+    arama: str = Query(None, min_length=1, max_length=50),
+    aktif_durum: bool = Query(None),
+    db: Session = Depends(get_db)
+):
+    query = db.query(semalar.Tedarikci)
+
+    if arama:
+        query = query.filter(
+            (semalar.Tedarikci.ad.ilike(f"%{arama}%")) |
+            (semalar.Tedarikci.kod.ilike(f"%{arama}%")) |
+            (semalar.Tedarikci.telefon.ilike(f"%{arama}%")) |
+            (semalar.Tedarikci.vergi_no.ilike(f"%{arama}%"))
+        )
+
+    if aktif_durum is not None:
+        query = query.filter(semalar.Tedarikci.aktif == aktif_durum)
+
+    total_count = query.count()
+    tedarikciler = query.offset(skip).limit(limit).all()
+
+    # Her tedarikçi için net bakiyeyi hesapla ve ekle
+    tedarikciler_with_balance = []
+    for tedarikci in tedarikciler:
+        net_bakiye = calculate_cari_net_bakiye(db, tedarikci.id, "TEDARIKCI")
+        tedarikci_dict = modeller.TedarikciRead.model_validate(tedarikci).model_dump()
+        tedarikci_dict["net_bakiye"] = net_bakiye
+        tedarikciler_with_balance.append(tedarikci_dict)
+
+    return {"items": tedarikciler_with_balance, "total": total_count}
+
+@router.get("/{tedarikci_id}", response_model=modeller.TedarikciRead)
+def read_tedarikci(tedarikci_id: int, db: Session = Depends(get_db)):
+    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id).first()
+    if not tedarikci:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
+    
+    # Tedarikçi detayını dönerken net bakiyeyi de ekleyelim
+    net_bakiye = calculate_cari_net_bakiye(db, tedarikci_id, "TEDARIKCI")
+    tedarikci_dict = modeller.TedarikciRead.model_validate(tedarikci).model_dump()
+    tedarikci_dict["net_bakiye"] = net_bakiye
+    return tedarikci_dict
+
+@router.put("/{tedarikci_id}", response_model=modeller.TedarikciRead)
+def update_tedarikci(tedarikci_id: int, tedarikci: modeller.TedarikciUpdate, db: Session = Depends(get_db)):
     db_tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id).first()
-    if db_tedarikci is None:
-        raise HTTPException(status_code=404, detail="Güncellenecek tedarikçi bulunamadı")
-    
-    # exclude_unset=True ile sadece gönderilen alanlar güncellenir
-    for key, value in tedarikci.dict(exclude_unset=True).items():
+    if not db_tedarikci:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
+    for key, value in tedarikci.model_dump(exclude_unset=True).items():
         setattr(db_tedarikci, key, value)
-    
     db.commit()
     db.refresh(db_tedarikci)
     return db_tedarikci
 
-# --- VERİ SİLME (DELETE) ---
-
-@router.delete("/{tedarikci_id}", status_code=204)
+@router.delete("/{tedarikci_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tedarikci(tedarikci_id: int, db: Session = Depends(get_db)):
-    """
-    Belirli bir ID'ye sahip tedarikçiyi siler.
-    """
     db_tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id).first()
-    if db_tedarikci is None:
-        raise HTTPException(status_code=404, detail="Silinecek tedarikçi bulunamadı")
-    
+    if not db_tedarikci:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
     db.delete(db_tedarikci)
     db.commit()
     return
+
+@router.get("/{tedarikci_id}/net_bakiye", response_model=modeller.NetBakiyeResponse)
+def get_net_bakiye_endpoint(tedarikci_id: int, db: Session = Depends(get_db)):
+    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id).first()
+    if not tedarikci:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
+    
+    net_bakiye = calculate_cari_net_bakiye(db, tedarikci_id, "TEDARIKCI")
+    return {"net_bakiye": net_bakiye}

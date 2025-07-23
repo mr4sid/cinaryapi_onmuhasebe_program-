@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 from .veritabani import engine, Base
 # Tüm rotaları import ediyoruz
-from .rotalar import musteriler, tedarikciler, stoklar, nitelikler, faturalar, siparisler, kasalar_bankalar, cari_hareketler, gelir_gider, sistem, dogrulama, raporlar
+from .rotalar import (musteriler, 
+tedarikciler, stoklar, nitelikler, faturalar, 
+siparisler, kasalar_bankalar, cari_hareketler, 
+gelir_gider, sistem, dogrulama, raporlar, yedekleme )
 # Veritabanı tablolarını (eğer yoksa) oluşturur. Bu satır önemlidir.
 Base.metadata.create_all(bind=engine)
 
@@ -21,6 +24,7 @@ app.include_router(gelir_gider.router)
 app.include_router(sistem.router) 
 app.include_router(dogrulama.router) 
 app.include_router(raporlar.router)
+app.include_router(yedekleme.router)
 # Ana ("/") adrese bir istek geldiğinde bu fonksiyon çalışacak
 @app.get("/")
 def read_root():

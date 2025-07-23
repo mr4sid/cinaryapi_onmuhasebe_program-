@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QGridLayout, QLabel, QLineEdit, QComboBox,
     QTreeWidget, QTreeWidgetItem, QAbstractItemView, QHeaderView, QTextEdit,
     QCheckBox, QFrame, QTableWidget, QTableWidgetItem, QGroupBox,
-    QMenu, QTabWidget,QSizePolicy, QProgressBar )
+    QMenu, QTabWidget,QSizePolicy, QProgressBar, QListWidgetItem  )
 from PySide6.QtGui import QFont, QPixmap, QImage, QDoubleValidator, QIntValidator, QBrush, QColor
 from PySide6.QtCore import Qt, QDate, QTimer, Signal, Slot
 import requests
@@ -116,8 +116,8 @@ class SiparisPenceresi(QDialog):
     def __init__(self, parent, db_manager, app_ref, siparis_tipi, siparis_id_duzenle=None, yenile_callback=None, initial_cari_id=None, initial_urunler=None, initial_data=None):
         super().__init__(parent)
         self.app = app_ref
-        self.db = db_manager # Keep db_manager for now as it's used for constants like SIPARIS_TIP_SATIS
-        
+        self.db = db_manager
+
         self.siparis_tipi = siparis_tipi
         self.siparis_id_duzenle = siparis_id_duzenle
         self.yenile_callback = yenile_callback
@@ -127,29 +127,26 @@ class SiparisPenceresi(QDialog):
 
         title = "Yeni Sipariş"
         if siparis_id_duzenle:
-            # Use requests to get siparis info for title
+            # Use self.db to get siparis info for title
             try:
-                response = requests.get(f"{API_BASE_URL}/siparisler/{siparis_id_duzenle}")
-                response.raise_for_status()
-                siparis_info = response.json()
+                siparis_info = self.db.siparis_getir_by_id(siparis_id_duzenle) # self.db kullanıldı
                 siparis_no_display = siparis_info.get('siparis_no', 'Bilinmiyor')
                 title = f"Sipariş Güncelleme: {siparis_no_display}"
-            except requests.exceptions.RequestException as e:
+            except Exception as e: # requests.exceptions.RequestException yerine daha genel Exception
                 logging.error(f"Sipariş bilgisi çekilirken hata: {e}")
                 QMessageBox.critical(self, "Hata", "Sipariş bilgisi yüklenirken hata oluştu.")
                 title = "Sipariş Güncelleme: Hata"
         else:
-            title = "Yeni Müşteri Siparişi" if siparis_tipi == "SATIŞ_SIPARIS" else "Yeni Tedarikçi Siparişi" # Use hardcoded string for now or fetch from API
+            title = "Yeni Müşteri Siparişi" if siparis_tipi == "SATIŞ_SIPARIS" else "Yeni Tedarikçi Siparişi"
 
         self.setWindowTitle(title)
-        self.setWindowState(Qt.WindowMaximized) # Maximize on start
+        self.setWindowState(Qt.WindowMaximized)
         self.setModal(True)
 
-        # Main layout for the dialog
         dialog_layout = QVBoxLayout(self)
 
-        # Instantiate SiparisOlusturmaSayfasi directly as a child of this dialog
-        from arayuz import SiparisOlusturmaSayfasi
+        # Dinamik import buraya taşındı
+        from arayuz import SiparisOlusturmaSayfasi # BURAYA DİNAMİK OLARAK EKLE
         self.siparis_form = SiparisOlusturmaSayfasi(
             self, # Parent is this dialog
             self.db,
@@ -179,72 +176,6 @@ class SiparisPenceresi(QDialog):
         # If there's a refresh callback, call it regardless of accept/reject
         if self.yenile_callback:
             self.yenile_callback()
-
-    def _siparis_yukle(self):
-        # Sipariş bilgileri mevcutsa yükle
-        if self.siparis_bilgileri:
-            self.ui.deTarih.setDate(QDate.fromString(self.siparis_bilgileri["tarih"], "yyyy-MM-dd"))
-            self.ui.txtBelgeNo.setText(self.siparis_bilgileri["belge_no"])
-            self.ui.txtAciklama.setText(self.siparis_bilgileri["aciklama"])
-            self.ui.lblToplamTutar.setText(f"{self.siparis_bilgileri.get('toplam_tutar', 0.0):.2f} {self.app_ref.ui.lblParaBirimi.text()}")
-
-            # Cari bilgilerini API'den çek ve ComboBox'ı ID ile ayarla
-            if self.siparis_bilgileri.get("cari_id"):
-                cari_id = self.siparis_bilgileri["cari_id"]
-                # Bu kısımda artık musteri_adi_getir_by_id kullanılmıyor.
-                # Cari listesini alıp, ID'ye göre ComboBox'ı ayarlamamız daha sağlıklı.
-                # Ancak burada doğrudan cari_adi'nı UI'da gösterebilmek için de API çağrısı yapabiliriz.
-                try:
-                    if self.siparis_tipi == "SATIŞ_SIPARIS":
-                        cari_data = self.db_manager.musteri_getir_by_id(cari_id)
-                    else: # ALIS_SIPARIS
-                        cari_data = self.db_manager.tedarikci_getir_by_id(cari_id)
-
-                    if cari_data:
-                        cari_ad = cari_data.get("ad_soyad", "Bilinmeyen Cari")
-                        # ComboBox'ı metin yerine doğrudan ID'ye göre ayarlayalım
-                        # Bu, cmbCari'nin doldurulmuş olduğunu varsayar
-                        index = self.ui.cmbCari.findData(cari_id)
-                        if index != -1:
-                            self.ui.cmbCari.setCurrentIndex(index)
-                        else:
-                            # Eğer cari combobox'ta yoksa, hata veya varsayılan gösterim
-                            self.ui.cmbCari.setCurrentText(cari_ad) # Geçici olarak sadece adını göster
-                            logger.warning(f"Sipariş yüklenirken Cari ID {cari_id} ComboBox'ta bulunamadı.")
-                except Exception as e:
-                    logger.error(f"Sipariş için cari bilgileri yüklenirken hata: {e}")
-                    self.ui.cmbCari.setCurrentText("Yükleme Hatası") # Hata durumunda
-
-            # Sipariş kalemlerini yükle
-            kalemler = self.siparis_bilgileri.get("siparis_kalemleri", [])
-            self.ui.tblKalemler.setRowCount(len(kalemler))
-            for row, kalem in enumerate(kalemler):
-                urun_id = kalem.get("urun_id")
-                # Stok adını API'den çekmeliyiz, artık db_manager.stok_adi_getir_by_id yok.
-                urun_adi = "Yükleniyor..."
-                try:
-                    urun_data = self.db_manager.stok_getir_by_id(urun_id)
-                    if urun_data:
-                        urun_adi = urun_data.get("ad", "Bilinmeyen Ürün")
-                except Exception as e:
-                    logger.error(f"Sipariş kalemi için ürün bilgisi yüklenirken hata: {e}")
-                    urun_adi = "Hata"
-
-                self.ui.tblKalemler.setItem(row, 0, QTableWidgetItem(urun_adi))
-                self.ui.tblKalemler.setItem(row, 1, QTableWidgetItem(str(kalem.get("miktar", 0))))
-                self.ui.tblKalemler.setItem(row, 2, QTableWidgetItem(f"{kalem.get('birim_fiyat', 0.0):.2f}"))
-                self.ui.tblKalemler.setItem(row, 3, QTableWidgetItem(f"{kalem.get('iskonto_orani', 0.0):.2f}%"))
-                self.ui.tblKalemler.setItem(row, 4, QTableWidgetItem(f"{kalem.get('kdv_orani', 0.0):.2f}%"))
-                self.ui.tblKalemler.setItem(row, 5, QTableWidgetItem(f"{kalem.get('ara_toplam', 0.0):.2f}"))
-                self.ui.tblKalemler.setItem(row, 6, QTableWidgetItem(f"{kalem.get('kdv_tutari', 0.0):.2f}"))
-                self.ui.tblKalemler.setItem(row, 7, QTableWidgetItem(f"{kalem.get('toplam_tutar', 0.0):.2f}"))
-
-                # Ürün ID'sini öğeye bağla (gerektiğinde kullanılmak üzere)
-                item_urun_id = QTableWidgetItem()
-                item_urun_id.setData(Qt.UserRole, urun_id)
-                self.ui.tblKalemler.setItem(row, self.ui.tblKalemler.columnCount() - 1, item_urun_id) # Genişleyen sütun
-
-            self.ui.tblKalemler.resizeColumnsToContents()
 
 class CariHesapEkstresiPenceresi(QDialog):
     def __init__(self, parent_app, db_manager, cari_id, cari_tip, pencere_basligi, parent_list_refresh_func=None):
@@ -748,126 +679,118 @@ class CariHesapEkstresiPenceresi(QDialog):
 
 
     def _yukle_ozet_bilgileri(self):
-        # Fetch cari data first to check current status for summary
         try:
-            cari_detail = None
-            if self.cari_tip == "MUSTERI":
-                response = requests.get(f"{API_BASE_URL}/musteriler/{self.cari_id}")
-            else: # TEDARIKCI
-                response = requests.get(f"{API_BASE_URL}/tedarikciler/{self.cari_id}")
-            response.raise_for_status()
-            cari_detail = response.json()
-
-            self.lbl_cari_detay_ad.setText(cari_detail.get('ad', '-'))
-            self.lbl_cari_detay_tel.setText(cari_detail.get('telefon', '-'))
-            self.lbl_cari_detay_adres.setText(cari_detail.get('adres', '-'))
-            vergi_info = f"{cari_detail.get('vergi_dairesi', '-')} / {cari_detail.get('vergi_no', '-')}"
-            self.lbl_cari_detay_vergi.setText(vergi_info)
-
-            # Fetch financial summary from API
-            # This requires an API endpoint for cari_summary or something similar
-            # For now, we simulate with direct db_manager calls
-            ozet_data = self.db.get_cari_ozet_bilgileri(self.cari_id, self.cari_tip)
-
-            self.lbl_donem_basi_bakiye.setText(self.db._format_currency(ozet_data.get("donem_basi_bakiye", 0.0)))
-            self.lbl_toplam_borc_hareketi.setText(self.db._format_currency(ozet_data.get("donem_toplam_borc_hareketi", 0.0)))
-            self.lbl_toplam_alacak_hareketi.setText(self.db._format_currency(ozet_data.get("donem_toplam_alacak_hareketi", 0.0)))
+            # Yeni Kod: self.db.musteri_getir_by_id veya self.db.tedarikci_getir_by_id kullanıyoruz
+            if self.cari_turu == "Müşteri":
+                cari_data = self.db.musteri_getir_by_id(self.cari_id)
+            else: # Tedarikçi
+                cari_data = self.db.tedarikci_getir_by_id(self.cari_id)
             
-            tahsilat_odeme_key = "toplam_tahsilat" if self.cari_tip == 'MUSTERI' else "toplam_odeme"
-            self.lbl_toplam_tahsilat_odeme.setText(self.db._format_currency(ozet_data.get(tahsilat_odeme_key, 0.0)))
-            
-            vadesi_gelmis = ozet_data.get("vadesi_gelmis_borc_alacak", 0.0)
-            self.lbl_vadesi_gelmis.setText(self.db._format_currency(vadesi_gelmis))
-            self.lbl_vadesi_gelmis.setStyleSheet(f"color: {'red' if vadesi_gelmis > 0 else 'black'};")
-            
-            vadesi_gelecek = ozet_data.get("vadesi_gelecek_borc_alacak", 0.0)
-            self.lbl_vadesi_gelecek.setText(self.db._format_currency(vadesi_gelecek))
-            self.lbl_vadesi_gelecek.setStyleSheet(f"color: {'blue' if vadesi_gelecek > 0 else 'black'};")
+            if not cari_data:
+                self.app.set_status_message(f"Hata: Cari bilgiler yüklenemedi. ID {self.cari_id} bulunamadı.", "red")
+                return
 
-            net_bakiye = ozet_data.get("donem_sonu_bakiye", 0.0)
-            self.lbl_ozet_net_bakiye.setText(self.db._format_currency(net_bakiye))
-            if net_bakiye > 0: self.lbl_ozet_net_bakiye.setStyleSheet("color: red;")
-            elif net_bakiye < 0: self.lbl_ozet_net_bakiye.setStyleSheet("color: green;")
-            else: self.lbl_ozet_net_bakiye.setStyleSheet("color: black;")
+            self.cari_adi_label.setText(cari_data.get("ad", "Bilinmiyor"))
+            self.cari_kodu_label.setText(cari_data.get("kod", "Bilinmiyor"))
+            self.cari_telefon_label.setText(cari_data.get("telefon", "Bilinmiyor"))
+            self.cari_eposta_label.setText(cari_data.get("eposta", "Bilinmiyor"))
 
-        except requests.exceptions.RequestException as e:
-            QMessageBox.critical(self, "API Hatası", f"Cari özet bilgileri çekilirken hata: {e}")
-            logging.error(f"Cari özet yükleme hatası: {e}")
+            net_bakiye = cari_data.get("net_bakiye", 0.0) # Varsayılan olarak 0.0
+                        
+            bakiye_metni = self.db._format_currency(net_bakiye)
+            if net_bakiye > 0:
+                bakiye_metni = f"<b style='color: green;'>{bakiye_metni} ALACAKLI</b>"
+            elif net_bakiye < 0:
+                bakiye_metni = f"<b style='color: red;'>{bakiye_metni} BORÇLU</b>"
+            else:
+                bakiye_metni = f"<b style='color: blue;'>{bakiye_metni}</b>"
+            self.cari_bakiye_label.setText(bakiye_metni)
+
+            self.app.set_status_message("Cari özet bilgileri güncellendi.", "green")
+
+        except Exception as e:
+            logger.error(f"Cari özet bilgileri yüklenirken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Cari özet bilgileri yüklenemedi. {e}", "red")
 
     def _cari_bilgileri_guncelle(self):
         try:
-            if self.cari_tip == 'MUSTERI':
-                response = requests.get(f"{API_BASE_URL}/musteriler/{self.cari_id}")
-                response.raise_for_status()
-                musteri_data = response.json()
-                dialog = YeniMusteriEklePenceresi(self, self.db, self._ozet_ve_liste_yenile, musteri_duzenle=musteri_data, app_ref=self.app)
-            elif self.cari_tip == 'TEDARIKCI':
-                response = requests.get(f"{API_BASE_URL}/tedarikciler/{self.cari_id}")
-                response.raise_for_status()
-                tedarikci_data = response.json()
-                from pencereler import YeniTedarikciEklePenceresi
-                dialog = YeniTedarikciEklePenceresi(self, self.db, self._ozet_ve_liste_yenile, tedarikci_duzenle=tedarikci_data, app_ref=self.app)
+            cari_data = None
+            if self.cari_turu == "Müşteri":
+                cari_data = self.db.musteri_getir_by_id(self.cari_id)
+                if cari_data:
+                    self.app._musteri_karti_penceresi_ac(self.db, cari_data)
+                else:
+                    self.app.set_status_message(f"Hata: Müşteri bilgileri yüklenemedi. ID {self.cari_id} bulunamadı.", "red")
+                    return
+            elif self.cari_turu == "Tedarikçi":
+                cari_data = self.db.tedarikci_getir_by_id(self.cari_id)
+                if cari_data:
+                    self.app._tedarikci_karti_penceresi_ac(self.db, cari_data)
+                else:
+                    self.app.set_status_message(f"Hata: Tedarikçi bilgileri yüklenemedi. ID {self.cari_id} bulunamadı.", "red")
+                    return
             
-            if dialog: dialog.exec()
+            self.app.set_status_message(f"{self.cari_turu} kartı açıldı.", "blue")
 
-        except requests.exceptions.RequestException as e:
-            QMessageBox.critical(self, "API Hatası", f"Cari detayları çekilirken hata: {e}")
-            logging.error(f"Cari güncelleme dialogu açma hatası: {e}")
+        except Exception as e:
+            logger.error(f"Cari bilgiler güncellenmek üzere yüklenirken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Cari bilgiler yüklenemedi. {e}", "red")
 
     def _ozet_ve_liste_yenile(self):
         self._yukle_ozet_bilgileri()
         self.ekstreyi_yukle()
-        # if self.parent_list_refresh_func: # This is handled by on_dialog_finished
-        #     self.parent_list_refresh_func()
 
     def _hizli_odeme_tahsilat_kaydet(self):
-        odeme_tipi = self.ot_odeme_tipi_combo.currentText()
-        tutar_str = self.ot_tutar_entry.text().replace(',', '.')
-        not_str = self.ot_not_entry.text()
-        kasa_id = self.ot_kasa_banka_combo.currentData()
+        islem_turu = self.sender().text() # 'Ödeme Yap' veya 'Tahsilat Yap'
+        islem_turu_enum = "GIDER" if islem_turu == "Ödeme Yap" else "GELIR"
 
-        if not tutar_str or float(tutar_str) <= 0:
-            QMessageBox.warning(self, "Eksik Bilgi", "Lütfen geçerli bir tutar giriniz.")
-            return
-        if kasa_id is None:
-            QMessageBox.warning(self, "Eksik Bilgi", "Lütfen bir Kasa/Banka hesabı seçiniz.")
-            return
-
-        tutar_f = float(tutar_str)
-        aciklama = not_str if not_str else f"Manuel {self.cari_tip.capitalize()} {odeme_tipi}"
-        
-        # API call to create Gelir/Gider entry
-        # This assumes a unified /gelir_gider endpoint handles both income and expense
+        tutar_str = self.hizli_tutar_input.text().replace(".", "").replace(",", ".")
         try:
-            gg_tip = "GELİR" if self.cari_tip == "MUSTERI" else "GİDER"
-            cari_id_param = self.cari_id # Pass cari_id to API for linking
-            cari_tip_param = self.cari_tip # Pass cari_tip to API for linking
+            tutar = float(tutar_str)
+            if tutar <= 0:
+                self.app.set_status_message("Tutar sıfırdan büyük olmalıdır.", "orange")
+                return
+        except ValueError:
+            self.app.set_status_message("Geçerli bir tutar girin.", "orange")
+            return
 
-            # GelirGiderCreate model requires: tarih, tip, tutar, aciklama, kasa_banka_id, cari_id, cari_tip
-            data = {
-                "tarih": date.today().strftime('%Y-%m-%d'),
-                "tip": gg_tip,
-                "tutar": tutar_f,
-                "aciklama": aciklama,
-                "kasa_banka_id": kasa_id,
-                "cari_id": cari_id_param,
-                "cari_tip": cari_tip_param
-            }
-            response = requests.post(f"{API_BASE_URL}/gelir_gider/", json=data)
-            response.raise_for_status()
+        aciklama = self.hizli_aciklama_input.text().strip()
+        if not aciklama:
+            self.app.set_status_message("Açıklama alanı boş bırakılamaz.", "orange")
+            return
 
-            QMessageBox.information(self, "Başarılı", f"İşlem başarıyla kaydedildi.")
-            self.ot_tutar_entry.clear()
-            self.ot_not_entry.clear()
-            self.ot_odeme_tipi_combo.setCurrentText(self.db.ODEME_TURU_NAKIT)
-            self._ot_odeme_tipi_degisince() # Reset Kasa/Banka combo
+        selected_hesap_idx = self.hizli_kasa_banka_comboBox.currentIndex()
+        if selected_hesap_idx < 0:
+            self.app.set_status_message("Lütfen bir Kasa/Banka hesabı seçin.", "orange")
+            return
+        
+        kasa_banka_id = self.kasa_banka_hesaplari[selected_hesap_idx]["id"]
 
-            self._ozet_ve_liste_yenile() # Refresh summary and list
-            self.app.set_status_message(f"Hızlı {gg_tip.lower()} kaydedildi.")
+        gelir_gider_data = {
+            "tarih": QDate.currentDate().toString("yyyy-MM-dd"),
+            "islem_turu": islem_turu_enum,
+            "kategori": f"Hızlı {islem_turu_enum.capitalize()}", # Otomatik kategori
+            "aciklama": aciklama,
+            "tutar": tutar,
+            "odeme_turu": "Nakit", # Varsayılan olarak nakit, kullanıcı seçimi eklenebilir
+            "cari_id": self.cari_id,
+            "kasa_banka_id": kasa_banka_id,
+        }
 
-        except requests.exceptions.RequestException as e:
-            QMessageBox.critical(self, "API Hatası", f"Kaydedilirken hata: {e}")
-            logging.error(f"Hızlı ödeme/tahsilat kaydetme hatası: {e}")
+        try:
+            # self.db.gelir_gider_ekle metodunu kullanıyoruz
+            result = self.db.gelir_gider_ekle(gelir_gider_data)
+            if result:
+                self.app.set_status_message(f"Hızlı {islem_turu.lower()} kaydı başarıyla oluşturuldu.", "green")
+                self.hizli_tutar_input.clear()
+                self.hizli_aciklama_input.clear()
+                self._yukle_hareketler() # Hareketleri ve özet bilgileri yenile
+                self._yukle_ozet_bilgileri()
+            else:
+                self.app.set_status_message(f"Hızlı {islem_turu.lower()} kaydı oluşturulamadı.", "red")
+        except Exception as e:
+            logger.error(f"Hızlı {islem_turu.lower()} kaydı oluşturulurken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Hızlı {islem_turu.lower()} kaydı oluşturulamadı. {e}", "red")
 
     def _hizli_veresiye_borc_kaydet(self):
         borc_tur = self.borc_tur_combo.currentText()
@@ -1147,101 +1070,90 @@ class CariHesapEkstresiPenceresi(QDialog):
             context_menu.exec(self.ekstre_tree.mapToGlobal(pos))
 
     def secili_islemi_sil(self):
-        selected_items = self.ekstre_tree.selectedItems()
+        selected_items = self.hareket_table_widget.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "Uyarı", "Lütfen silmek için bir işlem seçin.")
+            self.app.set_status_message("Lütfen silmek istediğiniz işlemi seçin.", "orange")
             return
 
-        item_qt = selected_items[0]
-        hareket_id = int(item_qt.text(0)) # Get ID from the first column
-
-        hareket_detayi = self.hareket_detay_map.get(hareket_id)
-        if not hareket_detayi:
-            QMessageBox.critical(self, "Hata", "İşlem detayları bulunamadı.")
-            return
+        row = selected_items[0].row()
+        hareket_id = int(self.hareket_table_widget.item(row, 0).text())
+        islem_turu = self.hareket_table_widget.item(row, 2).text() # 'FATURA', 'TAHSILAT', 'ÖDEME', 'VERESİYE BORÇ' vb.
+        aciklama = self.hareket_table_widget.item(row, 4).text()
         
-        ref_id = hareket_detayi.get('referans_id')
-        ref_tip = hareket_detayi.get('referans_tip')
-        aciklama_text = hareket_detayi.get('aciklama')
-        fatura_no = hareket_detayi.get('fatura_no')
-        
-        confirm_msg = f"'{aciklama_text}' açıklamalı işlemi silmek istediğinizden emin misiniz?\nBu işlem geri alınamaz."
-        if ref_tip in ["FATURA", "İADE_FATURA", "FATURA_SATIS_PESIN", "FATURA_ALIS_PESIN"]:
-            confirm_msg = f"'{fatura_no}' numaralı FATURA ve ilişkili tüm hareketlerini silmek istediğinizden emin misiniz?\nBu işlem geri alınamaz."
+        reply = QMessageBox.question(self, 'İşlem Sil Onayı',
+                                     f"'{aciklama}' açıklamalı {islem_turu} işlemini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
-        reply = QMessageBox.question(self, "Silme Onayı", confirm_msg, QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
-            success = False
-            message = "Bilinmeyen işlem tipi."
             try:
-                if ref_tip in ["FATURA", "İADE_FATURA", "FATURA_SATIS_PESIN", "FATURA_ALIS_PESIN"]:
-                    # API call to delete Fatura
-                    response = requests.delete(f"{API_BASE_URL}/faturalar/{ref_id}")
-                    response.raise_for_status()
-                    success = True
-                    message = f"Fatura {fatura_no} başarıyla silindi."
-                else: # Manual TAHSILAT/ODEME/VERESIYE_BORC_MANUEL
-                    # API call to delete Gelir/Gider or CariHareket directly if it's manual
-                    if ref_tip in ["TAHSILAT", "ODEME"]:
-                        response = requests.delete(f"{API_BASE_URL}/gelir_gider/{hareket_id}") # Assuming API deletes related cari_hareket
-                    elif ref_tip == "VERESIYE_BORC_MANUEL":
-                        response = requests.delete(f"{API_BASE_URL}/cari_hareketler/{hareket_id}")
-                    response.raise_for_status()
-                    success = True
-                    message = f"İşlem ID {hareket_id} başarıyla silindi."
+                success = False
+                if islem_turu == "FATURA (SATIŞ)" or islem_turu == "FATURA (ALIŞ)":
+                    
+                    # Varsayım: 'hareket_id' aslında 'fatura_id' ise veya API cari hareket üzerinden fatura siliyorsa:
+                    success = self.db.fatura_sil(hareket_id) # Varsayım: hareket_id == fatura_id
+                    
+                elif islem_turu == "TAHSİLAT" or islem_turu == "ÖDEME":
+                    # Gelir/Gider silme işlemi
+                    success = self.db.gelir_gider_sil(hareket_id) # gg_id'si hareket_id ile aynıdır
+                
+                elif islem_turu == "VERESİYE BORÇ" or islem_turu == "VERESİYE ALACAK":
+                    # API'de bu tür manuel cari hareketleri silmek için bir endpoint yoksa,
+                    # burası çalışmayacaktır. Bu bir eksikliktir.
+                    self.app.set_status_message(f"Hata: {islem_turu} türündeki hareket doğrudan silinemiyor. API desteği gerekli.", "red")
+                    return
 
                 if success:
-                    QMessageBox.information(self, "Başarılı", message)
-                    self._ozet_ve_liste_yenile()
-                    # Refresh related lists in main app as well
-                    if hasattr(self.app, 'fatura_listesi_sayfasi'):
-                        self.app.fatura_listesi_sayfasi.satis_fatura_frame.fatura_listesini_yukle()
-                        self.app.fatura_listesi_sayfasi.alis_fatura_frame.fatura_listesini_yukle()
-                    if hasattr(self.app, 'gelir_gider_sayfasi'):
-                        self.app.gelir_gider_sayfasi.gelir_listesi_frame.gg_listesini_yukle()
-                        self.app.gelir_gider_sayfasi.gider_listesi_frame.gg_listesini_yukle()
-                    if hasattr(self.app, 'kasa_banka_yonetimi_sayfasi'):
-                        self.app.kasa_banka_yonetimi_sayfasi.hesap_listesini_yenile()
+                    self.app.set_status_message(f"{islem_turu} kaydı başarıyla silindi.", "green")
+                    self._yukle_hareketler() # Hareketleri ve özet bilgileri yenile
+                    self._yukle_ozet_bilgileri()
                 else:
-                    QMessageBox.critical(self, "Hata", message)
-            except requests.exceptions.RequestException as e:
-                error_detail = "API Hatası: "
-                try: error_detail += e.response.json().get('detail', str(e.response.content))
-                except: error_detail += str(e)
-                QMessageBox.critical(self, "Hata", f"Silinirken hata: {error_detail}")
-                logging.error(f"Cari Ekstresi silme hatası: {error_detail}")
+                    self.app.set_status_message(f"Hata: {islem_turu} kaydı silinemedi. API'den hata döndü.", "red")
+
             except Exception as e:
-                QMessageBox.critical(self, "Hata", f"Silinirken beklenmeyen hata: {e}")
-                logging.error(f"Cari Ekstresi silme beklenmeyen hata: {e}")
-        else:
-            self.app.set_status_message("Silme işlemi iptal edildi.")
+                logger.error(f"{islem_turu} kaydı silinirken hata oluştu: {e}", exc_info=True)
+                self.app.set_status_message(f"Hata: {islem_turu} kaydı silinemedi. {e}", "red")
 
     def secili_islemi_guncelle(self):
-        selected_items = self.ekstre_tree.selectedItems()
+        selected_items = self.hareket_table_widget.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "Uyarı", "Lütfen güncellemek için bir fatura işlemi seçin.")
+            self.app.set_status_message("Lütfen güncellemek istediğiniz işlemi seçin.", "orange")
             return
 
-        item_qt = selected_items[0]
-        hareket_id = int(item_qt.text(0)) # Get ID from first column
+        row = selected_items[0].row()
+        hareket_id = int(self.hareket_table_widget.item(row, 0).text())
+        islem_turu = self.hareket_table_widget.item(row, 2).text() # 'FATURA', 'TAHSILAT', 'ÖDEME', 'VERESİYE BORÇ' vb.
 
-        hareket_detayi = self.hareket_detay_map.get(hareket_id)
-        if not hareket_detayi:
-            QMessageBox.critical(self, "Hata", "İşlem detayları bulunamadı.")
-            return
-        
-        ref_id = hareket_detayi.get('referans_id')
-        ref_tip = hareket_detayi.get('referans_tip')
-
-        if ref_tip in ["FATURA", "İADE_FATURA", "FATURA_SATIS_PESIN", "FATURA_ALIS_PESIN"]:
-            if ref_id:
-                from pencereler import FaturaGuncellemePenceresi
-                # Pass self as parent, so the dialog is centered on this window
-                FaturaGuncellemePenceresi(self, self.db, ref_id, self._ozet_ve_liste_yenile).exec()
+        try:
+            if islem_turu == "FATURA (SATIŞ)" or islem_turu == "FATURA (ALIŞ)":
+                # Fatura ID'si doğrudan hareket_id ile aynıysa bu kullanılabilir.
+                # Aksi takdirde, API'den veya tablodan doğru fatura ID'sinin alınması gerekir.
+                fatura_data = self.db.fatura_getir_by_id(hareket_id)
+                if fatura_data:
+                    self.app.show_invoice_form(self.db, fatura_data)
+                else:
+                    self.app.set_status_message(f"Hata: Fatura bulunamadı. ID {hareket_id}", "red")
+            elif islem_turu == "TAHSİLAT" or islem_turu == "ÖDEME":
+                gg_data = self.db.gelir_gider_getir_by_id(hareket_id)
+                if gg_data:
+                    # YeniGelirGiderEklePenceresi'ni açmak için
+                    # app._gelir_gider_karti_penceresi_ac metodu kullanılabilir.
+                    # Eğer bu metodun API'den gelen veriyi alıp pencereleri başlatma özelliği varsa.
+                    self.app._gelir_gider_karti_penceresi_ac(self.db, gg_data)
+                else:
+                    self.app.set_status_message(f"Hata: Gelir/Gider kaydı bulunamadı. ID {hareket_id}", "red")
+            elif islem_turu == "VERESİYE BORÇ" or islem_turu == "VERESİYE ALACAK":
+                self.app.set_status_message(f"Hata: {islem_turu} türündeki manuel hareketler şu an düzenlenemiyor.", "red")
+                return
             else:
-                QMessageBox.information(self, "Detay", "Fatura referansı bulunamadı.")
-        else:
-            QMessageBox.information(self, "Bilgi", "Sadece fatura işlemleri güncellenebilir.")
+                self.app.set_status_message("Bilinmeyen işlem türü: Düzenlenemiyor.", "orange")
+                return
+            
+            self._yukle_hareketler() # Güncelleme sonrası listeyi yenile
+            self._yukle_ozet_bilgileri() # Özet bilgileri de yenile
+
+        except Exception as e:
+            logger.error(f"İşlem detayları çekilirken veya pencere açılırken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: İşlem düzenlenemedi. {e}", "red")
 
     def on_double_click_hareket_detay(self, item, column): # item and column from QTreeWidget signal
         if item.text(3) == "DEVİR": # İşlem Tipi column is index 3
@@ -1282,7 +1194,7 @@ class CariHesapEkstresiPenceresi(QDialog):
 class FaturaGuncellemePenceresi(QDialog):
     def __init__(self, parent, db_manager, fatura_id_duzenle, yenile_callback_liste=None):
         super().__init__(parent)
-        self.app = parent.app if hasattr(parent, 'app') else parent # Ensure app reference
+        self.app = parent.app if hasattr(parent, 'app') else parent
         self.db = db_manager
         self.yenile_callback_liste = yenile_callback_liste
         self.fatura_id_duzenle = fatura_id_duzenle
@@ -1305,7 +1217,8 @@ class FaturaGuncellemePenceresi(QDialog):
 
         dialog_layout = QVBoxLayout(self)
 
-        from arayuz import FaturaOlusturmaSayfasi # Import the PySide6 form
+        # Dinamik import buraya taşındı
+        from arayuz import FaturaOlusturmaSayfasi # BURAYA DİNAMİK OLARAK EKLE
 
         self.fatura_olusturma_form = FaturaOlusturmaSayfasi(
             self, # Parent is this dialog
@@ -1322,10 +1235,8 @@ class FaturaGuncellemePenceresi(QDialog):
         self.fatura_olusturma_form.cancelled_successfully.connect(self.reject) # If form cancel, reject dialog
 
         self.finished.connect(self.on_dialog_finished)
-
+        
     def _fatura_guncellendi_callback(self):
-        # This callback is called by FaturaOlusturmaSayfasi when save is successful
-        # The parent FaturaGuncellemePenceresi should accept itself, and its `finished` signal will trigger `on_dialog_finished`
         pass
 
     def on_dialog_finished(self, result):
@@ -1437,10 +1348,10 @@ class FaturaPenceresi(QDialog):
             self._yukle_carileri()
             self._yukle_kasa_banka_hesaplarini()
             # Buradaki metot adını düzeltiyoruz
-            self._urunleri_yukle_ve_cachele() # <<<<<< BU SATIR GÜNCELLENDİ <<<<<<
+            self._urunleri_yukle_ve_cachele_ve_goster()
         except Exception as e:
-            QMessageBox.critical(self, "Veri Yükleme Hatası", f"Başlangıç verileri yüklenirken hata: {e}")
-            logging.error(f"FaturaPenceresi initial data yükleme hatası: {e}")
+            # Hata mesajını set_status_message metodunun beklediği formata uygun hale getiriyoruz
+            self.app.set_status_message(f"Hata: Başlangıç verileri yüklenemedi. {e}", "red") # 3. argüman kaldırıldı
 
         if self.duzenleme_id:
             self._mevcut_faturayi_yukle()
@@ -1715,84 +1626,52 @@ class FaturaPenceresi(QDialog):
         footer_layout.addWidget(self.btn_kaydet, 0, 3, 3, 1, Qt.AlignRight | Qt.AlignVCenter)
 
     def _mevcut_faturayi_yukle(self):
-        """
-        Düzenleme modunda mevcut faturanın bilgilerini API'den çeker ve forma yükler.
-        """
-        try:
-            # API'den fatura bilgilerini çek
-            # (API'de tek bir fatura getiren endpoint'in olduğu varsayılıyor)
-            response_fatura = requests.get(f"{API_BASE_URL}/faturalar/{self.duzenleme_id}")
-            response_fatura.raise_for_status() # HTTP hatalarını yakala
-            fatura_ana = response_fatura.json()
+        # Eğer initial_fatura_data varsa, bu mevcut bir faturayı düzenliyoruz demektir.
+        if self.initial_fatura_data:
+            self.fatura_no_input.setText(self.initial_fatura_data.get("fatura_no", ""))
+            self.tarih_input.setDate(QDate.fromString(self.initial_fatura_data.get("tarih", QDate.currentDate().toString("yyyy-MM-dd")), "yyyy-MM-dd"))
+            self.vade_tarihi_input.setDate(QDate.fromString(self.initial_fatura_data.get("vade_tarihi", QDate.currentDate().toString("yyyy-MM-dd")), "yyyy-MM-dd"))
+            self.aciklama_input.setText(self.initial_fatura_data.get("aciklama", ""))
+            self.iskonto_orani_input.setText(str(self.initial_fatura_data.get("iskonto_orani", 0.0)))
+            self.iskonto_tutari_input.setText(self.db._format_currency(self.initial_fatura_data.get("iskonto_tutari", 0.0)))
+            self.toplam_kdv_input.setText(self.db._format_currency(self.initial_fatura_data.get("toplam_kdv", 0.0)))
+            self.genel_toplam_input.setText(self.db._format_currency(self.initial_fatura_data.get("genel_toplam", 0.0)))
 
-            # API'den fatura kalemlerini çek
-            # (API'de fatura kalemlerini getiren bir endpoint'in olduğu varsayılıyor)
-            response_kalemler = requests.get(f"{API_BASE_URL}/faturalar/{self.duzenleme_id}/kalemler")
-            response_kalemler.raise_for_status()
-            fatura_kalemleri_api = response_kalemler.json()
+            cari_id = self.initial_fatura_data.get("cari_id")
+            if cari_id:
+                try:
+                    cari_data = self.db.musteri_getir_by_id(cari_id) if self.initial_fatura_data.get("fatura_turu") == "SATIŞ" else self.db.tedarikci_getir_by_id(cari_id)
+                    if cari_data:
+                        cari_index = self.cari_comboBox.findData(cari_data["id"])
+                        if cari_index >= 0:
+                            self.cari_comboBox.setCurrentIndex(cari_index)
+                except Exception as e:
+                    logger.error(f"Fatura yüklenirken cari bilgileri çekilemedi: {e}", exc_info=True)
+                    self.app.set_status_message("Hata: Cari bilgileri yüklenemedi.", "red")
+
+            self.fatura_turu_comboBox.setCurrentText(self.initial_fatura_data.get("fatura_turu", "SATIŞ"))
+            self.odeme_turu_comboBox.setCurrentText(self.initial_fatura_data.get("odeme_turu", "Nakit"))
             
-            # Form alanlarını doldur
-            self.f_no_e.setText(fatura_ana.get('fatura_no', ''))
-            self.fatura_tarihi_entry.setText(fatura_ana.get('tarih', ''))
+            # Kasa/Banka hesabını yükle
+            kasa_banka_id = self.initial_fatura_data.get("kasa_banka_id")
+            if kasa_banka_id:
+                try:
+                    kasa_banka_data = self.db.kasa_banka_getir_by_id(kasa_banka_id)
+                    if kasa_banka_data:
+                        kasa_banka_index = self.kasa_banka_comboBox.findData(kasa_banka_data["id"])
+                        if kasa_banka_index >= 0:
+                            self.kasa_banka_comboBox.setCurrentIndex(kasa_banka_index)
+                except Exception as e:
+                    logger.error(f"Fatura yüklenirken Kasa/Banka bilgileri çekilemedi: {e}", exc_info=True)
+                    self.app.set_status_message("Hata: Kasa/Banka bilgileri yüklenemedi.", "red")
 
-            self.secili_cari_id = fatura_ana.get('cari_id')
-            self.lbl_secili_cari_adi.setText(f"Seçilen Cari: {fatura_ana.get('cari_adi', 'Yok')}")
-            self._on_cari_selected() # Cari seçimi sonrası bakiye vb. bilgileri güncelle
-
-            self.odeme_turu_cb.setCurrentText(fatura_ana.get('odeme_turu', self.ODEME_TURU_NAKIT))
-            
-            if fatura_ana.get('kasa_banka_id'):
-                for i in range(self.islem_hesap_cb.count()):
-                    if self.islem_hesap_cb.itemData(i) == fatura_ana.get('kasa_banka_id'):
-                        self.islem_hesap_cb.setCurrentIndex(i)
-                        break
-
-            self.entry_vade_tarihi.setText(fatura_ana.get('vade_tarihi', ''))
-            self.fatura_notlari_text.setPlainText(fatura_ana.get('fatura_notlari', ''))
-            self.genel_iskonto_tipi_cb.setCurrentText(fatura_ana.get('genel_iskonto_tipi', "YOK"))
-            self.genel_iskonto_degeri_e.setText(f"{fatura_ana.get('genel_iskonto_degeri', 0.0):.2f}".replace('.', ','))
-            self._on_genel_iskonto_tipi_changed() # Genel iskonto tipine göre alanı aktif/pasif yap
-
-            # Fatura kalemlerini UI listesine yükle
-            self.fatura_kalemleri_ui.clear()
-            for k_api in fatura_kalemleri_api:
-                urun_adi = self._get_urun_adi_by_id(k_api.get('urun_id'))
-
-                # API'den gelen veriye göre 15 elemanlı tuple oluşturuluyor.
-                # Eksik olabilecek alanlar için varsayılan değerler sağlanmalı.
-                self.fatura_kalemleri_ui.append((
-                    k_api.get('urun_id'), # 0: urun_id
-                    urun_adi,             # 1: urun_adi
-                    k_api.get('miktar'),  # 2: miktar
-                    k_api.get('birim_fiyat'), # 3: birim_fiyat (KDV hariç orijinal)
-                    k_api.get('kdv_orani'),   # 4: kdv_orani
-                    k_api.get('kdv_tutari', 0.0), # 5: kdv_tutari
-                    k_api.get('kalem_toplam_kdv_haric', 0.0), # 6: kalem_toplam_kdv_haric
-                    k_api.get('kalem_toplam_kdv_dahil', 0.0), # 7: kalem_toplam_kdv_dahil
-                    k_api.get('alis_fiyati_fatura_aninda', 0.0), # 8: alis_fiyati_fatura_aninda
-                    k_api.get('kdv_orani_fatura_aninda', k_api.get('kdv_orani')), # 9: kdv_orani_fatura_aninda (fatura anındaki KDV)
-                    k_api.get('iskonto_yuzde_1', 0.0), # 10: iskonto_yuzde_1
-                    k_api.get('iskonto_yuzde_2', 0.0), # 11: iskonto_yuzde_2
-                    k_api.get('iskonto_tipi', "YOK"), # 12: iskonto_tipi
-                    k_api.get('iskonto_degeri', 0.0), # 13: iskonto_degeri
-                    (k_api.get('kalem_toplam_kdv_dahil') / k_api.get('miktar')) if k_api.get('miktar') else 0.0 # 14: iskontolu_birim_fiyat_kdv_dahil
-                ))
-            
-            self._sepeti_guncelle_ui() # Sepet ağacını ve toplamları güncelle
-            self.toplamlari_hesapla_ui() # Toplamları tekrar hesapla
-            self.f_no_e.setEnabled(False) # Düzenleme modunda fatura no değişmesin
-            self.btn_cari_sec.setEnabled(False) # Düzenleme modunda cari değişmesin
-
-            if self.iade_modu_aktif: # İade modunda da bazı alanlar kilitli
-                self.f_no_e.setEnabled(False)
-                self.btn_cari_sec.setEnabled(False)
-        
-        except requests.exceptions.RequestException as e:
-            QMessageBox.critical(self, "API Hatası", f"Fatura bilgileri çekilirken hata: {e}")
-            logging.error(f"Fatura yükleme hatası: {e}", exc_info=True)
-        except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Fatura yüklenirken beklenmeyen bir hata oluştu: {e}")
-            logging.error(f"Fatura yükleme beklenmeyen hata: {e}", exc_info=True)
+            # Fatura kalemlerini tabloya yükle
+            self.kalem_table_widget.setRowCount(0)
+            if self.initial_fatura_kalemleri_data:
+                for kalem in self.initial_fatura_kalemleri_data:
+                    self._kalem_ekle_tabloya(kalem)
+            self._toplam_tutarlari_hesapla()
+            self.fatura_kaydedildi.emit() # Fatura yüklendiğinde sinyal yay
 
     def _load_data_from_initial_data(self):
         """
@@ -1878,7 +1757,7 @@ class FaturaPenceresi(QDialog):
         self.iskonto_yuzde_2_e.setText("0,00")
 
         # Buradaki metot adını düzeltiyoruz
-        QTimer.singleShot(0, self._urunleri_yukle_ve_cachele) # <<<<<< BU SATIR GÜNCELLENDİ <<<<<<
+        QTimer.singleShot(0, self._urunleri_yukle_ve_cachele_ve_goster)
         self.f_no_e.setFocus()
 
     def _temizle_cari_secimi(self):
@@ -2076,47 +1955,27 @@ class FaturaPenceresi(QDialog):
 
         self._odeme_turu_degisince_event_handler()
 
-    def _urunleri_yukle_ve_cachele(self):
-        """
-        API'den ürün listesini çeker, cache'ler ve fiyatları fatura tipine göre ayarlar.
-        """
-        self.tum_urunler_cache = []
-        
+    def _urunleri_yukle_ve_cachele_ve_goster(self):
         try:
-            # API'den tüm stokları çek
-            response = requests.get(f"{API_BASE_URL}/stoklar/?limit=10000") # Çok sayıda ürün olabilir, limit yükseltildi
-            response.raise_for_status()
-            urunler_api = response.json()
+            filters = {"limit": 10000, "aktif_durum": True}
+            stok_listeleme_sonucu = self.db.stok_listesi_al(**filters) # **filters ile sözlüğü argüman olarak gönderiyoruz
+            
+            urunler = stok_listeleme_sonucu["items"]
+            self.urun_cache = {urun["id"]: urun for urun in urunler}
+            
+            self.urun_arama_list_widget.clear()
+            for urun in urunler:
+                item_text = f"{urun.get('kod', '')} - {urun.get('ad', '')} ({urun.get('miktar', 0):.2f} {urun.get('birim', {}).get('ad', '')})"
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.UserRole, urun["id"]) # ID'yi item'a sakla
+                self.urun_arama_list_widget.addItem(item)
+            
+            # Ürün arama listesini başlangıçta gizli tut
+            self.urun_arama_list_widget.hide()
 
-            for urun_item in urunler_api:
-                # API'den gelen ürüne fatura tipine göre doğru fiyatı ekle
-                fiyat_gosterim = 0.0
-                if self.islem_tipi == self.db.FATURA_TIP_SATIS:
-                    fiyat_gosterim = urun_item.get('satis_fiyati_kdv_dahil', 0.0)
-                elif self.islem_tipi == self.db.FATURA_TIP_ALIS:
-                    fiyat_gosterim = urun_item.get('alis_fiyati_kdv_dahil', 0.0)
-                elif self.islem_tipi == self.db.FATURA_TIP_SATIS_IADE:
-                    # Satış iadesinde alış fiyatı kullanılır
-                    fiyat_gosterim = urun_item.get('alis_fiyati_kdv_dahil', 0.0)
-                elif self.islem_tipi == self.db.FATURA_TIP_ALIS_IADE:
-                    # Alış iadesinde satış fiyatı kullanılır
-                    fiyat_gosterim = urun_item.get('satis_fiyati_kdv_dahil', 0.0)
-                elif self.islem_tipi == self.db.FATURA_TIP_DEVIR_GIRIS:
-                    fiyat_gosterim = urun_item.get('alis_fiyati_kdv_dahil', 0.0)
-                
-                urun_item['fiyat'] = fiyat_gosterim # Dictionary'ye 'fiyat' anahtarını ekle
-
-                self.tum_urunler_cache.append(urun_item)
-
-            self._urun_listesini_filtrele_anlik() # Filtrele ve UI'da göster
-            self.app.set_status_message(f"{len(self.tum_urunler_cache)} ürün API'den önbelleğe alındı.")
-
-        except requests.exceptions.RequestException as e:
-            QMessageBox.critical(self.app, "API Hatası", f"Ürün listesi çekilirken hata: {e}")
-            logging.error(f"FaturaPenceresi ürün listesi yükleme hatası: {e}", exc_info=True)
         except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Ürün listesi yüklenirken beklenmeyen bir hata oluştu: {e}")
-            logging.error(f"FaturaPenceresi ürün listesi yükleme beklenmeyen hata: {e}", exc_info=True)
+            logger.error(f"Ürün listesi yüklenirken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Ürünler yüklenemedi. {e}", "red")
 
     def _delayed_stok_yenile(self):
         if hasattr(self, '_delayed_timer') and self._delayed_timer.isActive():
@@ -5176,24 +5035,24 @@ class YeniKasaBankaEklePenceresi(QDialog):
 
         try:
             if self.hesap_duzenle_id:
-                api_url = f"{API_BASE_URL}/kasalar_bankalar/{self.hesap_duzenle_id}"
-                response = requests.put(api_url, json=data)
+                # GÜNCELLEME (PUT isteği)
+                success = self.db.kasa_banka_guncelle(self.hesap_duzenle_id, data)
             else:
-                api_url = f"{API_BASE_URL}/kasalar_bankalar/"
-                response = requests.post(api_url, json=data)
+                # YENİ KAYIT (POST isteği)
+                success = self.db.kasa_banka_ekle(data)
 
-            response.raise_for_status()
-            QMessageBox.information(self, "Başarılı", "Kasa/Banka hesabı başarıyla kaydedildi.")
-            if self.yenile_callback:
-                self.yenile_callback()
-            self.accept()
+            if success:
+                QMessageBox.information(self, "Başarılı", "Kasa/Banka hesabı başarıyla kaydedildi.")
+                if self.yenile_callback:
+                    self.yenile_callback()
+                self.accept()
+            else:
+                QMessageBox.critical(self, "Hata", "Kasa/Banka hesabı kaydedilirken bir hata oluştu.")
 
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             error_detail = str(e)
-            if e.response is not None:
-                try: error_detail = e.response.json().get('detail', str(e.response.content))
-                except ValueError: pass
-            QMessageBox.critical(self, "API Hatası", f"Hesap kaydedilirken bir hata oluştu:\n{error_detail}")
+            QMessageBox.critical(self, "Hata", f"Hesap kaydedilirken bir hata oluştu:\n{error_detail}")
+            logging.error(f"Kasa/Banka kaydetme hatası: {error_detail}", exc_info=True)
 
 class YeniTedarikciEklePenceresi(QDialog):
     def __init__(self, parent, db_manager, yenile_callback, tedarikci_duzenle=None, app_ref=None):
@@ -5278,24 +5137,24 @@ class YeniTedarikciEklePenceresi(QDialog):
 
         try:
             if self.tedarikci_duzenle_id:
-                api_url = f"{API_BASE_URL}/tedarikciler/{self.tedarikci_duzenle_id}"
-                response = requests.put(api_url, json=data)
+                # GÜNCELLEME (PUT isteği)
+                success = self.db.tedarikci_guncelle(self.tedarikci_duzenle_id, data)
             else:
-                api_url = f"{API_BASE_URL}/tedarikciler/"
-                response = requests.post(api_url, json=data)
+                # YENİ KAYIT (POST isteği)
+                success = self.db.tedarikci_ekle(data)
 
-            response.raise_for_status()
-            QMessageBox.information(self, "Başarılı", "Tedarikçi bilgileri başarıyla kaydedildi.")
-            if self.yenile_callback:
-                self.yenile_callback()
-            self.accept()
+            if success:
+                QMessageBox.information(self, "Başarılı", "Tedarikçi bilgileri başarıyla kaydedildi.")
+                if self.yenile_callback:
+                    self.yenile_callback()
+                self.accept()
+            else:
+                QMessageBox.critical(self, "Hata", "Tedarikçi kaydedilirken bir hata oluştu.")
 
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             error_detail = str(e)
-            if e.response is not None:
-                try: error_detail = e.response.json().get('detail', str(e.response.content))
-                except ValueError: pass
-            QMessageBox.critical(self, "API Hatası", f"Tedarikçi kaydedilirken bir hata oluştu:\n{error_detail}")
+            QMessageBox.critical(self, "Hata", f"Tedarikçi kaydedilirken bir hata oluştu:\n{error_detail}")
+            logging.error(f"Tedarikçi kaydetme hatası: {error_detail}", exc_info=True)
 
 class YeniMusteriEklePenceresi(QDialog):
     def __init__(self, parent, db_manager, yenile_callback, musteri_duzenle=None, app_ref=None):
@@ -5398,30 +5257,28 @@ class YeniMusteriEklePenceresi(QDialog):
         try:
             if self.musteri_duzenle_id:
                 # GÜNCELLEME (PUT isteği)
-                api_url = f"{API_BASE_URL}/musteriler/{self.musteri_duzenle_id}"
-                response = requests.put(api_url, json=data)
+                success = self.db.musteri_guncelle(self.musteri_duzenle_id, data)
             else:
                 # YENİ KAYIT (POST isteği)
-                api_url = f"{API_BASE_URL}/musteriler/"
-                response = requests.post(api_url, json=data)
+                success = self.db.musteri_ekle(data)
 
-            response.raise_for_status()
+            if success:
+                QMessageBox.information(self, "Başarılı", "Müşteri bilgileri başarıyla kaydedildi.")
+                
+                if self.yenile_callback:
+                    self.yenile_callback()
+                
+                self.accept()
+            else:
+                QMessageBox.critical(self, "Hata", "Müşteri kaydedilirken bir hata oluştu.")
 
-            QMessageBox.information(self, "Başarılı", "Müşteri bilgileri başarıyla kaydedildi.")
-            
-            if self.yenile_callback:
-                self.yenile_callback()
-            
-            self.accept()
-
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             error_detail = str(e)
-            if e.response is not None:
-                try:
-                    error_detail = e.response.json().get('detail', str(e.response.content))
-                except ValueError:
-                    pass
-            QMessageBox.critical(self, "API Hatası", f"Müşteri kaydedilirken bir hata oluştu:\n{error_detail}")
+            # Eğer hata nesnesinde response varsa, API'den dönen detayı almaya çalış.
+            # self.db metotları zaten HTTPException'ı yakalayıp mesaj döndürüyor olmalı.
+            # Eğer Exception fırlatıyorsa, bu beklenmedik bir durumdur.
+            QMessageBox.critical(self, "Hata", f"Müşteri kaydedilirken bir hata oluştu:\n{error_detail}")
+            logging.error(f"Müşteri kaydetme hatası: {error_detail}", exc_info=True)
             
 class KalemDuzenlePenceresi(QDialog):
     def __init__(self, parent_page, db_manager, kalem_index, kalem_verisi, islem_tipi, fatura_id_duzenle=None):
@@ -6196,7 +6053,6 @@ class YeniGelirGiderEklePenceresi(QDialog):
             self.kasa_banka_combobox.addItem("Hesap Yok", None)
             self.kasa_banka_combobox.setEnabled(False)
 
-
     def _kaydet(self):
         tarih_str = self.tarih_entry.text().strip()
         tip_str = self.tip_combo.currentText()
@@ -6243,7 +6099,7 @@ class YeniGelirGiderEklePenceresi(QDialog):
             return
 
         try:
-            # API çağrısı
+            # self.db.gelir_gider_ekle metodunu çağırıyoruz
             data = {
                 "tarih": tarih_str,
                 "tip": tip_str,
@@ -6253,26 +6109,20 @@ class YeniGelirGiderEklePenceresi(QDialog):
                 "gelir_siniflandirma_id": gelir_siniflandirma_id_val,
                 "gider_siniflandirma_id": gider_siniflandirma_id_val
             }
-            response = requests.post(f"{API_BASE_URL}/gelir_gider/", json=data)
-            response.raise_for_status() # HTTP 4xx/5xx hataları için exception fırlatır
+            success = self.db.gelir_gider_ekle(data)
 
-            QMessageBox.information(self, "Başarılı", "Gelir/Gider kaydı başarıyla eklendi.")
-            if self.yenile_callback:
-                self.yenile_callback()
-            self.accept() # QDialog'u kapat
+            if success:
+                QMessageBox.information(self, "Başarılı", "Gelir/Gider kaydı başarıyla eklendi.")
+                if self.yenile_callback:
+                    self.yenile_callback()
+                self.accept() # QDialog'u kapat
+            else:
+                QMessageBox.critical(self, "Hata", "Gelir/Gider kaydı eklenirken bir hata oluştu.")
 
-        except requests.exceptions.RequestException as e:
-            error_detail = str(e)
-            if e.response is not None:
-                try:
-                    error_detail = e.response.json().get('detail', str(e.response.content))
-                except ValueError:
-                    pass
-            QMessageBox.critical(self, "API Hatası", f"Kaydedilirken hata: {error_detail}")
-            logging.error(f"Gelir/Gider kaydetme hatası: {error_detail}", exc_info=True)
         except Exception as e:
-            QMessageBox.critical(self, "Beklenmeyen Hata", f"Kaydedilirken beklenmeyen bir hata oluştu: {e}")
-            logging.error(f"Gelir/Gider kaydetme beklenmeyen hata: {e}", exc_info=True)
+            error_detail = str(e)
+            QMessageBox.critical(self, "Hata", f"Kaydedilirken bir hata oluştu:\n{error_detail}")
+            logging.error(f"Gelir/Gider kaydetme hatası: {error_detail}", exc_info=True)
             
 class TarihAraligiDialog(QDialog): # simpledialog.Dialog yerine QDialog kullanıldı
     def __init__(self, parent_app, title=None, baslangic_gun_sayisi=30):

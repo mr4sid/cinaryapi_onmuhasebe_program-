@@ -1,192 +1,135 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case
-from typing import List, Optional
-from .. import semalar, modeller
+from sqlalchemy import func, and_
+from .. import modeller, semalar
 from ..veritabani import get_db
-from datetime import date
 
-router = APIRouter(
-    prefix="/siparisler",
-    tags=["Siparişler"]
-)
+router = APIRouter(prefix="/siparisler", tags=["Siparişler"])
 
-@router.get("/", response_model=List[modeller.SiparisBase])
-def read_siparisler(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """
-    Tüm siparişleri, ilişkili cari adlarıyla birlikte tek bir veritabanı sorgusuyla verimli bir şekilde listeler.
-    """
-    # Fatura rotasındaki gibi, JOIN ile tek sorguda cari adını alıyoruz.
-    cari_adi_case = case(
-        (semalar.Siparis.cari_tip == "MUSTERI", semalar.Musteri.ad),
-        (semalar.Siparis.cari_tip == "TEDARIKCI", semalar.Tedarikci.ad),
-        else_="Bilinmeyen Cari"
-    ).label("cari_adi")
-
-    siparis_results = db.query(semalar.Siparis, cari_adi_case)\
-        .outerjoin(semalar.Musteri, semalar.Musteri.id == semalar.Siparis.cari_id)\
-        .outerjoin(semalar.Tedarikci, semalar.Tedarikci.id == semalar.Siparis.cari_id)\
-        .order_by(semalar.Siparis.tarih.desc())\
-        .offset(skip)\
-        .limit(limit)\
-        .all()
-
-    results = []
-    for siparis, cari_adi in siparis_results:
-        siparis_model = modeller.SiparisBase.from_orm(siparis)
-        siparis_model.cari_adi = cari_adi
-        siparis_model.siparis_tipi = "Satış Siparişi" if siparis.cari_tip == "MUSTERI" else "Alış Siparişi"
-        results.append(siparis_model)
-        
-    return results
-
-@router.get("/{siparis_id}", response_model=modeller.SiparisBase)
-def read_siparis(siparis_id: int, db: Session = Depends(get_db)):
-    """
-    Belirli bir ID'ye sahip tek bir siparişi, ilişkili cari adıyla birlikte döndürür.
-    """
-    cari_adi_case = case(
-        (semalar.Siparis.cari_tip == "MUSTERI", semalar.Musteri.ad),
-        (semalar.Siparis.cari_tip == "TEDARIKCI", semalar.Tedarikci.ad),
-        else_="Bilinmeyen Cari"
-    ).label("cari_adi")
-
-    result = db.query(semalar.Siparis, cari_adi_case)\
-        .outerjoin(semalar.Musteri, semalar.Musteri.id == semalar.Siparis.cari_id)\
-        .outerjoin(semalar.Tedarikci, semalar.Tedarikci.id == semalar.Siparis.cari_id)\
-        .filter(semalar.Siparis.id == siparis_id)\
-        .first()
-
-    if not result:
-        raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
-
-    siparis, cari_adi = result
-    siparis_model = modeller.SiparisBase.from_orm(siparis)
-    siparis_model.cari_adi = cari_adi
-    siparis_model.siparis_tipi = "Satış Siparişi" if siparis.cari_tip == "MUSTERI" else "Alış Siparişi"
-    
-    return siparis_model
-
-@router.post("/", response_model=modeller.SiparisBase)
+@router.post("/", response_model=modeller.SiparisRead)
 def create_siparis(siparis: modeller.SiparisCreate, db: Session = Depends(get_db)):
-    """
-    Yeni bir sipariş ve kalemlerini oluşturur. Tüm mantık API katmanındadır.
-    """
-    db.begin_nested()
+    db_siparis = semalar.Siparis(**siparis.model_dump(exclude={"kalemler"}))
+    db.add(db_siparis)
+    db.flush() # Sipariş ID'sini almak için
+
     try:
-        existing_siparis = db.query(semalar.Siparis).filter(semalar.Siparis.siparis_no == siparis.siparis_no).first()
-        if existing_siparis:
-            raise HTTPException(status_code=400, detail=f"Sipariş numarası '{siparis.siparis_no}' zaten mevcut.")
+        # Sipariş Kalemlerini Ekle
+        for kalem_data in siparis.kalemler:
+            db_kalem = semalar.SiparisKalemi(siparis_id=db_siparis.id, **kalem_data.model_dump())
+            db.add(db_kalem)
+            # Sipariş oluştuğunda stoktan düşme veya arttırma yapılmaz. Bu Fatura'ya dönüşünce olur.
+            # Stok Hareketi Ekle (Sipariş için stok hareketleri genellikle yapılmaz veya pasif olur)
+            # İstenirse buraya 'AYIRMA' veya 'REZERV' gibi stok hareketleri eklenebilir.
 
-        toplam_tutar = 0.0
-        db_kalemler = []
+        # Cari Hareket Ekle (Sipariş için cari hareket genellikle yapılmaz veya pasif olur)
+        # Sadece fatura kesildiğinde cari hareket oluşur.
 
-        for kalem in siparis.kalemler:
-            iskontolu_bf_haric = kalem.birim_fiyat * (1 - kalem.iskonto_yuzde_1 / 100) * (1 - kalem.iskonto_yuzde_2 / 100)
-            kalem_toplam_dahil = (kalem.miktar * iskontolu_bf_haric) * (1 + kalem.kdv_orani / 100)
-            toplam_tutar += kalem_toplam_dahil
-            
-            db_kalemler.append(semalar.SiparisKalemleri(
-                urun_id=kalem.urun_id, miktar=kalem.miktar, birim_fiyat=kalem.birim_fiyat,
-                kdv_orani=kalem.kdv_orani, alis_fiyati_siparis_aninda=kalem.alis_fiyati_siparis_aninda,
-                satis_fiyati_siparis_aninda=kalem.satis_fiyati_siparis_aninda,
-                iskonto_yuzde_1=kalem.iskonto_yuzde_1, iskonto_yuzde_2=kalem.iskonto_yuzde_2
-            ))
-        
-        # Genel iskonto henüz siparişte toplam tutarı etkilemiyor, faturada etkiliyor. İstenirse eklenebilir.
-        
-        db_siparis = semalar.Siparis(
-            siparis_no=siparis.siparis_no,
-            tarih=date.today(),
-            cari_tip='MUSTERI' if siparis.siparis_tipi == 'SATIŞ_SIPARIS' else 'TEDARIKCI',
-            cari_id=siparis.cari_id,
-            toplam_tutar=toplam_tutar,
-            durum=siparis.durum,
-            siparis_notlari=siparis.siparis_notlari,
-            teslimat_tarihi=siparis.teslimat_tarihi,
-            genel_iskonto_tipi=siparis.genel_iskonto_tipi,
-            genel_iskonto_degeri=siparis.genel_iskonto_degeri,
-            olusturan_kullanici_id=1 # Varsayılan kullanıcı
-        )
-        db_siparis.kalemler.extend(db_kalemler)
-        
-        db.add(db_siparis)
         db.commit()
         db.refresh(db_siparis)
         return db_siparis
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Sipariş oluşturulurken hata: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Sipariş oluşturulurken bir hata oluştu: {e}")
 
-@router.put("/{siparis_id}", response_model=modeller.SiparisBase)
-def update_siparis(siparis_id: int, siparis: modeller.SiparisUpdate, db: Session = Depends(get_db)):
-    """
-    Mevcut bir siparişi günceller.
-    """
-    db_siparis = db.query(semalar.Siparis).filter(semalar.Siparis.id == siparis_id).first()
-    if not db_siparis:
-        raise HTTPException(status_code=404, detail="Güncellenecek sipariş bulunamadı.")
+@router.get("/", response_model=modeller.SiparisListResponse)
+def read_siparisler(
+    skip: int = 0,
+    limit: int = 100,
+    arama: str = Query(None, min_length=1, max_length=50),
+    siparis_turu: str = Query(None),
+    durum: str = Query(None),
+    baslangic_tarihi: str = Query(None),
+    bitis_tarihi: str = Query(None),
+    cari_id: int = Query(None),
+    db: Session = Depends(get_db)
+):
+    query = db.query(semalar.Siparis).join(semalar.Musteri, semalar.Siparis.cari_id == semalar.Musteri.id, isouter=True) \
+                                    .join(semalar.Tedarikci, semalar.Siparis.cari_id == semalar.Tedarikci.id, isouter=True)
+
+    if arama:
+        query = query.filter(semalar.Siparis.siparis_no.ilike(f"%{arama}%"))
     
-    if db_siparis.fatura_id:
-        raise HTTPException(status_code=400, detail="Faturaya dönüştürülmüş bir sipariş güncellenemez.")
+    if siparis_turu:
+        query = query.filter(semalar.Siparis.siparis_turu == siparis_turu.upper())
+    
+    if durum:
+        query = query.filter(semalar.Siparis.durum == durum.upper())
 
-    db.begin_nested()
-    try:
-        # Eski kalemleri sil
-        db.query(semalar.SiparisKalemleri).filter(semalar.SiparisKalemleri.siparis_id == siparis_id).delete(synchronize_session=False)
-        db.flush()
+    if baslangic_tarihi:
+        query = query.filter(semalar.Siparis.tarih >= baslangic_tarihi)
+    
+    if bitis_tarihi:
+        query = query.filter(semalar.Siparis.tarih <= bitis_tarihi)
+    
+    if cari_id:
+        query = query.filter(semalar.Siparis.cari_id == cari_id)
 
-        # Yeni kalemleri ve toplamları hesapla
-        toplam_tutar = 0.0
-        db_kalemler = []
-        for kalem in siparis.kalemler:
-            iskontolu_bf_haric = kalem.birim_fiyat * (1 - kalem.iskonto_yuzde_1 / 100) * (1 - kalem.iskonto_yuzde_2 / 100)
-            kalem_toplam_dahil = (kalem.miktar * iskontolu_bf_haric) * (1 + kalem.kdv_orani / 100)
-            toplam_tutar += kalem_toplam_dahil
-            
-            db_kalemler.append(semalar.SiparisKalemleri(
-                siparis_id=siparis_id, urun_id=kalem.urun_id, miktar=kalem.miktar, birim_fiyat=kalem.birim_fiyat,
-                kdv_orani=kalem.kdv_orani, alis_fiyati_siparis_aninda=kalem.alis_fiyati_siparis_aninda,
-                satis_fiyati_siparis_aninda=kalem.satis_fiyati_siparis_aninda,
-                iskonto_yuzde_1=kalem.iskonto_yuzde_1, iskonto_yuzde_2=kalem.iskonto_yuzde_2
-            ))
-        db.add_all(db_kalemler)
-        
-        # Ana sipariş tablosunu güncelle
-        db_siparis.siparis_no = siparis.siparis_no
-        db_siparis.cari_id = siparis.cari_id
-        db_siparis.durum = siparis.durum
-        db_siparis.siparis_notlari = siparis.siparis_notlari
-        db_siparis.teslimat_tarihi = siparis.teslimat_tarihi
-        db_siparis.toplam_tutar = toplam_tutar
-        db_siparis.son_guncelleyen_kullanici_id = 1 # Varsayılan kullanıcı
-        
-        db.commit()
-        db.refresh(db_siparis)
-        return db_siparis
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Sipariş güncellenirken hata: {str(e)}")
+    total_count = query.count()
+    siparisler = query.order_by(semalar.Siparis.tarih.desc()).offset(skip).limit(limit).all()
 
-@router.delete("/{siparis_id}", status_code=204)
-def delete_siparis(siparis_id: int, db: Session = Depends(get_db)):
-    """
-    Bir siparişi ve kalemlerini siler. Faturaya dönüştürülmüşse silinemez.
-    """
+    return {"items": [
+        modeller.SiparisRead.model_validate(siparis, from_attributes=True)
+        for siparis in siparisler
+    ], "total": total_count}
+
+@router.get("/{siparis_id}", response_model=modeller.SiparisRead)
+def read_siparis(siparis_id: int, db: Session = Depends(get_db)):
+    siparis = db.query(semalar.Siparis).filter(semalar.Siparis.id == siparis_id).first()
+    if not siparis:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sipariş bulunamadı")
+    return modeller.SiparisRead.model_validate(siparis, from_attributes=True)
+
+@router.put("/{siparis_id}", response_model=modeller.SiparisRead)
+def update_siparis(siparis_id: int, siparis: modeller.SiparisUpdate, db: Session = Depends(get_db)):
     db_siparis = db.query(semalar.Siparis).filter(semalar.Siparis.id == siparis_id).first()
     if not db_siparis:
-        raise HTTPException(status_code=404, detail="Silinecek sipariş bulunamadı.")
-        
-    if db_siparis.fatura_id:
-        raise HTTPException(status_code=400, detail="Faturaya dönüştürülmüş bir sipariş silinemez. Önce ilişkili faturayı silin.")
-        
-    db.begin_nested()
-    try:
-        db.query(semalar.SiparisKalemleri).filter(semalar.SiparisKalemleri.siparis_id == siparis_id).delete(synchronize_session=False)
-        db.delete(db_siparis)
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Sipariş silinirken hata: {str(e)}")
-        
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sipariş bulunamadı")
+    
+    for key, value in siparis.model_dump(exclude_unset=True, exclude={"kalemler"}).items():
+        setattr(db_siparis, key, value)
+    
+    # Kalemleri güncelleme veya silme/yeniden oluşturma mantığı buraya eklenecek
+    # Şimdilik kalemleri ayrı endpoint üzerinden veya doğrudan burada silip yeniden oluşturma.
+
+    db.commit()
+    db.refresh(db_siparis)
+    return db_siparis
+
+@router.delete("/{siparis_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_siparis(siparis_id: int, db: Session = Depends(get_db)):
+    db_siparis = db.query(semalar.Siparis).filter(semalar.Siparis.id == siparis_id).first()
+    if not db_siparis:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sipariş bulunamadı")
+    
+    # Sipariş kalemlerini sil
+    db.query(semalar.SiparisKalemi).filter(semalar.SiparisKalemi.siparis_id == siparis_id).delete(synchronize_session=False)
+
+    db.delete(db_siparis)
+    db.commit()
     return
+
+@router.get("/next_siparis_no", response_model=modeller.NextSiparisNoResponse)
+def get_next_siparis_no_endpoint(prefix: str = Query("MS", max_length=2), db: Session = Depends(get_db)):
+    # Belirtilen prefix'e göre en yüksek sipariş numarasını bul
+    last_siparis = db.query(semalar.Siparis).filter(semalar.Siparis.siparis_no.ilike(f"{prefix}%")) \
+                                           .order_by(semalar.Siparis.siparis_no.desc()).first()
+    
+    next_sequence = 1
+    if last_siparis and last_siparis.siparis_no.startswith(prefix):
+        try:
+            current_sequence_str = last_siparis.siparis_no[len(prefix):]
+            current_sequence = int(current_sequence_str)
+            next_sequence = current_sequence + 1
+        except ValueError:
+            # Eğer numara formatı bozuksa, baştan başla
+            pass
+    
+    next_siparis_no = f"{prefix}{next_sequence:09d}" # MS000000001 formatı
+    return {"siparis_no": next_siparis_no}
+
+@router.get("/{siparis_id}/kalemler", response_model=list[modeller.SiparisKalemiRead])
+def get_siparis_kalemleri_endpoint(siparis_id: int, db: Session = Depends(get_db)):
+    kalemler = db.query(semalar.SiparisKalemi).filter(semalar.SiparisKalemi.siparis_id == siparis_id).all()
+    if not kalemler:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sipariş kalemleri bulunamadı")
+    return [modeller.SiparisKalemiRead.model_validate(kalem, from_attributes=True) for kalem in kalemler]

@@ -401,9 +401,33 @@ class App(QMainWindow):
         self.siparis_karti_penceresi = SiparisPenceresi(self, self.db_manager, app_ref=self, siparis_tipi="SATIŞ_SIPARIS", yenile_callback=self._initial_load_data)
         self.siparis_karti_penceresi.show()
 
+    def _on_cari_secim_yapildi(self, cari_id, cari_turu_str):
+        # Cari Seçim Penceresi'nden dönen veriyi işleyen callback
+        if cari_id is not None and cari_turu_str is not None:
+            # CariHesapEkstresiPenceresi'ni aç
+            from pencereler import CariHesapEkstresiPenceresi
+            
+            # `cari_turu_str` değeri `Müşteri` veya `Tedarikçi` gelecektir,
+            # bunu `CariHesapEkstresiPenceresi`'nin beklediği `MUSTERI` veya `TEDARIKCI` formatına dönüştürelim.
+            cari_tip_enum = "MUSTERI" if cari_turu_str == "Müşteri" else "TEDARIKCI"
+
+            dialog = CariHesapEkstresiPenceresi(
+                self, # parent_app olarak kendini (App objesi) gönder
+                self.db, # db_manager'ı gönder
+                cari_id, 
+                cari_tip_enum, 
+                cari_turu_str # Pencere başlığı için kullanılan "Müşteri" veya "Tedarikçi"
+            )
+            dialog.exec() # Modalı olarak göster
+            self.set_status_message(f"Cari '{cari_turu_str}' ID: {cari_id} için ekstre açıldı.")
+        else:
+            self.set_status_message("Cari seçimi iptal edildi veya başarısız oldu.", "orange")
+
     def _cari_hareketler_penceresi_ac(self):
-        from pencereler import CariHesapEkstresiPenceresi # CariHesapEkstresiPenceresi
-        QMessageBox.information(self, "Bilgi", "Cari Hareketler penceresi doğrudan açılamıyor. Lütfen önce bir cari seçimi yapın veya ilgili cari ekstresi üzerinden erişin.")
+        # Cari Seçim Penceresini aç
+        from pencereler import CariSecimPenceresi
+        dialog = CariSecimPenceresi(self, self.db, "GENEL", self._on_cari_secim_yapildi) # "GENEL" tipi ile tüm carileri göstermek için
+        dialog.exec()
 
     def _nitelik_yonetimi_penceresi_ac(self):
         from pencereler import UrunNitelikYonetimiPenceresi # Doğru sınıf adını kullanalım

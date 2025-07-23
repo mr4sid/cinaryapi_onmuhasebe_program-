@@ -1,119 +1,116 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import Optional, Dict, Any
+from .. import modeller, semalar
+from ..veritabani import get_db
 
-# Kendi modüllerimiz
-from .. import semalar # semalar.py'den modelleri içe aktarıyoruz
-from .. import modeller # Pydantic modellerini içe aktarıyoruz
-from ..veritabani import get_db # veritabani.py'den get_db bağımlılığını içe aktarıyoruz
+router = APIRouter(prefix="/sistem", tags=["Sistem"])
 
-# -- Varsayılan Değerler --
-def get_perakende_musteri_id_from_db(db: Session):
-    # Gerçek uygulamada, veritabanından ID'si veya kodu 'PERAKENDE' olan müşteriyi bulmalısınız.
-    # Örneğin: musteri = db.query(semalar.Musteri).filter(semalar.Musteri.kod == "PERAKENDE").first()
-    # Şu an için basitçe ID'si 1 olan müşteriyi varsayıyoruz.
-    musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == 1).first() 
-    if musteri:
-        return {"id": musteri.id}
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Perakende musteri bulunamadi.")
+@router.get("/varsayilan_cariler/perakende_musteri_id", response_model=modeller.DefaultIdResponse)
+def get_perakende_musteri_id_endpoint(db: Session = Depends(get_db)):
+    # ID'si 'PERAKENDE_MUSTERI' olan kodu ara, bulunamazsa ID'si 1 olanı ara.
+    musteri = db.query(semalar.Musteri).filter(semalar.Musteri.kod == "PERAKENDE_MUSTERI").first()
+    if not musteri:
+        musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == 1).first()
 
-def get_genel_tedarikci_id_from_db(db: Session):
-    # Gerçek uygulamada, veritabanından ID'si veya kodu 'GENEL' olan tedarikçiyi bulmalısınız.
-    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == 1).first() 
-    if tedarikci:
-        return {"id": tedarikci.id}
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Genel tedarikci bulunamadi.")
-
-def get_varsayilan_kasa_banka_from_db(db: Session, odeme_turu: str):
-    # Ödeme türüne göre varsayılan kasa/banka hesabını veritabanından çek.
-    # Örneğin, NAKIT için 'KASA' tipi bir hesap
-    # KART için 'BANKA' tipi bir POS hesabı vb.
-    # Şu an için basit bir eşleşme yapalım
-    hesap = None
-    if odeme_turu == "NAKİT":
-        hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.tip == "KASA").first()
-    elif odeme_turu == "KART":
-        hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.tip == "BANKA", semalar.KasaBanka.hesap_adi.like("%POS%")).first()
-    else: # Diğer ödeme türleri için herhangi bir ilk hesabı döndürebiliriz
-        hesap = db.query(semalar.KasaBanka).first()
-
-    if hesap:
-        return {"id": hesap.id, "hesap_adi": hesap.hesap_adi, "tip": hesap.tip}
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Varsayılan kasa/banka hesabı bulunamadı: {odeme_turu}")
-
-# -- Şirket Bilgileri --
-def get_sirket_bilgileri_from_db(db: Session):
-    # Gerçek uygulamada, veritabanından şirket bilgilerini çekeceksiniz.
-    # Varsayılan olarak sadece bir şirket kaydı olduğu varsayılabilir.
-    sirket = db.query(semalar.Sirket).first() # semalar.py'de Sirket modeli olmalı
-    if sirket:
-        return modeller.SirketBilgileri.model_validate(sirket) # Pydantic modeline dönüştür
-    # Eğer Sirket tablosu yoksa veya boşsa, varsayılan bir değer döndürebiliriz.
-    return modeller.SirketBilgileri(sirket_adi="Varsayılan Şirket Adı", adres="", telefon="", email="")
-
-def update_sirket_bilgileri_in_db(db: Session, bilgiler: modeller.SirketBilgileriUpdate):
-    # Gerçek uygulamada, şirket bilgilerini güncelleyeceksiniz.
-    sirket = db.query(semalar.Sirket).first()
-    if not sirket:
-        # Sirket bilgisi yoksa, yeni bir tane oluştur
-        sirket = semalar.Sirket(**bilgiler.model_dump())
-        db.add(sirket)
-        db.commit()
-        db.refresh(sirket)
-        return True, "Şirket bilgileri oluşturuldu."
-
-    # Bilgileri güncelle
-    for key, value in bilgiler.model_dump(exclude_unset=True).items():
-        setattr(sirket, key, value)
-    db.commit()
-    db.refresh(sirket)
-    return True, "Şirket bilgileri başarıyla güncellendi."
-
-# -- Kullanıcı Doğrulama --
-def authenticate_user_from_db(db: Session, user: modeller.KullaniciLogin):
-    # Gerçek uygulamada, kullanıcı adı ve şifreyi doğrulamalısınız.
-    # Şifre hash'leme ve saltlama kullanılmalıdır!
-    # Örneğin: user_db = db.query(semalar.Kullanici).filter(semalar.Kullanici.kullanici_adi == user.username).first()
-    # if user_db and user_db.hashed_password == hash_password(user.password): return user_db
-    # Şu an için basit bir kontrol:
-    if user.username == "admin" and user.password == "admin":
-        # Semalar.Kullanici modeli API'de olması gereken
-        # Bu kısım API'deki User modeline göre ayarlanacak.
-        # Şimdilik sadece bir dict dönüyoruz.
-        return {"id": 1, "username": "admin", "rol": "ADMIN"}
-    return None
-
-
-# -- Router Tanımlamaları --
-router = APIRouter(
-    prefix="/sistem",
-    tags=["Sistem ve Varsayılanlar"]
-)
-
-@router.get("/varsayilan_kasa_banka/{odeme_turu}")
-def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, db: Session = Depends(get_db)):
-    return get_varsayilan_kasa_banka_from_db(db, odeme_turu)
-
-@router.get("/sirket/bilgiler", response_model=modeller.SirketBilgileri)
-def get_sirket_bilgileri_endpoint(db: Session = Depends(get_db)):
-    return get_sirket_bilgileri_from_db(db)
-
-@router.put("/sirket/bilgiler")
-def update_sirket_bilgileri_endpoint(bilgiler: modeller.SirketBilgileriUpdate, db: Session = Depends(get_db)):
-    success, message = update_sirket_bilgileri_in_db(db, bilgiler)
-    if not success:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
-    return {"message": message}
-
-@router.post("/auth/login")
-def login_for_access_token(user: modeller.KullaniciLogin, db: Session = Depends(get_db)):
-    authenticated_user = authenticate_user_from_db(db, user)
-    if not authenticated_user:
+    if not musteri:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Hatalı kullanıcı adı veya şifre",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Varsayılan perakende müşteri bulunamadı. Lütfen bir perakende müşteri tanımlayın."
         )
-    # Gerçek uygulamada burada JWT token oluşturulur ve döndürülür
-    return {"access_token": "fake-jwt-token", "token_type": "bearer", "user": authenticated_user}
+    return {"id": musteri.id}
 
+@router.get("/varsayilan_cariler/genel_tedarikci_id", response_model=modeller.DefaultIdResponse)
+def get_genel_tedarikci_id_endpoint(db: Session = Depends(get_db)):
+    # ID'si 'GENEL_TEDARIKCI' olan kodu ara, bulunamazsa ID'si 1 olanı ara.
+    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.kod == "GENEL_TEDARIKCI").first()
+    if not tedarikci:
+        tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == 1).first()
+
+    if not tedarikci:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Varsayılan genel tedarikçi bulunamadı. Lütfen bir genel tedarikçi tanımlayın."
+        )
+    return {"id": tedarikci.id}
+
+@router.get("/varsayilan_kasa_banka/{odeme_turu}", response_model=modeller.KasaBankaRead)
+def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, db: Session = Depends(get_db)):
+    # Raporunuzda bu endpoint için henüz bir implementasyon yoktu.
+    # Varsayılan olarak, "Nakit" için kodu "VARSAYILAN_NAKIT" olanı, "Banka" için "VARSAYILAN_BANKA" olanı ararız.
+    # Bulunamazsa ilgili türdeki ilk hesabı döneriz.
+
+    if odeme_turu.upper() == "NAKİT":
+        hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.kod == "VARSAYILAN_NAKİT").first()
+        if not hesap: # Koduyla bulunamazsa, türü 'Kasa' olan ilk hesabı ara
+            hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.hesap_turu == "Kasa").first()
+    elif odeme_turu.upper() == "BANKA":
+        hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.kod == "VARSAYILAN_BANKA").first()
+        if not hesap: # Koduyla bulunamazsa, türü 'Banka' olan ilk hesabı ara
+            hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.hesap_turu == "Banka").first()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Desteklenmeyen ödeme türü: {odeme_turu}. 'Nakit' veya 'Banka' olmalıdır."
+        )
+    
+    if not hesap:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Varsayılan {odeme_turu} hesabı bulunamadı. Lütfen bir {odeme_turu} hesabı tanımlayın."
+        )
+    return hesap
+
+@router.get("/bilgiler", response_model=modeller.SirketRead)
+def get_sirket_bilgileri_endpoint(db: Session = Depends(get_db)):
+    # Sirket bilgilerini çek
+    sirket_bilgisi = db.query(semalar.Sirket).first()
+    if not sirket_bilgisi:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Şirket bilgileri bulunamadı. Lütfen şirket bilgilerini kaydedin."
+        )
+    return sirket_bilgisi
+
+@router.put("/bilgiler", response_model=modeller.SirketRead)
+def update_sirket_bilgileri_endpoint(sirket_update: modeller.SirketCreate, db: Session = Depends(get_db)):
+    # Sirket bilgilerini güncelle veya oluştur
+    sirket_bilgisi = db.query(semalar.Sirket).first()
+    if not sirket_bilgisi:
+        # Şirket bilgisi yoksa, yeni oluştur
+        db_sirket = semalar.Sirket(**sirket_update.model_dump())
+        db.add(db_sirket)
+    else:
+        # Varsa güncelle
+        for key, value in sirket_update.model_dump(exclude_unset=True).items():
+            setattr(sirket_bilgisi, key, value)
+    
+    db.commit()
+    db.refresh(sirket_bilgisi)
+    return sirket_bilgisi
+
+@router.get("/next_fatura_number/{fatura_turu}", response_model=modeller.NextFaturaNoResponse)
+def get_next_fatura_number_endpoint(fatura_turu: str, db: Session = Depends(get_db)):
+    # Fatura türüne göre en yüksek fatura numarasını bul
+    last_fatura = db.query(semalar.Fatura).filter(semalar.Fatura.fatura_turu == fatura_turu.upper()) \
+                                       .order_by(semalar.Fatura.fatura_no.desc()).first()
+
+    prefix = ""
+    if fatura_turu.upper() == "SATIŞ":
+        prefix = "SF"
+    elif fatura_turu.upper() == "ALIŞ":
+        prefix = "AF"
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz fatura türü. 'SATIŞ' veya 'ALIŞ' olmalıdır.")
+
+    next_sequence = 1
+    if last_fatura and last_fatura.fatura_no.startswith(prefix):
+        try:
+            current_sequence_str = last_fatura.fatura_no[len(prefix):]
+            current_sequence = int(current_sequence_str)
+            next_sequence = current_sequence + 1
+        except ValueError:
+            # Eğer numara formatı bozuksa, baştan başla
+            pass
+
+    next_fatura_no = f"{prefix}{next_sequence:09d}" # SF000000001 formatı
+    return {"fatura_no": next_fatura_no}
