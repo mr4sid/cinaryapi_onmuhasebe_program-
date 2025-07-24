@@ -1,54 +1,59 @@
-# create_pg_tables.py dosyasının TAMAMI
-import psycopg2
-# api.veritabani'ndan Base ve engine'i import ediyoruz
-from api.veritabani import Base, engine 
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy_utils import database_exists, create_database
+import logging
 
-# Adım 1'de oluşturduğunuz PostgreSQL bağlantı bilgilerinizi girin
-# Bu bilgiler zaten api/veritabani.py içinde tanımlı, ancak PostgreSQL bağlantısı için tekrar tanımlanabilir
-DB_NAME = "on_muhasebe_prod"
-DB_USER = "muhasebe_user"
-DB_PASS = "755397.mAmi"  # <-- Şifre Satırı
-DB_HOST = "localhost"
-DB_PORT = "5432"
+# Loglama ayarları
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-def main():
-    conn = None
+# FastAPI modelleri yerine doğrudan SQLAlchemy modellerini içe aktarın.
+# Bu script, API'ye bağımlı olmadan tabloları oluşturmalıdır.
+# Sizin api/semalar.py dosyanızdaki Base objesini ve tanımlanmış modelleri kullanmalıyız.
+from api.semalar import Base, User, SirketBilgileri, Musteri, Tedarikci, Stok, KasaBanka, Fatura, FaturaKalemi, Siparis, SiparisKalemi, CariHareket, GelirGider, Nitelik
+
+# .env dosyasındaki ortam değişkenlerini yükle
+load_dotenv()
+
+# PostgreSQL bağlantı bilgileri ortam değişkenlerinden alınır
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_NAME = os.getenv("DB_NAME")
+
+# Veritabanı bağlantı bilgilerinin eksik olup olmadığını kontrol et
+if not all([DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME]):
+    logger.error("Veritabanı bağlantı bilgileri .env dosyasından eksik veya hatalı. Lütfen .env dosyasını kontrol edin.")
+    raise ValueError("Veritabanı bağlantı bilgileri eksik. Tablolar oluşturulamıyor.")
+
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+def create_tables():
+    """Veritabanı tablolarını oluşturan fonksiyon."""
     try:
-        # PostgreSQL'e bağlan
-        conn = psycopg2.connect(
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASS,
-            host=DB_HOST,
-            port=DB_PORT
-        )
-        cursor = conn.cursor()
-        print("PostgreSQL veritabanına başarıyla bağlanıldı.")
+        engine = create_engine(DATABASE_URL)
 
-        # TÜM TABLOLARI SİL (ÖNEMLİ: Mevcut tüm veriler silinecektir!)
-        Base.metadata.drop_all(bind=engine)
-        print("Mevcut tüm tablolar silindi.")
+        # Veritabanı yoksa oluştur
+        if not database_exists(engine.url):
+            create_database(engine.url)
+            logger.info(f"Veritabanı '{DB_NAME}' oluşturuldu.")
+        else:
+            logger.info(f"Veritabanı '{DB_NAME}' zaten mevcut.")
 
-        # TÜM TABLOLARI YENİDEN OLUŞTUR
+        # Tüm tabloları oluştur
+        # api/semalar.py'deki Base objesi kullanılmalı.
+        # Bu, tüm tanımlı SQLAlchemy modellerinin tablolarını veritabanında oluşturur.
         Base.metadata.create_all(bind=engine)
-        print("Tüm tablolar PostgreSQL veritabanında başarıyla oluşturuldu!")
+        logger.info("Tüm veritabanı tabloları başarıyla oluşturuldu/güncellendi.")
 
-        # Değişiklikleri kaydet (bu örnekte gerekmez ama alışkanlık olarak kalsın)
-        # conn.commit() 
-
-    except psycopg2.Error as e:
-        print(f"Veritabanı hatası: {e}")
-        if conn:
-            conn.rollback() # Hata durumunda işlemi geri al
     except Exception as e:
-        print(f"Genel hata: {e}")
-        if conn:
-            conn.rollback()
-    finally:
-        if conn:
-            cursor.close()
-            conn.close()
-            print("PostgreSQL bağlantısı kapatıldı.")
+        logger.error(f"Veritabanı tabloları oluşturulurken bir hata oluştu: {e}")
+        print(f"Hata: {e}")
 
 if __name__ == "__main__":
-    main()
+    logger.info("create_pg_tables.py çalıştırılıyor...")
+    create_tables()
+    logger.info("create_pg_tables.py tamamlandı.")

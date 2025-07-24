@@ -1,0 +1,5 @@
+DB_USER=muhasebe_user
+DB_PASSWORD=755397.mAmi
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=on_muhasebe_prod
