@@ -4,8 +4,7 @@ from sqlalchemy import (
     Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text, Enum,
     create_engine, and_ # 'and_' koşulları için eklendi
 )
-from sqlalchemy.orm import relationship, declarative_base, sessionmaker
-from sqlalchemy.sql.elements import foreign # 'foreign' doğru yerden import edildi
+from sqlalchemy.orm import relationship, declarative_base, sessionmaker, foreign # 'foreign' doğru yerden import edildi
 from datetime import datetime
 import enum
 
@@ -24,8 +23,8 @@ class OdemeTuruEnum(str, enum.Enum):
     EFT_HAVALE = "EFT/HAVALE"
     CEK = "ÇEK"
     SENET = "SENET"
-    ACIK_HESAP = "AÇIK HESAP"
-    ETKISIZ_FATURA = "ETKİSİZ FATURA"
+    ACIK_HESAP = "AÇIK_HESAP"
+    ETKISIZ_FATURA = "ETKİSİZ_FATURA"
 
 class CariTipiEnum(str, enum.Enum):
     MUSTERI = "MUSTERI"
@@ -94,6 +93,58 @@ class Kullanici(Base):
     olusturma_tarihi = Column(DateTime, default=datetime.now)
     son_giris_tarihi = Column(DateTime, nullable=True)
 
+# CariHareket sınıfı, Musteri ve Tedarikci'den önce tanımlanmalı
+class CariHareket(Base):
+    __tablename__ = 'cari_hareketler'
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    cari_id = Column(Integer, index=True)
+    cari_turu = Column(Enum(CariTipiEnum), index=True)
+    tarih = Column(Date)
+    islem_turu = Column(String)
+    islem_yone = Column(Enum(IslemYoneEnum))
+    tutar = Column(Float)
+    aciklama = Column(Text, nullable=True)
+    kaynak = Column(String)
+    kaynak_id = Column(Integer, nullable=True)
+    odeme_turu = Column(Enum(OdemeTuruEnum), nullable=True)
+    kasa_banka_id = Column(Integer, ForeignKey('kasalar_bankalar.id'), nullable=True)
+    vade_tarihi = Column(Date, nullable=True)
+    
+    olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
+    olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
+
+    # Dairesel bağımlılıklar için primaryjoin'de lambda ve foreign kullanıldı
+    musteri_iliski = relationship(
+        "Musteri", # String referans
+        primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_turu == 'MUSTERI'),
+        viewonly=True
+    )
+    tedarikci_iliski = relationship(
+        "Tedarikci", # String referans
+        primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_turu == 'TEDARIKCI'),
+        viewonly=True
+    )
+    kasa_banka_hesabi = relationship("KasaBanka", backref="cari_hareketler_iliski")
+
+# StokHareket sınıfı Stok sınıfından önce tanımlanmalı
+class StokHareket(Base):
+    __tablename__ = 'stok_hareketleri'
+    __table_args__ = {'extend_existing': True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    stok_id = Column(Integer, ForeignKey('stoklar.id'), index=True)
+    tarih = Column(Date)
+    islem_turu = Column(Enum(StokIslemTipiEnum))
+    miktar = Column(Float)
+    birim_fiyat = Column(Float)
+    aciklama = Column(Text, nullable=True)
+    kaynak = Column(String, nullable=True)
+    kaynak_id = Column(Integer, nullable=True)
+
+    stok = relationship("Stok", back_populates="stok_hareketleri")
+
 class Musteri(Base):
     __tablename__ = 'musteriler'
     __table_args__ = {'extend_existing': True}
@@ -108,17 +159,16 @@ class Musteri(Base):
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
 
+    # Dairesel bağımlılıklar için primaryjoin'de lambda ve foreign kullanıldı
     cari_hareketler = relationship(
         "CariHareket",
-        primaryjoin=and_(
-            Musteri.id == foreign(CariHareket.cari_id), # foreign() ile açıkça belirtildi
-            CariHareket.cari_turu == 'MUSTERI'
-        ),
+        primaryjoin=lambda: and_(Musteri.id == foreign(CariHareket.cari_id), CariHareket.cari_turu == 'MUSTERI'), 
         back_populates="musteri_iliski",
         cascade="all, delete-orphan"
     )
     faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ İADE'])", back_populates="musteri_fatura", cascade="all, delete-orphan")
-    siparisler = relationship("Siparis", foreign_keys="[Siparis.cari_id]", primaryjoin="Musteri.id == Siparis.cari_id and Siparis.siparis_turu == 'SATIŞ_SIPARIS'", back_populates="musteri_siparis", cascade="all, delete-orphan")
+    # foreign_keys düzeltildi ve cascade kaldırıldı
+    siparisler = relationship("Siparis", foreign_keys="Siparis.cari_id", primaryjoin="Musteri.id == Siparis.cari_id and Siparis.siparis_turu == 'SATIŞ_SIPARIS'", back_populates="musteri_siparis")
 
 class Tedarikci(Base):
     __tablename__ = 'tedarikciler'
@@ -134,17 +184,16 @@ class Tedarikci(Base):
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
 
+    # Dairesel bağımlılıklar için primaryjoin'de lambda ve foreign kullanıldı
     cari_hareketler = relationship(
         "CariHareket",
-        primaryjoin=and_(
-            Tedarikci.id == foreign(CariHareket.cari_id), # foreign() ile açıkça belirtildi
-            CariHareket.cari_turu == 'TEDARIKCI'
-        ),
+        primaryjoin=lambda: and_(Tedarikci.id == foreign(CariHareket.cari_id), CariHareket.cari_turu == 'TEDARIKCI'),
         back_populates="tedarikci_iliski",
         cascade="all, delete-orphan"
     )
     faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])", back_populates="tedarikci_fatura", cascade="all, delete-orphan")
-    siparisler = relationship("Siparis", foreign_keys="[Siparis.cari_id]", primaryjoin="Tedarikci.id == Siparis.cari_id and Siparis.siparis_turu == 'ALIŞ_SIPARIS'", back_populates="tedarikci_siparis", cascade="all, delete-orphan")
+    # foreign_keys düzeltildi ve cascade kaldırıldı
+    siparisler = relationship("Siparis", foreign_keys="Siparis.cari_id", primaryjoin="Tedarikci.id == Siparis.cari_id and Siparis.siparis_turu == 'ALIŞ_SIPARIS'", back_populates="tedarikci_siparis")
 
 class KasaBanka(Base):
     __tablename__ = 'kasalar_bankalar'
@@ -194,6 +243,7 @@ class Stok(Base):
     birim = relationship("UrunBirimi", back_populates="stoklar")
     mense_ulke = relationship("Ulke", back_populates="stoklar")
 
+    # StokHareket sınıfı artık Stok'tan önce tanımlandığı için direkt referans verebilir
     stok_hareketleri = relationship("StokHareket", back_populates="stok", cascade="all, delete-orphan")
     fatura_kalemleri = relationship("FaturaKalemi", back_populates="urun", cascade="all, delete-orphan")
     siparis_kalemleri = relationship("SiparisKalemi", back_populates="urun", cascade="all, delete-orphan")
@@ -225,8 +275,10 @@ class Fatura(Base):
     olusturan_kullanici = relationship("Kullanici", foreign_keys=[olusturan_kullanici_id])
     son_guncelleyen_kullanici = relationship("Kullanici", foreign_keys=[son_guncelleyen_kullanici_id])
     
-    musteri_fatura = relationship("Musteri", foreign_keys=[cari_id], primaryjoin="Fatura.cari_id == Musteri.id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ İADE'])", viewonly=True)
-    tedarikci_fatura = relationship("Tedarikci", foreign_keys=[cari_id], primaryjoin="Fatura.cari_id == Tedarikci.id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])", viewonly=True)
+    # cascade="all, delete-orphan" kaldırıldı
+    musteri_fatura = relationship("Musteri", foreign_keys=[cari_id], primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ İADE'])", back_populates="musteri_fatura", viewonly=True)
+    # cascade="all, delete-orphan" kaldırıldı
+    tedarikci_fatura = relationship("Tedarikci", foreign_keys=[cari_id], primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])", back_populates="tedarikci_fatura", viewonly=True)
     
     kalemler = relationship("FaturaKalemi", back_populates="fatura", cascade="all, delete-orphan")
 
@@ -318,48 +370,10 @@ class GelirGider(Base):
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
     kasa_banka_hesabi = relationship("KasaBanka", backref="gelir_gider_iliski")
-    gelir_siniflandirma = relationship("GelirSiniflandirma", back_populates="gelir_giderler")
-    gider_siniflandirma = relationship("GiderSiniflandirma", back_populates="gelir_giderler")
+    gelir_siniflandirma = relationship("GelirSiniflandirma", back_populates="gelir_siniflandirma")
+    gider_siniflandirma = relationship("GiderSiniflandirma", back_populates="gider_siniflandirma")
     olusturan_kullanici = relationship("Kullanici", foreign_keys=[olusturan_kullanici_id])
 
-class CariHareket(Base):
-    __tablename__ = 'cari_hareketler'
-    __table_args__ = {'extend_existing': True}
-
-    id = Column(Integer, primary_key=True, index=True)
-    cari_id = Column(Integer, index=True)
-    cari_turu = Column(Enum(CariTipiEnum), index=True)
-    tarih = Column(Date)
-    islem_turu = Column(String)
-    islem_yone = Column(Enum(IslemYoneEnum))
-    tutar = Column(Float)
-    aciklama = Column(Text, nullable=True)
-    kaynak = Column(String)
-    kaynak_id = Column(Integer, nullable=True)
-    odeme_turu = Column(Enum(OdemeTuruEnum), nullable=True)
-    kasa_banka_id = Column(Integer, ForeignKey('kasalar_bankalar.id'), nullable=True)
-    vade_tarihi = Column(Date, nullable=True)
-    
-    olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
-    olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
-
-    musteri_iliski = relationship(
-        "Musteri",
-        primaryjoin=and_(
-            CariHareket.cari_id == foreign(Musteri.id), # foreign() ile açıkça belirtildi
-            CariHareket.cari_turu == 'MUSTERI'
-        ),
-        viewonly=True
-    )
-    tedarikci_iliski = relationship(
-        "Tedarikci",
-        primaryjoin=and_(
-            CariHareket.cari_id == foreign(Tedarikci.id), # foreign() ile açıkça belirtildi
-            CariHareket.cari_turu == 'TEDARIKCI'
-        ),
-        viewonly=True
-    )
-    kasa_banka_hesabi = relationship("KasaBanka", backref="cari_hareketler_iliski")
 
 class KasaBankaHareket(Base):
     __tablename__ = 'kasa_banka_hareketleri'
