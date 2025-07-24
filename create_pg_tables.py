@@ -1,7 +1,10 @@
+# create_pg_tables.py dosyasının TAMAMI
 import psycopg2
-from veritabani import OnMuhasebe # Güncellediğimiz veritabani.py dosyasını import ediyoruz
+# api.veritabani'ndan Base ve engine'i import ediyoruz
+from api.veritabani import Base, engine 
 
 # Adım 1'de oluşturduğunuz PostgreSQL bağlantı bilgilerinizi girin
+# Bu bilgiler zaten api/veritabani.py içinde tanımlı, ancak PostgreSQL bağlantısı için tekrar tanımlanabilir
 DB_NAME = "on_muhasebe_prod"
 DB_USER = "muhasebe_user"
 DB_PASS = "755397.mAmi"  # <-- Şifre Satırı
@@ -22,20 +25,25 @@ def main():
         cursor = conn.cursor()
         print("PostgreSQL veritabanına başarıyla bağlanıldı.")
 
-        # OnMuhasebe sınıfından bir örnek oluştur (sadece metotlarını kullanmak için)
-        db_manager = OnMuhasebe()
-        
-        # create_tables metodunu çağırarak tabloları oluştur
-        db_manager.create_tables(cursor)
-        
-        # Değişiklikleri kaydet
-        conn.commit()
+        # TÜM TABLOLARI SİL (ÖNEMLİ: Mevcut tüm veriler silinecektir!)
+        Base.metadata.drop_all(bind=engine)
+        print("Mevcut tüm tablolar silindi.")
+
+        # TÜM TABLOLARI YENİDEN OLUŞTUR
+        Base.metadata.create_all(bind=engine)
         print("Tüm tablolar PostgreSQL veritabanında başarıyla oluşturuldu!")
+
+        # Değişiklikleri kaydet (bu örnekte gerekmez ama alışkanlık olarak kalsın)
+        # conn.commit() 
 
     except psycopg2.Error as e:
         print(f"Veritabanı hatası: {e}")
         if conn:
             conn.rollback() # Hata durumunda işlemi geri al
+    except Exception as e:
+        print(f"Genel hata: {e}")
+        if conn:
+            conn.rollback()
     finally:
         if conn:
             cursor.close()

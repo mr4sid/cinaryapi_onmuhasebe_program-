@@ -41,12 +41,14 @@ def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, db: Session = Depends(ge
 
     if odeme_turu.upper() == "NAKİT":
         hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.kod == "VARSAYILAN_NAKİT").first()
-        if not hesap: # Koduyla bulunamazsa, türü 'Kasa' olan ilk hesabı ara
-            hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.hesap_turu == "Kasa").first()
+        if not hesap: 
+            # DEĞİŞİKLİK BURADA: 'hesap_turu' yerine 'tip' kullanıldı
+            hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.tip == "KASA").first()
     elif odeme_turu.upper() == "BANKA":
         hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.kod == "VARSAYILAN_BANKA").first()
-        if not hesap: # Koduyla bulunamazsa, türü 'Banka' olan ilk hesabı ara
-            hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.hesap_turu == "Banka").first()
+        if not hesap: 
+            # DEĞİŞİKLİK BURADA: 'hesap_turu' yerine 'tip' kullanıldı
+            hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.tip == "BANKA").first()
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

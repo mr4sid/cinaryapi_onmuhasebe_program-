@@ -166,8 +166,8 @@ class Musteri(Base):
         back_populates="musteri_iliski",
         cascade="all, delete-orphan"
     )
-    faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ İADE'])", back_populates="musteri_fatura", cascade="all, delete-orphan")
-    # foreign_keys düzeltildi ve cascade kaldırıldı
+    # DEĞİŞİKLİK BURADA: back_populates değeri 'ilgili_musteri' olarak ayarlandı
+    faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ İADE'])", back_populates="ilgili_musteri", cascade="all, delete-orphan")
     siparisler = relationship("Siparis", foreign_keys="Siparis.cari_id", primaryjoin="Musteri.id == Siparis.cari_id and Siparis.siparis_turu == 'SATIŞ_SIPARIS'", back_populates="musteri_siparis")
 
 class Tedarikci(Base):
@@ -191,8 +191,8 @@ class Tedarikci(Base):
         back_populates="tedarikci_iliski",
         cascade="all, delete-orphan"
     )
-    faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])", back_populates="tedarikci_fatura", cascade="all, delete-orphan")
-    # foreign_keys düzeltildi ve cascade kaldırıldı
+    # DEĞİŞİKLİK BURADA: back_populates değeri 'ilgili_tedarikci' olarak ayarlandı
+    faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])", back_populates="ilgili_tedarikci", cascade="all, delete-orphan")
     siparisler = relationship("Siparis", foreign_keys="Siparis.cari_id", primaryjoin="Tedarikci.id == Siparis.cari_id and Siparis.siparis_turu == 'ALIŞ_SIPARIS'", back_populates="tedarikci_siparis")
 
 class KasaBanka(Base):
@@ -275,10 +275,10 @@ class Fatura(Base):
     olusturan_kullanici = relationship("Kullanici", foreign_keys=[olusturan_kullanici_id])
     son_guncelleyen_kullanici = relationship("Kullanici", foreign_keys=[son_guncelleyen_kullanici_id])
     
-    # cascade="all, delete-orphan" kaldırıldı
-    musteri_fatura = relationship("Musteri", foreign_keys=[cari_id], primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ İADE'])", back_populates="musteri_fatura", viewonly=True)
-    # cascade="all, delete-orphan" kaldırıldı
-    tedarikci_fatura = relationship("Tedarikci", foreign_keys=[cari_id], primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])", back_populates="tedarikci_fatura", viewonly=True)
+    # DEĞİŞİKLİK BURADA: İlişki adı 'ilgili_musteri' olarak değiştirildi ve back_populates 'faturalar' olarak ayarlandı
+    ilgili_musteri = relationship("Musteri", foreign_keys=[cari_id], primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ İADE'])", back_populates="faturalar", viewonly=True)
+    # DEĞİŞİKLİK BURADA: İlişki adı 'ilgili_tedarikci' olarak değiştirildi ve back_populates 'faturalar' olarak ayarlandı
+    ilgili_tedarikci = relationship("Tedarikci", foreign_keys=[cari_id], primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])", back_populates="faturalar", viewonly=True)
     
     kalemler = relationship("FaturaKalemi", back_populates="fatura", cascade="all, delete-orphan")
 
@@ -370,10 +370,11 @@ class GelirGider(Base):
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
     kasa_banka_hesabi = relationship("KasaBanka", backref="gelir_gider_iliski")
-    gelir_siniflandirma = relationship("GelirSiniflandirma", back_populates="gelir_siniflandirma")
-    gider_siniflandirma = relationship("GiderSiniflandirma", back_populates="gider_siniflandirma")
+    # DEĞİŞİKLİK BURADA: back_populates "gelir_giderler" olmalı
+    gelir_siniflandirma = relationship("GelirSiniflandirma", back_populates="gelir_giderler")
+    # DEĞİŞİKLİK BURADA: back_populates "gelir_giderler" olmalı
+    gider_siniflandirma = relationship("GiderSiniflandirma", back_populates="gelir_giderler")
     olusturan_kullanici = relationship("Kullanici", foreign_keys=[olusturan_kullanici_id])
-
 
 class KasaBankaHareket(Base):
     __tablename__ = 'kasa_banka_hareketleri'
