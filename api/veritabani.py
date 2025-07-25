@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 import logging
 
@@ -31,15 +31,10 @@ if not all([DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME]):
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 # SQLAlchemy motoru oluşturma
-try:
-    engine = create_engine(DATABASE_URL)
-    # Bağlantıyı test etmek için basit bir sorgu
-    with engine.connect() as connection:
-        connection.execute(f"SELECT 1")
-    logger.info(f"PostgreSQL veritabanı bağlantısı başarılı: {DB_NAME}@{DB_HOST}:{DB_PORT}")
-except Exception as e:
-    logger.critical(f"Veritabanı bağlantısı kurulamadı! Lütfen PostgreSQL sunucusunun çalıştığından ve .env bilgilerinin doğru olduğundan emin olun. Hata: {e}")
-    raise
+# NOT: Bağlantı testi burada yapılmaz, çünkü 'veritabani.py' içe aktarılırken
+# anında veritabanı bağlantısı kurulmasını önlemek istiyoruz (döngüsel bağımlılıkları önlemek için).
+# Bağlantı hataları, ilk veritabanı işlemi sırasında ortaya çıkacaktır.
+engine = create_engine(DATABASE_URL)
 
 # Veritabanı oturumunu yapılandırma
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -53,6 +48,13 @@ Base = declarative_base()
 def get_db():
     db = SessionLocal()
     try:
+        # Bağlantıyı test etmek için basit bir sorgu (sadece get_db() çağrıldığında çalışır)
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1")) # Bağlantı testi buraya taşındı
+        logger.info(f"PostgreSQL veritabanı bağlantısı başarılı: {DB_NAME}@{DB_HOST}:{DB_PORT}")
         yield db
+    except Exception as e:
+        logger.critical(f"Veritabanı bağlantısı kurulamadı! Lütfen PostgreSQL sunucusunun çalıştığından ve .env bilgilerinin doğru olduğundan emin olun. Hata: {e}")
+        raise
     finally:
         db.close()
