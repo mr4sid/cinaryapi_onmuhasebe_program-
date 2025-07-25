@@ -43,16 +43,8 @@ def create_tables():
     temp_engine = create_engine(temp_database_url)
 
     try:
-        # Eğer hedef veritabanı varsa, ÖNCE TAMAMEN SİL! (Geliştirme ortamı için)
-        # Bu işlem için temp_engine kullanılır.
-        if database_exists(DATABASE_URL): # DATABASE_URL'in varlığını kontrol edin
-            drop_database(DATABASE_URL, force=True) # force=True ekleyerek bağlantıları kapatmayı zorlayın
-            logger.info(f"Mevcut veritabanı '{DB_NAME}' silindi.")
 
-        # Hedef veritabanı yoksa oluşturun.
-        # Bu işlem için de temp_engine kullanılır.
-        create_database(DATABASE_URL) # DATABASE_URL'i oluşturun
-        logger.info(f"Veritabanı '{DB_NAME}' oluşturuldu.")
+        pass 
 
         # Şimdi, asıl uygulamanın bağlanacağı veritabanına bir engine oluşturun.
         # Bu engine artık mevcut olan 'on_muhasebe_prod' veritabanına başarıyla bağlanabilir.

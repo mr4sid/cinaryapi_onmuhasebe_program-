@@ -1,5 +1,3 @@
-# api/modeller.py dosyasının TAMAMI
-
 from __future__ import annotations # Model referans sorunlarını çözmek için
 
 from pydantic import BaseModel, EmailStr, Field
@@ -16,10 +14,10 @@ from .semalar import (
 # Ortak Temel Modeller
 class BaseOrmModel(BaseModel):
     class Config:
-        from_attributes = True
+        from_attributes = True # Pydantic v2 için orm_mode yerine from_attributes kullanılır
 
 # Şirket Bilgileri
-class SirketBase(BaseModel):
+class SirketBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     sirket_adi: Optional[str] = None
     sirket_adresi: Optional[str] = None
     sirket_telefonu: Optional[str] = None
@@ -36,7 +34,7 @@ class SirketRead(SirketBase):
     sirket_adi: str
 
 # Kullanıcı Modelleri
-class UserBase(BaseModel):
+class UserBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     kullanici_adi: str
     aktif: Optional[bool] = True
     yetki: Optional[str] = "kullanici"
@@ -44,7 +42,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     sifre: str
 
-class UserLogin(BaseModel):
+class UserLogin(BaseModel): # Bu bir ORM objesinden gelmediği için BaseModel kalır
     kullanici_adi: str
     sifre: str
 
@@ -53,22 +51,22 @@ class UserRead(UserBase):
     olusturma_tarihi: datetime
     son_giris_tarihi: Optional[datetime] = None
 
-class UserUpdate(BaseModel):
+class UserUpdate(BaseModel): # Bu da doğrudan bir ORM objesinden gelmediği için BaseModel kalır
     kullanici_adi: Optional[str] = None
     hashed_sifre: Optional[str] = None
     aktif: Optional[bool] = None
     yetki: Optional[str] = None
 
-class Token(BaseModel):
+class Token(BaseModel): # Bu da bir ORM objesinden gelmediği için BaseModel kalır
     access_token: str
     token_type: str
 
-class UserListResponse(BaseModel):
+class UserListResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     items: List[UserRead]
     total: int
 
 # Cari (Müşteri/Tedarikçi) Modelleri
-class CariBase(BaseModel):
+class CariBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     ad: str
     telefon: Optional[str] = None
     adres: Optional[str] = None
@@ -89,7 +87,7 @@ class MusteriRead(CariBase):
     olusturma_tarihi: datetime
     net_bakiye: Optional[float] = Field(0.0, description="Cari net bakiyesi")
 
-class MusteriListResponse(BaseModel):
+class MusteriListResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     items: List[MusteriRead]
     total: int
 
@@ -106,13 +104,13 @@ class TedarikciRead(CariBase):
     olusturma_tarihi: datetime
     net_bakiye: Optional[float] = Field(0.0, description="Cari net bakiyesi")
 
-class TedarikciListResponse(BaseModel):
+class TedarikciListResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     items: List[TedarikciRead]
     total: int
 
 
 # Kasa/Banka Modelleri
-class KasaBankaBase(BaseModel):
+class KasaBankaBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     hesap_adi: str
     kod: Optional[str] = None 
     tip: str
@@ -137,13 +135,13 @@ class KasaBankaRead(KasaBankaBase):
     aktif: bool
     olusturma_tarihi: datetime
 
-class KasaBankaListResponse(BaseModel):
+class KasaBankaListResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     items: List[KasaBankaRead]
     total: int
 
 
 # Stok Modelleri
-class StokBase(BaseModel):
+class StokBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     kod: str
     ad: str
     detay: Optional[str] = None
@@ -180,15 +178,15 @@ class StokRead(StokBase):
     birim: Optional[UrunBirimiRead] = None
     mense_ulke: Optional[UlkeRead] = None
 
-class StokListResponse(BaseModel):
+class StokListResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     items: List[StokRead]
     total: int
 
-class AnlikStokMiktariResponse(BaseModel):
+class AnlikStokMiktariResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     anlik_miktar: float
 
 # Stok Hareket Modelleri
-class StokHareketBase(BaseModel):
+class StokHareketBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     stok_id: int
     tarih: date
     islem_tipi: StokIslemTipiEnum
@@ -206,12 +204,12 @@ class StokHareketRead(StokHareketBase):
     stok: Optional[StokRead] = None
     olusturma_tarihi_saat: datetime
 
-class StokHareketListResponse(BaseModel):
+class StokHareketListResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     items: List[StokHareketRead]
     total: int
 
 # Fatura Kalem Modelleri
-class FaturaKalemiBase(BaseModel):
+class FaturaKalemiBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     urun_id: int
     miktar: float
     birim_fiyat: float
@@ -238,7 +236,7 @@ class FaturaKalemiRead(FaturaKalemiBase):
 
 
 # Fatura Modelleri
-class FaturaBase(BaseModel):
+class FaturaBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     fatura_no: str
     fatura_turu: FaturaTuruEnum
     tarih: date
@@ -273,16 +271,16 @@ class FaturaRead(FaturaBase):
     toplam_kdv_dahil: Optional[float] = None
     genel_toplam: Optional[float] = None
 
-class FaturaListResponse(BaseModel):
+class FaturaListResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     items: List[FaturaRead]
     total: int
 
-class NextFaturaNoResponse(BaseModel):
+class NextFaturaNoResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     fatura_no: str
 
 
 # Sipariş Kalem Modelleri
-class SiparisKalemiBase(BaseModel):
+class SiparisKalemiBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     urun_id: int
     miktar: float
     birim_fiyat: float
@@ -310,7 +308,7 @@ class SiparisKalemiRead(SiparisKalemiBase):
 
 
 # Sipariş Modelleri
-class SiparisBase(BaseModel):
+class SiparisBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     siparis_no: str
     siparis_turu: SiparisTuruEnum
     durum: SiparisDurumEnum
@@ -343,16 +341,16 @@ class SiparisRead(SiparisBase):
     cari_adi: Optional[str] = None
     toplam_tutar: Optional[float] = None
 
-class SiparisListResponse(BaseModel):
+class SiparisListResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     items: List[SiparisRead]
     total: int
 
-class NextSiparisNoResponse(BaseModel): # YENİ EKLENDİ
+class NextSiparisNoResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     siparis_no: str
 
 
 # Gelir/Gider Modelleri
-class GelirGiderBase(BaseModel):
+class GelirGiderBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     tarih: date
     tip: IslemYoneEnum
     aciklama: str
@@ -379,13 +377,13 @@ class GelirGiderRead(GelirGiderBase):
     gelir_siniflandirma_adi: Optional[str] = None
     gider_siniflandirma_adi: Optional[str] = None
 
-class GelirGiderListResponse(BaseModel):
+class GelirGiderListResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     items: List[GelirGiderRead]
     total: int
 
 
 # Cari Hareket Modelleri
-class CariHareketBase(BaseModel):
+class CariHareketBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     cari_id: int
     cari_turu: CariTipiEnum
     tarih: date
@@ -413,13 +411,13 @@ class CariHareketRead(CariHareketBase):
     fatura_turu: Optional[FaturaTuruEnum] = None
     islem_saati: Optional[str] = None
 
-class CariHareketListResponse(BaseModel):
+class CariHareketListResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     items: List[CariHareketRead]
     total: int
 
 
 # Kasa/Banka Hareket Modelleri
-class KasaBankaHareketBase(BaseModel):
+class KasaBankaHareketBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     kasa_banka_id: int
     tarih: date
     islem_turu: str
@@ -439,13 +437,13 @@ class KasaBankaHareketRead(KasaBankaHareketBase):
     id: int
     olusturma_tarihi_saat: datetime
 
-class KasaBankaHareketListResponse(BaseModel):
+class KasaBankaHareketListResponse(BaseModel): # Liste yanıtı, ORM objesi değil
     items: List[KasaBankaHareketRead]
     total: int
 
 
 # Nitelik Modelleri (Kategori, Marka, Grup, Birim, Ülke, Gelir/Gider Sınıflandırma)
-class NitelikBase(BaseModel):
+class NitelikBase(BaseOrmModel): # BaseModel yerine BaseOrmModel'den türetildi
     ad: str
 
 class UrunKategoriCreate(NitelikBase):
@@ -497,7 +495,7 @@ class GiderSiniflandirmaUpdate(NitelikBase):
 class GiderSiniflandirmaRead(NitelikBase):
     id: int
 
-# Rapor Modelleri
+# Rapor Modelleri (Bu modeller ORM objelerinden türetilmediği için BaseModel olarak kalır)
 class DashboardSummary(BaseModel):
     toplam_satislar: float
     toplam_alislar: float

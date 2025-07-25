@@ -1,3 +1,4 @@
+# api/rotalar/musteriler.py Dosyasının içeriği. Lütfen inceledikten sonra yapılması gereken değişiklikleri. Ve güncellemeleri. Yaparak. Dosyanın tamamını eksiksiz ve güncel bir şekilde yaz.
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func

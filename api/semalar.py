@@ -1,5 +1,3 @@
-# api/semalar.py dosyasının TAMAMI
-
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text, Enum,
     create_engine, and_ # 'and_' koşulları için eklendi
@@ -189,11 +187,25 @@ class Tedarikci(Base):
         "CariHareket",
         primaryjoin=lambda: and_(Tedarikci.id == foreign(CariHareket.cari_id), CariHareket.cari_turu == 'TEDARIKCI'),
         back_populates="tedarikci_iliski",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
+        overlaps="cari_hareketler" # Yeni eklendi: SAWarning'i gidermek için
     )
     # DEĞİŞİKLİK BURADA: back_populates değeri 'ilgili_tedarikci' olarak ayarlandı
-    faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])", back_populates="ilgili_tedarikci", cascade="all, delete-orphan")
-    siparisler = relationship("Siparis", foreign_keys="Siparis.cari_id", primaryjoin="Tedarikci.id == Siparis.cari_id and Siparis.siparis_turu == 'ALIŞ_SIPARIS'", back_populates="tedarikci_siparis")
+    faturalar = relationship(
+        "Fatura",
+        foreign_keys="[Fatura.cari_id]",
+        primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])",
+        back_populates="ilgili_tedarikci",
+        cascade="all, delete-orphan",
+        overlaps="faturalar" # Yeni eklendi: SAWarning'i gidermek için
+    )
+    siparisler = relationship(
+        "Siparis",
+        foreign_keys="Siparis.cari_id",
+        primaryjoin="Tedarikci.id == Siparis.cari_id and Siparis.siparis_turu == 'ALIŞ_SIPARIS'",
+        back_populates="tedarikci_siparis",
+        overlaps="siparisler" # Yeni eklendi: SAWarning'i gidermek için
+    )
 
 class KasaBanka(Base):
     __tablename__ = 'kasalar_bankalar'
