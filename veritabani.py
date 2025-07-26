@@ -1,12 +1,11 @@
 # veritabani.py dosyasının TAMAMI
-
 import requests
 import json
 import logging
 import os
 import locale # YENİ EKLENDİ (Para birimi formatlama için)
 from config import API_BASE_URL # DÜZELTİLDİ: Göreceli içe aktarma kaldırıldı, doğrudan import
-
+from typing import List, Optional
 # Logger kurulumu
 logger = logging.getLogger(__name__)
 
@@ -222,15 +221,19 @@ class OnMuhasebe:
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Müşteri ID {musteri_id} silinirken hata: {e}")
             return False
-
-    def get_perakende_musteri_id(self):
+            
+    def get_perakende_musteri_id(self) -> Optional[int]:
+        """API'den varsayılan perakende müşteri ID'sini çeker."""
         try:
-            response = self._make_api_request("GET", "/sistem/varsayilan_cariler/perakende_musteri_id")
-            return response.get("id")
-        except (ValueError, ConnectionError, Exception) as e:
+            response_data = self._make_api_request("GET", "/sistem/varsayilan_cariler/perakende_musteri_id")
+            # API'den gelen yanıtın doğrudan bir ID (int) veya dictionary döndürdüğüne bağlı olarak
+            # response_data.get('id') veya doğrudan response_data olarak alınabilir.
+            # Sistem endpoint'i MusteriRead döndüğü için response_data bir dict olacaktır.
+            return response_data.get('id')
+        except Exception as e:
             logger.warning(f"Varsayılan perakende müşteri ID'si API'den alınamadı: {e}. None dönülüyor.")
             return None
-            
+                    
     def get_musteri_net_bakiye(self, musteri_id: int):
         try:
             response = self._make_api_request("GET", f"/musteriler/{musteri_id}/net_bakiye")
@@ -286,6 +289,17 @@ class OnMuhasebe:
             return response.get("id")
         except (ValueError, ConnectionError, Exception) as e:
             logger.warning(f"Varsayılan genel tedarikçi ID'si API'den alınamadı: {e}. None dönülüyor.")
+            return None
+        
+    def get_kasa_banka_by_odeme_turu(self, odeme_turu: str) -> Optional[tuple]:
+        """API'den ödeme türüne göre varsayılan kasa/banka hesabını çeker."""
+        try:
+            response_data = self._make_api_request("GET", f"/sistem/varsayilan_kasa_banka/{odeme_turu}")
+            # API'den gelen yanıtın bir kasa/banka objesi (dict) döndürdüğüne bağlı olarak
+            # buradan ilgili ID ve adı çekebiliriz.
+            return (response_data.get('id'), response_data.get('hesap_adi'))
+        except Exception as e:
+            logger.warning(f"Varsayılan kasa/banka ({odeme_turu}) API'den alınamadı: {e}. None dönülüyor.")
             return None
 
     def get_tedarikci_net_bakiye(self, tedarikci_id: int):
@@ -357,14 +371,15 @@ class OnMuhasebe:
             return False
 
     def stok_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, 
-                             kategori_id: int = None, marka_id: int = None, stok_durumu: str = None, 
-                             kritik_stok_altinda: bool = None, aktif_durum: bool = None):
+                             kategori_id: int = None, marka_id: int = None, urun_grubu_id: int = None, 
+                             stok_durumu: str = None, kritik_stok_altinda: bool = None, aktif_durum: bool = None):
         params = {
             "skip": skip,
             "limit": limit,
             "arama": arama,
             "kategori_id": kategori_id,
             "marka_id": marka_id,
+            "urun_grubu_id": urun_grubu_id,
             "stok_durumu": stok_durumu,
             "kritik_stok_altinda": kritik_stok_altinda,
             "aktif_durum": aktif_durum
@@ -401,6 +416,16 @@ class OnMuhasebe:
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Stok hareketi eklenirken hata: {e}")
             return False
+            
+    def get_urun_faturalari(self, urun_id: int, fatura_tipi: Optional[str] = None):
+        """Belirli bir ürüne ait faturaları API'den çeker."""
+        params = {"urun_id": urun_id, "fatura_tipi": fatura_tipi}
+        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
+        try:
+            return self._make_api_request("GET", "/raporlar/urun_faturalari", params=cleaned_params)
+        except Exception as e:
+            logger.error(f"Ürün faturaları API'den alınamadı: {e}")
+            return []
 
     # --- FATURALAR ---
     def fatura_ekle(self, data: dict):
@@ -525,19 +550,28 @@ class OnMuhasebe:
             logger.error(f"Gelir/Gider eklenirken hata: {e}")
             return False
 
-    def gelir_gider_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, islem_turu: str = None, odeme_turu: str = None, kategori: str = None, cari_ad: str = None):
+    def gelir_gider_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, tip_filtre: str = None, odeme_turu: str = None, kategori: str = None, cari_ad: str = None):
         params = {
             "skip": skip,
             "limit": limit,
-            "arama": arama,
+            "aciklama_filtre": arama, # 'arama' parametresi backend'de 'aciklama_filtre' olarak kullanılıyor
             "baslangic_tarihi": baslangic_tarihi,
             "bitis_tarihi": bitis_tarihi,
-            "islem_turu": islem_turu,
-            "odeme_turu": odeme_turu,
-            "kategori": kategori,
-            "cari_ad": cari_ad
+            "tip_filtre": tip_filtre, # Düzeltildi: Parametre ismi 'tip_filtre' olarak güncellendi
+            # 'odeme_turu', 'kategori', 'cari_ad' parametreleri backend rotasında doğrudan yok,
+            # bu yüzden API çağrısında bunları göndermemeliyiz veya backend rotalarını genişletmeliyiz.
+            # Şimdilik backend rotasında olan parametreleri gönderiyoruz.
+            # Eğer backend'de bu filtreler yoksa, OnMuhasebe sınıfında bu parametreleri almak anlamsızdır.
+            # Veya bu parametreler arayuzde başka bir amaçla kullanılıyorsa ayrıştırılmalıdır.
         }
-        return self._make_api_request("GET", "/gelir_gider/", params=params)
+        # None olan veya boş string olan parametreleri temizle (API'ye sadece geçerli filtreleri gönder)
+        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
+
+        try:
+            return self._make_api_request("GET", "/gelir_gider/", params=cleaned_params)
+        except Exception as e:
+            logger.error(f"Gelir/Gider listesi alınırken hata: {e}")
+            raise # Hatayı yukarı fırlat
 
     def gelir_gider_sil(self, gg_id: int):
         try:
@@ -579,7 +613,7 @@ class OnMuhasebe:
         try:
             response = self._make_api_request("GET", "/raporlar/cari_hesap_ekstresi", params=params)
             return response.get("items", []), response.get("devreden_bakiye", 0.0), True, "Başarılı"
-        except (ValueError, ConnectionError, Exception) as e:
+        except Exception as e:
             logger.error(f"Cari hesap ekstresi API'den alınamadı: {e}")
             return [], 0.0, False, f"Ekstre alınırken hata: {e}"
 
@@ -589,34 +623,112 @@ class OnMuhasebe:
             return self._make_api_request("POST", f"/nitelikler/{nitelik_tipi}", data=data)
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Nitelik tipi {nitelik_tipi} eklenirken hata: {e}")
-            return False
+            raise # Hatayı yukarı fırlat
 
-    def nitelik_listesi_al(self, nitelik_tipi: str, skip: int = 0, limit: int = 100):
-        params = {"skip": skip, "limit": limit}
-        try:
-            return self._make_api_request("GET", f"/nitelikler/{nitelik_tipi}", params=params)
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Nitelik tipi {nitelik_tipi} listesi API'den alınamadı: {e}")
-            return []
-    
     def nitelik_guncelle(self, nitelik_tipi: str, nitelik_id: int, data: dict):
         try:
             return self._make_api_request("PUT", f"/nitelikler/{nitelik_tipi}/{nitelik_id}", data=data)
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Nitelik tipi {nitelik_tipi} ID {nitelik_id} güncellenirken hata: {e}")
-            return False
+            raise # Hatayı yukarı fırlat
 
     def nitelik_sil(self, nitelik_tipi: str, nitelik_id: int):
         try:
             return self._make_api_request("DELETE", f"/nitelikler/{nitelik_tipi}/{nitelik_id}")
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Nitelik tipi {nitelik_tipi} ID {nitelik_id} silinirken hata: {e}")
-            return False
+            raise # Hatayı yukarı fırlat
 
+    # NOT: Aşağıdaki metotlar, arayuz.py ve pencereler.py'den gelen çağrılara özel olarak eklendi.
+    # Her bir nitelik tipi için ayrı ayrı API endpoint'lerini çağırırlar.
+
+    def kategori_listele(self, skip: int = 0, limit: int = 1000):
+        try:
+            response = self._make_api_request("GET", "/nitelikler/kategoriler", params={"skip": skip, "limit": limit})
+            return response # API'nin doğrudan liste dönmesini bekliyoruz
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kategori listesi API'den alınamadı: {e}")
+            return []
+
+    def marka_listele(self, skip: int = 0, limit: int = 1000):
+        try:
+            response = self._make_api_request("GET", "/nitelikler/markalar", params={"skip": skip, "limit": limit})
+            return response
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Marka listesi API'den alınamadı: {e}")
+            return []
+
+    def urun_grubu_listele(self, skip: int = 0, limit: int = 1000):
+        try:
+            response = self._make_api_request("GET", "/nitelikler/urun_gruplari", params={"skip": skip, "limit": limit})
+            return response
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Ürün grubu listesi API'den alınamadı: {e}")
+            return []
+
+    def urun_birimi_listele(self, skip: int = 0, limit: int = 1000):
+        try:
+            response = self._make_api_request("GET", "/nitelikler/urun_birimleri", params={"skip": skip, "limit": limit})
+            return response
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Ürün birimi listesi API'den alınamadı: {e}")
+            return []
+            
+    def ulke_listele(self, skip: int = 0, limit: int = 1000):
+        try:
+            response = self._make_api_request("GET", "/nitelikler/ulkeler", params={"skip": skip, "limit": limit})
+            return response
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Ülke listesi API'den alınamadı: {e}")
+            return []
+
+    def gelir_siniflandirma_listele(self, skip: int = 0, limit: int = 1000):
+        try:
+            response = self._make_api_request("GET", "/nitelikler/gelir_siniflandirmalari", params={"skip": skip, "limit": limit})
+            return response
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Gelir sınıflandırma listesi API'den alınamadı: {e}")
+            return []
+
+    def gider_siniflandirma_listele(self, skip: int = 0, limit: int = 1000):
+        try:
+            response = self._make_api_request("GET", "/nitelikler/gider_siniflandirmalari", params={"skip": skip, "limit": limit})
+            return response
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Gider sınıflandırma listesi API'den alınamadı: {e}")
+            return []
+    
     # --- RAPORLAR ---
     def get_dashboard_summary(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
         params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
         return self._make_api_request("GET", "/raporlar/dashboard_ozet", params=params)
+
+    def get_total_sales(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
+        """Dashboard özeti için toplam satışları çeker."""
+        try:
+            summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+            return summary.get("toplam_satislar", 0.0)
+        except Exception as e:
+            logger.error(f"Toplam satışlar çekilirken hata: {e}")
+            return 0.0
+
+    def get_total_collections(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
+        """Dashboard özeti için toplam tahsilatları çeker."""
+        try:
+            summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+            return summary.get("toplam_tahsilatlar", 0.0)
+        except Exception as e:
+            logger.error(f"Toplam tahsilatlar çekilirken hata: {e}")
+            return 0.0
+
+    def get_total_payments(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
+        """Dashboard özeti için toplam ödemeleri çeker."""
+        try:
+            summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+            return summary.get("toplam_odemeler", 0.0)
+        except Exception as e:
+            logger.error(f"Toplam ödemeler çekilirken hata: {e}")
+            return 0.0
 
     def get_satislar_detayli_rapor(self, baslangic_tarihi: str, bitis_tarihi: str, cari_id: int = None):
         params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "cari_id": cari_id}
@@ -624,22 +736,176 @@ class OnMuhasebe:
 
     def get_kar_zarar_verileri(self, baslangic_tarihi: str, bitis_tarihi: str):
         params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        return self._make_api_request("GET", "/raporlar/kar_zarar_verileri", params=params)
+        try:
+            return self._make_api_request("GET", "/raporlar/kar_zarar_verileri", params=params)
+        except Exception as e:
+            logger.error(f"Kar/Zarar verileri çekilirken hata: {e}")
+            # Hata durumunda varsayılan boş bir KarZararResponse yapısı döndürebiliriz
+            return {
+                "toplam_satis_geliri": 0.0,
+                "toplam_satis_maliyeti": 0.0,
+                "toplam_alis_gideri": 0.0,
+                "diger_gelirler": 0.0,
+                "diger_giderler": 0.0,
+                "brut_kar": 0.0,
+                "net_kar": 0.0
+            }
+            
+    def get_monthly_sales_summary(self, baslangic_tarihi: str, bitis_tarihi: str):
+        """Dashboard için aylık satış özetini çeker."""
+        # API'de doğrudan aylık satış özeti yok, get_satislar_detayli_rapor endpoint'i kullanılabilir
+        # Veya api/rotalar/raporlar.py içinde yeni bir endpoint oluşturulabilir.
+        # Şimdilik varsayılan bir yapı döndürelim, daha sonra API genişletilebilir.
+        # Not: Bu fonksiyon muhtemelen `api/rotalar/raporlar.py` içindeki
+        # `get_gelir_gider_aylik_ozet_endpoint` benzeri bir endpoint'ten gelmeli.
+        # API'de böyle bir endpoint şu an tanımlı değil.
+        # Örneğin: `/raporlar/aylik_satis_ozeti`
+        logger.warning(f"get_monthly_sales_summary metodu API'de doğrudan karşılığı yok. Simüle ediliyor.")
+        return [] # Boş liste döndür
 
-    def get_nakit_akisi_raporu(self, baslangic_tarihi: str, bitis_tarihi: str):
+    def get_monthly_income_expense_summary(self, baslangic_tarihi: str, bitis_tarihi: str):
+        """Dashboard için aylık gelir/gider özetini çeker."""
+        # api/rotalar/raporlar.py içindeki get_gelir_gider_aylik_ozet_endpoint'i çağırır.
+        # Yıl parametresi bekleniyor, tarih aralığından yılı çıkaracağız.
+        try:
+            yil = int(baslangic_tarihi.split('-')[0])
+            response = self._make_api_request("GET", "/raporlar/gelir_gider_aylik_ozet", params={"yil": yil})
+            return response.get("aylik_ozet", [])
+        except Exception as e:
+            logger.error(f"Aylık gelir/gider özeti çekilirken hata: {e}")
+            return []
+
+    def get_gross_profit_and_cost(self, baslangic_tarihi: str, bitis_tarihi: str):
+        """Kar/Zarar raporu için brüt kar ve maliyet verilerini çeker."""
+        # api/rotalar/raporlar.py içindeki get_kar_zarar_verileri_endpoint'i çağırır
         params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        return self._make_api_request("GET", "/raporlar/nakit_akisi_raporu", params=params)
+        try:
+            data = self._make_api_request("GET", "/raporlar/kar_zarar_verileri", params=params)
+            brut_kar = data.get("brut_kar", 0.0)
+            cogs = data.get("toplam_satis_maliyeti", 0.0)
+            toplam_satis_geliri = data.get("toplam_satis_geliri", 0.0)
+            brut_kar_orani = (brut_kar / toplam_satis_geliri) * 100 if toplam_satis_geliri > 0 else 0.0
+            return brut_kar, cogs, brut_kar_orani
+        except Exception as e:
+            logger.error(f"Brüt kar ve maliyet verileri çekilirken hata: {e}")
+            return 0.0, 0.0, 0.0
 
-    def get_cari_yaslandirma_verileri(self):
-        # API'de tarih parametresi alıyordu, burada da alabilir
-        return self._make_api_request("GET", "/raporlar/cari_yaslandirma_raporu")
+    def get_monthly_gross_profit_summary(self, baslangic_tarihi: str, bitis_tarihi: str):
+        """Kar/Zarar raporu için aylık brüt kar özetini çeker."""
+        # API'de doğrudan bu özet yok. get_gelir_gider_aylik_ozet_endpoint'i ile birleştirilebilir
+        # veya yeni bir endpoint oluşturulabilir. Şimdilik boş liste döndürüyoruz.
+        logger.warning(f"get_monthly_gross_profit_summary metodu API'de doğrudan karşılığı yok. Simüle ediliyor.")
+        return []
 
-    def get_stok_deger_raporu(self):
-        return self._make_api_request("GET", "/raporlar/stok_deger_raporu")
+    def get_nakit_akisi_verileri(self, baslangic_tarihi: str, bitis_tarihi: str):
+        """Nakit akışı raporu için verileri çeker."""
+        # api/rotalar/raporlar.py içindeki get_nakit_akisi_raporu_endpoint'i çağırır
+        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
+        try:
+            response = self._make_api_request("GET", "/raporlar/nakit_akisi_raporu", params=params)
+            return {
+                "nakit_girisleri": response.get("nakit_girisleri", 0.0),
+                "nakit_cikislar": response.get("nakit_cikislar", 0.0),
+                "net_nakit_akisi": response.get("net_nakit_akisi", 0.0)
+            }
+        except Exception as e:
+            logger.error(f"Nakit akışı verileri çekilirken hata: {e}")
+            return {"nakit_girisleri": 0.0, "nakit_cikislar": 0.0, "net_nakit_akisi": 0.0}
 
-    def get_gelir_gider_aylik_ozet(self, yil: int):
-        params = {"yil": yil}
-        return self._make_api_request("GET", "/raporlar/gelir_gider_aylik_ozet", params=params)
+    def get_tum_kasa_banka_bakiyeleri(self):
+        """Tüm kasa/banka hesaplarının güncel bakiyelerini çeker."""
+        # api/rotalar/kasalar_bankalar.py içindeki listeleme endpoint'i kullanılabilir.
+        try:
+            response = self.kasa_banka_listesi_al(limit=1000) # Tüm hesapları çek
+            return response.get("items", []) # 'items' anahtarı içinde listeyi bekliyoruz
+        except Exception as e:
+            logger.error(f"Tüm kasa/banka bakiyeleri çekilirken hata: {e}")
+            return []
+
+    def get_monthly_cash_flow_summary(self, baslangic_tarihi: str, bitis_tarihi: str):
+        """Nakit akışı raporu için aylık nakit akışı özetini çeker."""
+        # api/rotalar/raporlar.py içindeki get_gelir_gider_aylik_ozet_endpoint'i çağırır.
+        # Aylık gelir/gider özeti ile nakit akışı özeti aynı kaynaktan türetilebilir.
+        try:
+            yil = int(baslangic_tarihi.split('-')[0])
+            response = self._make_api_request("GET", "/raporlar/gelir_gider_aylik_ozet", params={"yil": yil})
+            return response.get("aylik_ozet", []) # aylık_ozet içinde 'toplam_gelir' ve 'toplam_gider' var
+        except Exception as e:
+            logger.error(f"Aylık nakit akışı özeti çekilirken hata: {e}")
+            return []
+
+    def get_cari_yaslandirma_verileri(self, tarih: str = None):
+        """Cari yaşlandırma raporu verilerini çeker."""
+        # api/rotalar/raporlar.py içindeki get_cari_yaslandirma_verileri_endpoint'i çağırır
+        params = {"tarih": tarih} if tarih else {}
+        try:
+            response = self._make_api_request("GET", "/raporlar/cari_yaslandirma_raporu", params=params)
+            return response # modeller.CariYaslandirmaResponse dönecek, dict bekliyoruz.
+        except Exception as e:
+            logger.error(f"Cari yaşlandırma verileri çekilirken hata: {e}")
+            return {"musteri_alacaklar": [], "tedarikci_borclar": []} # Hata durumunda boş dict döndür
+
+    def get_stock_value_by_category(self):
+        """Stok değer raporu için kategoriye göre toplam stok değerini çeker."""
+        # api/rotalar/raporlar.py içinde get_stok_deger_raporu_endpoint'i çağırır
+        # Bu endpoint şuan sadece toplam_stok_maliyeti döndürüyor.
+        # Kategori bazında çekmek için API'deki endpoint'in genişletilmesi gerekir.
+        # Şimdilik boş liste döndürüyoruz, API'ye özel endpoint eklenmelidir.
+        logger.warning(f"get_stock_value_by_category metodu API'de doğrudan karşılığı yok. Simüle ediliyor.")
+        return []
+
+    def get_critical_stock_items(self):
+        """Kritik stok altındaki ürünleri çeker."""
+        # api/rotalar/stoklar.py içindeki stok listeleme endpoint'i kullanılabilir.
+        # params={"kritik_stok_altinda": True} olarak gönderilir.
+        try:
+            response = self.stok_listesi_al(kritik_stok_altinda=True, limit=1000) # Tüm kritik stokları çek
+            return response.get("items", []) # 'items' içinde listeyi bekliyoruz
+        except Exception as e:
+            logger.error(f"Kritik stok ürünleri çekilirken hata: {e}")
+            return []
+            
+    def get_sales_by_payment_type(self, baslangic_tarihi: str, bitis_tarihi: str):
+        """Satış raporu için ödeme türüne göre satış dağılımını çeker."""
+        # API'de doğrudan böyle bir endpoint yok.
+        # api/rotalar/raporlar.py içinde get_satislar_detayli_rapor_endpoint'i kullanılır.
+        # Ancak, bu endpoint ödeme türü dağılımı değil, detaylı fatura listesi döner.
+        # API'de yeni bir endpoint gereklidir (örn: /raporlar/satislar_odeme_dagilimi).
+        logger.warning(f"get_sales_by_payment_type metodu API'de doğrudan karşılığı yok. Simüle ediliyor.")
+        return []
+
+    def get_top_selling_products(self, baslangic_tarihi: str, bitis_tarihi: str, limit: int = 5):
+        """Dashboard ve satış raporu için en çok satan ürünleri çeker."""
+        # api/rotalar/raporlar.py içindeki get_dashboard_ozet_endpoint'i çağırır
+        # Zaten en çok satan ürünler bu özette dönüyor.
+        try:
+            summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+            return summary.get("en_cok_satan_urunler", [])
+        except Exception as e:
+            logger.error(f"En çok satan ürünler çekilirken hata: {e}")
+            return []
+
+    def tarihsel_satis_raporu_verilerini_al(self, baslangic_tarihi: str, bitis_tarihi: str, cari_id: int = None):
+        """Tarihsel satış raporu için detaylı fatura kalemleri verilerini çeker."""
+        # api/rotalar/raporlar.py içindeki get_satislar_detayli_rapor_endpoint'i çağırır.
+        # Bu endpoint, FaturaListResponse döner. Kalem detayları için kalemleri ayrıca çekmek gerekebilir.
+        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "cari_id": cari_id}
+        try:
+            response_data = self._make_api_request("GET", "/raporlar/satislar_detayli_rapor", params=params)
+            return response_data.get("items", []) # modeller.FaturaRead listesi dönüyor
+        except Exception as e:
+            logger.error(f"Tarihsel satış raporu verileri çekilirken hata: {e}")
+            return []
+            
+    def get_urun_faturalari(self, urun_id: int, fatura_tipi: Optional[str] = None):
+        """Belirli bir ürüne ait faturaları API'den çeker."""
+        params = {"urun_id": urun_id, "fatura_tipi": fatura_tipi}
+        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
+        try:
+            return self._make_api_request("GET", "/raporlar/urun_faturalari", params=cleaned_params)
+        except Exception as e:
+            logger.error(f"Ürün faturaları API'den alınamadı: {e}")
+            return []
 
     # --- YARDIMCI FONKSİYONLAR ---
     def _format_currency(self, value):
@@ -800,3 +1066,29 @@ class OnMuhasebe:
 
     def get_next_tedarikci_kodu(self):
         return "T-OTOMATIK"
+    
+    def siparis_listele(self, baslangic_tarih: Optional[str] = None, bitis_tarih: Optional[str] = None,
+                         arama_terimi: Optional[str] = None, cari_id_filter: Optional[int] = None,
+                         durum_filter: Optional[str] = None, siparis_tipi_filter: Optional[str] = None,
+                         limit: int = 100, offset: int = 0) -> dict:
+        """
+        API'den sipariş listesini çeker.
+        """
+        params = {
+            "skip": offset,
+            "limit": limit,
+            "bas_t": baslangic_tarih,
+            "bit_t": bitis_tarih,
+            "arama": arama_terimi,
+            "cari_id": cari_id_filter,
+            "durum": durum_filter,
+            "tip": siparis_tipi_filter, # API'de 'tip' parametresi bekleniyor
+        }
+        # None olan parametreleri temizle
+        params = {k: v for k, v in params.items() if v is not None}
+        
+        try:
+            return self._make_api_request("GET", "/siparisler/", params=params)
+        except Exception as e:
+            logger.error(f"Sipariş listesi alınırken hata: {e}")
+            raise # Hatayı yukarı fırlat

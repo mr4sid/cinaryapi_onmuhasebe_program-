@@ -1,3 +1,4 @@
+# api_ana.py dosyasının TAMAMI
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -5,7 +6,10 @@ import logging
 from datetime import datetime
 
 # Gerekli içe aktarmalar
+# Base ve engine, veritabani.py'den import edilmeli
 from .veritabani import SessionLocal, engine, Base
+
+# Başlangıç verileri için kullanılacak modeller
 from .semalar import Musteri, KasaBanka
 
 # Mevcut rotaların içe aktarılması
@@ -23,7 +27,15 @@ logger = logging.getLogger(__name__)
 def get_db():
     db = SessionLocal()
     try:
+        # Bağlantıyı test etmek için basit bir sorgu.
+        # Tablo oluşturma işlemi artık startup_event içinde olduğu için burada gerek yok.
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1")) 
+        logger.info(f"PostgreSQL veritabanı bağlantısı başarılı: {engine.url.database}@{engine.url.host}:{engine.url.port}")
         yield db
+    except Exception as e:
+        logger.critical(f"Veritabanı bağlantısı kurulamadı! Lütfen PostgreSQL sunucusunun çalıştığından ve .env bilgilerinin doğru olduğundan emin olun. Hata: {e}")
+        raise
     finally:
         db.close()
 
@@ -93,6 +105,19 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     logger.info("API başlangıcı algılandı.")
+
+    # VERİTABANI TABLOLARINI OLUŞTUR
+    # Tüm tabloların semalar.py'deki tanımlara göre oluşturulmasını sağlar.
+    # Eğer tablolar zaten varsa, bu komut onları tekrar oluşturmaya çalışmaz (hata vermez).
+    try:
+        Base.metadata.create_all(bind=engine)
+        logger.info("Veritabanı tabloları başarıyla oluşturuldu/güncellendi.")
+    except Exception as e:
+        logger.critical(f"Veritabanı tabloları oluşturulurken kritik hata: {e}")
+        # Uygulama başlatılamazsa burada bir hata fırlatılması gerekir.
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Veritabanı başlatma hatası: {e}")
+
+    # VARSAYILAN VERİLERİ EKLE (Tablolar oluşturulduktan sonra çalışır)
     create_initial_data()
 
 # Router'ları ekle - İLGİLİ ROUTER DOSYALARI ZATEN PREFIX TANIMLADIĞI İÇİN BURADA PREFIX KULLANILMIYOR

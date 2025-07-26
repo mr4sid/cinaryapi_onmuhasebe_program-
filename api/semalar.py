@@ -1,12 +1,15 @@
+# api.zip/semalar.py dosyasının TAMAMI - Lütfen TÜM içeriği bununla değiştirin
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text, Enum,
-    create_engine, and_ # 'and_' koşulları için eklendi
+    create_engine, and_
 )
-from sqlalchemy.orm import relationship, declarative_base, sessionmaker, foreign # 'foreign' doğru yerden import edildi
+from sqlalchemy.orm import relationship, declarative_base, sessionmaker, foreign
+from sqlalchemy.dialects import postgresql # PostgreSQL'e özgü tipler için eklendi (örnekte kullanılmasa da kalsın)
 from datetime import datetime
 import enum
 
 from .veritabani import Base # Base objesi api.veritabani'ndan alınır
+
 # Enum tanımları
 class FaturaTuruEnum(str, enum.Enum):
     SATIS = "SATIŞ"
@@ -28,7 +31,7 @@ class CariTipiEnum(str, enum.Enum):
     MUSTERI = "MUSTERI"
     TEDARIKCI = "TEDARIKCI"
 
-class IslemYoneEnum(str, enum.Enum): # IslemYoneEnum burada doğru tanımlı
+class IslemYoneEnum(str, enum.Enum): # İşlem yönü için kullanılan enum (ALACAK/BORC)
     GIRIS = "GİRİŞ"
     CIKIS = "ÇIKIŞ"
     BORC = "BORC"
@@ -57,13 +60,21 @@ class SiparisDurumEnum(str, enum.Enum):
     TAMAMLANDI = "TAMAMLANDI"
     KISMİ_TESLIMAT = "KISMİ_TESLİMAT"
     IPTAL_EDILDI = "İPTAL_EDİLDİ"
-    FALATURASTIRILDI = "FATURALAŞTIRILDI"
+    FATURALASTIRILDI = "FATURALAŞTIRILDI"
 
 class KaynakTipEnum(str, enum.Enum):
     FATURA = "FATURA"
     SIPARIS = "SIPARIS"
     GELIR_GIDER = "GELIR_GIDER"
     MANUEL = "MANUEL"
+    TAHSILAT = "TAHSİLAT"
+    ODEME = "ÖDEME"
+    VERESIYE_BORC_MANUEL = "VERESİYE_BORÇ_MANUEL"
+
+# YENİ EKLENEN ENUM: Gelir/Gider tipi için özel enum
+class GelirGiderTipEnum(str, enum.Enum):
+    GELIR = "GELİR"
+    GIDER = "GİDER"
 
 # Tablo Modelleri
 class Sirket(Base):
@@ -100,16 +111,16 @@ class CariHareket(Base):
     cari_id = Column(Integer, index=True)
     cari_turu = Column(Enum(CariTipiEnum), index=True)
     tarih = Column(Date)
-    islem_turu = Column(String)
-    islem_yone = Column(Enum(IslemYoneEnum))
+    islem_turu = Column(String) # Enum olabilir, ama şimdilik string kalsın. (FATURA, TAHSİLAT, ÖDEME, VERESİYE_BORÇ)
+    islem_yone = Column(Enum(IslemYoneEnum)) # BURASI DOĞRU
     tutar = Column(Float)
     aciklama = Column(Text, nullable=True)
-    kaynak = Column(String)
+    kaynak = Column(String) # KaynakTipEnum ile uyumlu olmalı
     kaynak_id = Column(Integer, nullable=True)
     odeme_turu = Column(Enum(OdemeTuruEnum), nullable=True)
     kasa_banka_id = Column(Integer, ForeignKey('kasalar_bankalar.id'), nullable=True)
     vade_tarihi = Column(Date, nullable=True)
-    
+
     olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
@@ -136,12 +147,12 @@ class StokHareket(Base):
     tarih = Column(Date)
     islem_turu = Column(Enum(StokIslemTipiEnum))
     miktar = Column(Float)
-    birim_fiyat = Column(Float)
+    birim_fiyat = Column(Float) # Bu alan Stok tablosundan farklı olarak, hareket anındaki birim fiyatı tutar.
     aciklama = Column(Text, nullable=True)
-    kaynak = Column(String, nullable=True)
+    kaynak = Column(String) # KaynakTipEnum ile uyumlu olmalı
     kaynak_id = Column(Integer, nullable=True)
 
-    stok = relationship("Stok", back_populates="stok_hareketleri")
+    stok = relationship("Stok", back_populates="stok", cascade="all, delete-orphan")
 
 class Musteri(Base):
     __tablename__ = 'musteriler'
@@ -188,7 +199,7 @@ class Tedarikci(Base):
         primaryjoin=lambda: and_(Tedarikci.id == foreign(CariHareket.cari_id), CariHareket.cari_turu == 'TEDARIKCI'),
         back_populates="tedarikci_iliski",
         cascade="all, delete-orphan",
-        overlaps="cari_hareketler" # Yeni eklendi: SAWarning'i gidermek için
+        overlaps="cari_hareketler"
     )
     # DEĞİŞİKLİK BURADA: back_populates değeri 'ilgili_tedarikci' olarak ayarlandı
     faturalar = relationship(
@@ -197,14 +208,14 @@ class Tedarikci(Base):
         primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])",
         back_populates="ilgili_tedarikci",
         cascade="all, delete-orphan",
-        overlaps="faturalar" # Yeni eklendi: SAWarning'i gidermek için
+        overlaps="faturalar"
     )
     siparisler = relationship(
         "Siparis",
         foreign_keys="Siparis.cari_id",
         primaryjoin="Tedarikci.id == Siparis.cari_id and Siparis.siparis_turu == 'ALIŞ_SIPARIS'",
         back_populates="tedarikci_siparis",
-        overlaps="siparisler" # Yeni eklendi: SAWarning'i gidermek için
+        overlaps="siparisler"
     )
 
 class KasaBanka(Base):
@@ -214,7 +225,7 @@ class KasaBanka(Base):
     id = Column(Integer, primary_key=True, index=True)
     hesap_adi = Column(String, index=True)
     kod = Column(String, unique=True, index=True, nullable=True)
-    tip = Column(String, default="KASA")
+    tip = Column(String, default="KASA") # KasaBankaTipiEnum olmalıydı, string yapıldı
     bakiye = Column(Float, default=0.0)
     para_birimi = Column(String, default="TL")
     banka_adi = Column(String, nullable=True)
@@ -278,6 +289,10 @@ class Fatura(Base):
     genel_iskonto_degeri = Column(Float, default=0.0)
     original_fatura_id = Column(Integer, ForeignKey('faturalar.id'), nullable=True)
 
+    # YENİ EKLENDİ: Toplam KDV Hariç ve Toplam KDV Dahil alanları - Bu alanlar daha önce eksikti
+    toplam_kdv_haric = Column(Float, nullable=False, default=0.0)
+    toplam_kdv_dahil = Column(Float, nullable=False, default=0.0)
+
     olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
     son_guncelleme_tarihi_saat = Column(DateTime, onupdate=datetime.now, nullable=True)
@@ -286,12 +301,12 @@ class Fatura(Base):
     kasa_banka_hesabi = relationship("KasaBanka", backref="faturalar_iliski")
     olusturan_kullanici = relationship("Kullanici", foreign_keys=[olusturan_kullanici_id])
     son_guncelleyen_kullanici = relationship("Kullanici", foreign_keys=[son_guncelleyen_kullanici_id])
-    
+
     # DEĞİŞİKLİK BURADA: İlişki adı 'ilgili_musteri' olarak değiştirildi ve back_populates 'faturalar' olarak ayarlandı
     ilgili_musteri = relationship("Musteri", foreign_keys=[cari_id], primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ İADE'])", back_populates="faturalar", viewonly=True)
     # DEĞİŞİKLİK BURADA: İlişki adı 'ilgili_tedarikci' olarak değiştirildi ve back_populates 'faturalar' olarak ayarlandı
     ilgili_tedarikci = relationship("Tedarikci", foreign_keys=[cari_id], primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])", back_populates="faturalar", viewonly=True)
-    
+
     kalemler = relationship("FaturaKalemi", back_populates="fatura", cascade="all, delete-orphan")
 
 class FaturaKalemi(Base):
@@ -304,6 +319,7 @@ class FaturaKalemi(Base):
     miktar = Column(Float)
     birim_fiyat = Column(Float)
     kdv_orani = Column(Float)
+    alis_fiyati_fatura_aninda = Column(Float, nullable=True)
     iskonto_yuzde_1 = Column(Float, default=0.0)
     iskonto_yuzde_2 = Column(Float, default=0.0)
     iskonto_tipi = Column(String, default="YOK")
@@ -336,7 +352,7 @@ class Siparis(Base):
 
     olusturan_kullanici = relationship("Kullanici", foreign_keys=[olusturan_kullanici_id])
     son_guncelleyen_kullanici = relationship("Kullanici", foreign_keys=[son_guncelleyen_kullanici_id])
-    
+
     musteri_siparis = relationship("Musteri", foreign_keys=[cari_id], primaryjoin="Siparis.cari_id == Musteri.id and Siparis.siparis_turu == 'SATIŞ_SIPARIS'", viewonly=True)
     tedarikci_siparis = relationship("Tedarikci", foreign_keys=[cari_id], primaryjoin="Siparis.cari_id == Tedarikci.id and Siparis.siparis_turu == 'ALIŞ_SIPARIS'", viewonly=True)
 
@@ -368,7 +384,7 @@ class GelirGider(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tarih = Column(Date)
-    tip = Column(Enum(IslemYoneEnum), index=True)
+    tip = Column(Enum(GelirGiderTipEnum), index=True) # DÜZELTİLDİ: IslemYoneEnum yerine GelirGiderTipEnum
     aciklama = Column(Text)
     tutar = Column(Float)
     odeme_turu = Column(Enum(OdemeTuruEnum), nullable=True)
@@ -377,14 +393,12 @@ class GelirGider(Base):
     cari_tip = Column(Enum(CariTipiEnum), nullable=True)
     gelir_siniflandirma_id = Column(Integer, ForeignKey('gelir_siniflandirmalari.id'), nullable=True)
     gider_siniflandirma_id = Column(Integer, ForeignKey('gider_siniflandirmalari.id'), nullable=True)
-    
+
     olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
     kasa_banka_hesabi = relationship("KasaBanka", backref="gelir_gider_iliski")
-    # DEĞİŞİKLİK BURADA: back_populates "gelir_giderler" olmalı
     gelir_siniflandirma = relationship("GelirSiniflandirma", back_populates="gelir_giderler")
-    # DEĞİŞİKLİK BURADA: back_populates "gelir_giderler" olmalı
     gider_siniflandirma = relationship("GiderSiniflandirma", back_populates="gelir_giderler")
     olusturan_kullanici = relationship("Kullanici", foreign_keys=[olusturan_kullanici_id])
 
@@ -399,7 +413,7 @@ class KasaBankaHareket(Base):
     islem_yone = Column(Enum(IslemYoneEnum))
     tutar = Column(Float)
     aciklama = Column(Text, nullable=True)
-    kaynak = Column(String)
+    kaynak = Column(String) # KaynakTipEnum ile uyumlu olmalı
     kaynak_id = Column(Integer, nullable=True)
 
     kasa_banka_hesabi = relationship("KasaBanka", back_populates="hareketler")

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+# api/rotalar/kasalar_bankalar.py Dosyasının tam içeriği şu şekildedir. Lütfen. Güncellenmiş. Halinin tamamını yaz. Herhangi bir eksik olmadan? Veya hata olmadan.
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from .. import semalar, modeller
@@ -12,41 +13,43 @@ router = APIRouter(
 
 # --- VERİ OKUMA (READ) ---
 
-@router.get("/", response_model=List[modeller.KasaBankaBase])
+@router.get("/", response_model=modeller.KasaBankaListResponse) # response_model list[modeller.KasaBankaRead] yerine
 def read_kasalar_bankalar(
-    skip: int = 0, 
-    limit: int = 100, 
-    arama_terimi: Optional[str] = None,
-    tip_filtre: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    arama: Optional[str] = None, # Optional eklendi
+    tip: Optional[str] = None, # tip parametresi eklendi
+    aktif_durum: Optional[bool] = None, # aktif_durum parametresi eklendi
     db: Session = Depends(get_db)
 ):
-    """
-    Tüm kasa/banka hesaplarını listeler. Arama terimi ve tip filtresi ile filtrelenebilir.
-    """
     query = db.query(semalar.KasaBanka)
 
-    if arama_terimi:
+    if arama:
         query = query.filter(
-            (semalar.KasaBanka.hesap_adi.ilike(f"%{arama_terimi}%")) |
-            (semalar.KasaBanka.hesap_no.ilike(f"%{arama_terimi}%")) | # Hesap no'ya göre arama
-            (semalar.KasaBanka.banka_adi.ilike(f"%{arama_terimi}%")) # Banka adına göre arama
+            (semalar.KasaBanka.hesap_adi.ilike(f"%{arama}%")) |
+            (semalar.KasaBanka.kod.ilike(f"%{arama}%")) |
+            (semalar.KasaBanka.banka_adi.ilike(f"%{arama}%")) |
+            (semalar.KasaBanka.hesap_no.ilike(f"%{arama}%"))
         )
+
+    if tip:
+        query = query.filter(semalar.KasaBanka.tip == tip)
+
+    if aktif_durum is not None:
+        query = query.filter(semalar.KasaBanka.aktif == aktif_durum)
+
+    total_count = query.count()
+    hesaplar = query.offset(skip).limit(limit).all()
     
-    if tip_filtre:
-        query = query.filter(semalar.KasaBanka.tip == tip_filtre)
+    # List yerine sözlük döndürüyoruz
+    return {"items": [modeller.KasaBankaRead.model_validate(hesap, from_attributes=True) for hesap in hesaplar], "total": total_count}
 
-    kasalar_bankalar = query.order_by(semalar.KasaBanka.hesap_adi).offset(skip).limit(limit).all()
-    return kasalar_bankalar
-
-@router.get("/{hesap_id}", response_model=modeller.KasaBankaBase)
+@router.get("/{hesap_id}", response_model=modeller.KasaBankaRead)
 def read_kasa_banka(hesap_id: int, db: Session = Depends(get_db)):
-    """
-    Belirli bir ID'ye sahip tek bir kasa/banka hesabını döndürür.
-    """
-    db_hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == hesap_id).first()
-    if db_hesap is None:
-        raise HTTPException(status_code=404, detail="Kasa/Banka hesabı bulunamadı")
-    return db_hesap
+    hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == hesap_id).first()
+    if not hesap:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kasa/Banka hesabı bulunamadı")
+    return modeller.KasaBankaRead.model_validate(hesap, from_attributes=True)
 
 # --- VERİ OLUŞTURMA (CREATE) ---
 class KasaBankaCreate(modeller.KasaBankaBase):
@@ -123,15 +126,11 @@ def update_kasa_banka(hesap_id: int, hesap: modeller.KasaBankaCreate, db: Sessio
     return db_hesap
 
 # --- VERİ SİLME (DELETE) ---
-@router.delete("/{hesap_id}", status_code=204)
+@router.delete("/{hesap_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_kasa_banka(hesap_id: int, db: Session = Depends(get_db)):
-    """
-    Belirli bir ID'ye sahip kasa/banka hesabını siler.
-    """
     db_hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == hesap_id).first()
-    if db_hesap is None:
-        raise HTTPException(status_code=404, detail="Kasa/Banka hesabı bulunamadı")
-    
+    if not db_hesap:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kasa/Banka hesabı bulunamadı")
     db.delete(db_hesap)
     db.commit()
     return

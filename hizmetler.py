@@ -30,6 +30,89 @@ class FaturaService:
             logger.error(f"Fatura oluşturulurken hata: {e}")
             raise
 
+    def siparis_faturaya_donustur(self, siparis_id, olusturan_kullanici_id, odeme_turu, kasa_banka_id, vade_tarihi=None):
+        """
+        Belirli bir siparişi alıp bir faturaya dönüştürür.
+        Bu işlem, siparişin kalemlerini fatura kalemlerine dönüştürmeyi,
+        gerekirse stokları güncellemeyi ve cari hareketleri oluşturmayı içerir.
+        """
+        try:
+            # Sipariş detaylarını çek
+            siparis_detay = self.db.siparis_getir_by_id(siparis_id)
+            if not siparis_detay:
+                raise ValueError(f"Sipariş ID {siparis_id} bulunamadı.")
+
+            # Sipariş kalemlerini çek
+            siparis_kalemleri = self.db.siparis_kalemleri_al(siparis_id)
+            if not siparis_kalemleri:
+                raise ValueError(f"Sipariş ID {siparis_id} için kalem bulunamadı.")
+
+            # Fatura Numarasını al
+            fatura_turu = self.db.FATURA_TIP_SATIS if siparis_detay['cari_tip'] == self.db.CARI_TIP_MUSTERI else self.db.FATURA_TIP_ALIS
+            fatura_no = self.db.son_fatura_no_getir(fatura_turu)
+            if fatura_no == "HATA":
+                raise ValueError("Yeni fatura numarası alınamadı.")
+
+            # Fatura kalemlerini hazırla
+            fatura_kalemleri_data = []
+            for s_kalem in siparis_kalemleri:
+                urun_info = self.db.stok_getir_by_id(s_kalem['urun_id'])
+                if not urun_info:
+                    logger.warning(f"Ürün ID {s_kalem['urun_id']} bulunamadı, bu kalem atlanıyor.")
+                    continue
+
+                # API'ye gönderilecek fatura kalemi formatına dönüştür
+                # NOT: Bu kısım API'deki FaturaKalemiCreate modeline uygun olmalıdır.
+                fatura_kalemleri_data.append({
+                    "urun_id": s_kalem['urun_id'],
+                    "miktar": s_kalem['miktar'],
+                    "birim_fiyat": s_kalem['birim_fiyat'], # iskontosuz kdv hariç birim fiyat
+                    "kdv_orani": s_kalem['kdv_orani'],
+                    "alis_fiyati_fatura_aninda": urun_info.get('alis_fiyati', 0.0), # Stoktan güncel alış fiyatı alınır
+                    "iskonto_yuzde_1": s_kalem.get('iskonto_yuzde_1', 0.0),
+                    "iskonto_yuzde_2": s_kalem.get('iskonto_yuzde_2', 0.0),
+                    "iskonto_tipi": s_kalem.get('iskonto_tipi', "YOK"),
+                    "iskonto_degeri": s_kalem.get('iskonto_degeri', 0.0)
+                })
+
+            # Fatura ana bilgilerini hazırla
+            fatura_data = {
+                "fatura_no": fatura_no,
+                "tarih": datetime.now().strftime('%Y-%m-%d'),
+                "fatura_turu": fatura_turu,
+                "cari_id": siparis_detay['cari_id'],
+                "odeme_turu": odeme_turu,
+                "kalemler": fatura_kalemleri_data,
+                "kasa_banka_id": kasa_banka_id,
+                "misafir_adi": siparis_detay.get('misafir_adi'), # Siparişten misafir adı varsa
+                "fatura_notlari": f"Sipariş No: {siparis_detay['siparis_no']} kaynağından oluşturuldu. {siparis_detay.get('siparis_notlari', '')}",
+                "vade_tarihi": vade_tarihi,
+                "genel_iskonto_tipi": siparis_detay.get('genel_iskonto_tipi', "YOK"),
+                "genel_iskonto_degeri": siparis_detay.get('genel_iskonto_degeri', 0.0),
+                "original_fatura_id": None # Bu bir siparişten dönüştürülen fatura, iade faturası değil
+            }
+            
+            # API üzerinden faturayı oluştur
+            response_fatura = self.db.fatura_ekle(fatura_data)
+            
+            # Fatura başarıyla oluşturulduysa, siparişin durumunu güncelle
+            if response_fatura and response_fatura.get('id'):
+                fatura_id_new = response_fatura.get('id')
+                # Siparişin durumunu "TAMAMLANDI" olarak güncelle ve fatura ID'sini bağla
+                siparis_guncelle_data = {
+                    "durum": self.db.SIPARIS_DURUM_TAMAMLANDI,
+                    "fatura_id": fatura_id_new
+                }
+                self.db.siparis_guncelle(siparis_id, siparis_guncelle_data)
+                
+                return True, f"Sipariş '{siparis_detay['siparis_no']}' başarıyla faturaya dönüştürüldü (Fatura No: {fatura_no})."
+            else:
+                return False, f"Fatura oluşturma API'si başarısız oldu."
+
+        except Exception as e:
+            logger.error(f"Siparişi faturaya dönüştürürken hata: {e}", exc_info=True)
+            return False, f"Siparişi faturaya dönüştürürken bir hata oluştu: {e}"
+
     def fatura_guncelle(self, fatura_id, fatura_bilgileri):
         """
         Mevcut bir faturayı günceller.

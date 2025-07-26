@@ -12,40 +12,45 @@ router = APIRouter(
 
 # --- VERİ OKUMA (READ) ---
 
-@router.get("/", response_model=List[modeller.CariHareketBase])
+@router.get("/", response_model=modeller.CariHareketListResponse)
 def read_cari_hareketler(
     skip: int = 0,
     limit: int = 100,
     cari_id: Optional[int] = None,
     cari_tip: Optional[str] = None,
-    baslangic_tarihi: Optional[date] = None,
-    bitis_tarihi: Optional[date] = None,
+    baslangic_tarihi: Optional[str] = None,
+    bitis_tarihi: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """
-    Tüm cari hareketleri, ilişkili kasa/banka adıyla birlikte tek sorguda verimli bir şekilde listeler.
-    """
-    query = db.query(semalar.CariHareketler, semalar.KasaBanka.hesap_adi.label("kasa_banka_adi"))\
-        .outerjoin(semalar.KasaBanka, semalar.KasaBanka.id == semalar.CariHareketler.kasa_banka_id)
+    # DEĞİŞİKLİK BURADA: semalar.CariHareketler yerine semalar.CariHareket kullanıldı
+    query = db.query(semalar.CariHareket, semalar.KasaBanka.hesap_adi.label("kasa_banka_adi"))\
+              .outerjoin(semalar.KasaBanka, semalar.CariHareket.kasa_banka_id == semalar.KasaBanka.id)
 
-    if cari_id:
-        query = query.filter(semalar.CariHareketler.cari_id == cari_id)
+    if cari_id is not None:
+        query = query.filter(semalar.CariHareket.cari_id == cari_id)
     if cari_tip:
-        query = query.filter(semalar.CariHareketler.cari_tip == cari_tip)
+        query = query.filter(semalar.CariHareket.cari_turu == cari_tip)
     if baslangic_tarihi:
-        query = query.filter(semalar.CariHareketler.tarih >= baslangic_tarihi)
+        query = query.filter(semalar.CariHareket.tarih >= baslangic_tarihi)
     if bitis_tarihi:
-        query = query.filter(semalar.CariHareketler.tarih <= bitis_tarihi)
-    
-    hareket_results = query.order_by(semalar.CariHareketler.tarih.desc(), semalar.CariHareketler.id.desc()).offset(skip).limit(limit).all()
+        query = query.filter(semalar.CariHareket.tarih <= bitis_tarihi)
 
-    results = []
-    for hareket, kasa_banka_adi in hareket_results:
-        hareket_model = modeller.CariHareketBase.from_orm(hareket)
-        hareket_model.kasa_banka_adi = kasa_banka_adi
-        results.append(hareket_model)
+    total_count = query.count()
+    hareketler = query.order_by(semalar.CariHareket.tarih.desc(), semalar.CariHareket.olusturma_tarihi_saat.desc()).offset(skip).limit(limit).all()
+
+    # Pydantic modeline dönüştürme ve ilişkili verileri ekleme
+    cari_hareket_read_models = []
+    for hareket in hareketler:
+        # Tuple'dan objeye dönüştürme (SQLAlchemy join sonucu)
+        cari_hareket_obj = hareket[0] # İlk eleman CariHareket objesidir
+        kasa_banka_adi = hareket[1] # İkinci eleman kasa_banka_adi'dir
+
+        cari_hareket_read_data = modeller.CariHareketRead.model_validate(cari_hareket_obj, from_attributes=True).model_dump()
+        cari_hareket_read_data['kasa_banka_adi'] = kasa_banka_adi
         
-    return results
+        cari_hareket_read_models.append(cari_hareket_read_data)
+
+    return {"items": cari_hareket_read_models, "total": total_count}
 
 @router.get("/count", response_model=int)
 def get_cari_hareketler_count(

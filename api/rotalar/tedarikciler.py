@@ -1,29 +1,12 @@
+# api.zip/rotalar/tedarikciler.py dosyasının tamamını bu şekilde güncelleyin:
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from .. import modeller, semalar
 from ..veritabani import get_db
+from .api_yardimcilar import calculate_cari_net_bakiye # Yeni eklenen satır
 
 router = APIRouter(prefix="/tedarikciler", tags=["Tedarikçiler"])
-
-# Cari net bakiyeyi hesaplayan yardımcı fonksiyon (Müşteriler dosyasındaki ile aynı)
-# Bu fonksiyonu ortak bir yere taşıyıp import etmek daha temiz bir çözüm olabilir.
-# Ancak şimdilik kopyalayarak ilerliyoruz.
-def calculate_cari_net_bakiye(db: Session, cari_id: int, cari_turu: str) -> float:
-    alacak_toplami = db.query(func.sum(semalar.CariHareket.tutar)).filter(
-        semalar.CariHareket.cari_id == cari_id,
-        semalar.CariHareket.cari_turu == cari_turu,
-        semalar.CariHareket.islem_yone == "ALACAK"
-    ).scalar() or 0.0
-
-    borc_toplami = db.query(func.sum(semalar.CariHareket.tutar)).filter(
-        semalar.CariHareket.cari_id == cari_id,
-        semalar.CariHareket.cari_turu == cari_turu,
-        semalar.CariHareket.islem_yone == "BORC"
-    ).scalar() or 0.0
-
-    net_bakiye = alacak_toplami - borc_toplami
-    return net_bakiye
 
 @router.post("/", response_model=modeller.TedarikciRead)
 def create_tedarikci(tedarikci: modeller.TedarikciCreate, db: Session = Depends(get_db)):
@@ -72,7 +55,7 @@ def read_tedarikci(tedarikci_id: int, db: Session = Depends(get_db)):
     tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id).first()
     if not tedarikci:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
-    
+
     # Tedarikçi detayını dönerken net bakiyeyi de ekleyelim
     net_bakiye = calculate_cari_net_bakiye(db, tedarikci_id, "TEDARIKCI")
     tedarikci_dict = modeller.TedarikciRead.model_validate(tedarikci).model_dump()
@@ -104,6 +87,6 @@ def get_net_bakiye_endpoint(tedarikci_id: int, db: Session = Depends(get_db)):
     tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id).first()
     if not tedarikci:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
-    
+
     net_bakiye = calculate_cari_net_bakiye(db, tedarikci_id, "TEDARIKCI")
     return {"net_bakiye": net_bakiye}

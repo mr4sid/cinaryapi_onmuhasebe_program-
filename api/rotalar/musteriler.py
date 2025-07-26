@@ -1,9 +1,10 @@
-# api/rotalar/musteriler.py Dosyasının içeriği. Lütfen inceledikten sonra yapılması gereken değişiklikleri. Ve güncellemeleri. Yaparak. Dosyanın tamamını eksiksiz ve güncel bir şekilde yaz.
+# api.zip/rotalar/musteriler.py dosyasının tamamını bu şekilde güncelleyin:
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from .. import modeller, semalar
 from ..veritabani import get_db
+from .api_yardimcilar import calculate_cari_net_bakiye # Yeni eklenen satır
 
 router = APIRouter(prefix="/musteriler", tags=["Müşteriler"])
 
@@ -32,7 +33,7 @@ def read_musteriler(
             (semalar.Musteri.telefon.ilike(f"%{arama}%")) |
             (semalar.Musteri.vergi_no.ilike(f"%{arama}%"))
         )
-    
+
     if aktif_durum is not None:
         query = query.filter(semalar.Musteri.aktif == aktif_durum)
 
@@ -55,7 +56,7 @@ def read_musteri(musteri_id: int, db: Session = Depends(get_db)):
     musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == musteri_id).first()
     if not musteri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müşteri bulunamadı")
-    
+
     # Müşteri detayını dönerken net bakiyeyi de ekleyelim
     net_bakiye = calculate_cari_net_bakiye(db, musteri_id, "MUSTERI")
     musteri_dict = modeller.MusteriRead.model_validate(musteri).model_dump()
@@ -82,31 +83,11 @@ def delete_musteri(musteri_id: int, db: Session = Depends(get_db)):
     db.commit()
     return
 
-# Cari net bakiyeyi hesaplayan yardımcı fonksiyon
-def calculate_cari_net_bakiye(db: Session, cari_id: int, cari_turu: str) -> float:
-    # `CariHareket` modelini kullanarak alacak ve borç hareketlerini topluyoruz.
-    # `alacak` ve `borc` alanları varsa
-    alacak_toplami = db.query(func.sum(semalar.CariHareket.tutar)).filter(
-        semalar.CariHareket.cari_id == cari_id,
-        semalar.CariHareket.cari_turu == cari_turu,
-        semalar.CariHareket.islem_yone == "ALACAK" # ALACAK'a gelen tutarlar
-    ).scalar() or 0.0
-
-    borc_toplami = db.query(func.sum(semalar.CariHareket.tutar)).filter(
-        semalar.CariHareket.cari_id == cari_id,
-        semalar.CariHareket.cari_turu == cari_turu,
-        semalar.CariHareket.islem_yone == "BORC" # BORC'a giden tutarlar
-    ).scalar() or 0.0
-
-    # Net bakiye = Alacak - Borç
-    net_bakiye = alacak_toplami - borc_toplami
-    return net_bakiye
-
 @router.get("/{musteri_id}/net_bakiye", response_model=modeller.NetBakiyeResponse)
 def get_net_bakiye_endpoint(musteri_id: int, db: Session = Depends(get_db)):
     musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == musteri_id).first()
     if not musteri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müşteri bulunamadı")
-    
+
     net_bakiye = calculate_cari_net_bakiye(db, musteri_id, "MUSTERI")
     return {"net_bakiye": net_bakiye}

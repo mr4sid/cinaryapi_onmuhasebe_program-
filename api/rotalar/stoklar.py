@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from .. import modeller, semalar
 from ..veritabani import get_db
-
+from typing import List, Optional
 router = APIRouter(prefix="/stoklar", tags=["Stoklar"])
 
 @router.post("/", response_model=modeller.StokRead)
@@ -19,16 +19,15 @@ def read_stoklar(
     skip: int = 0,
     limit: int = 100,
     arama: str = Query(None, min_length=1, max_length=50),
-    kategori_id: int = Query(None),
-    marka_id: int = Query(None),
-    stok_durumu: str = Query(None),
-    kritik_stok_altinda: bool = Query(None),
-    aktif_durum: bool = Query(None),
+    kategori_id: Optional[int] = None,
+    marka_id: Optional[int] = None,
+    urun_grubu_id: Optional[int] = None,
+    stok_durumu: Optional[bool] = None, # True = Stokta Var, False = Stokta Yok
+    kritik_stok_altinda: Optional[bool] = False, # True ise kritik stok altındakiler
+    aktif_durum: Optional[bool] = True, # True ise aktif ürünler
     db: Session = Depends(get_db)
 ):
-    query = db.query(semalar.Stok).join(semalar.UrunBirimi, semalar.Stok.birim_id == semalar.UrunBirimi.id, isouter=True) \
-                                 .join(semalar.UrunKategori, semalar.Stok.kategori_id == semalar.UrunKategori.id, isouter=True) \
-                                 .join(semalar.UrunMarka, semalar.Stok.marka_id == semalar.UrunMarka.id, isouter=True)
+    query = db.query(semalar.Stok)
 
     if arama:
         query = query.filter(
@@ -36,21 +35,24 @@ def read_stoklar(
             (semalar.Stok.kod.ilike(f"%{arama}%"))
         )
     
-    if kategori_id:
+    if kategori_id is not None:
         query = query.filter(semalar.Stok.kategori_id == kategori_id)
     
-    if marka_id:
+    if marka_id is not None:
         query = query.filter(semalar.Stok.marka_id == marka_id)
 
-    if stok_durumu:
-        # Stok durumu filtrelemesi eklenebilir (örn: 'Yeterli', 'Az', 'Kritik')
-        pass # Mevcut `miktar` üzerinden UI tarafında yönetiliyor olabilir
+    if urun_grubu_id is not None:
+        query = query.filter(semalar.Stok.urun_grubu_id == urun_grubu_id)
 
-    if kritik_stok_altinda is not None:
-        if kritik_stok_altinda:
-            query = query.filter(semalar.Stok.miktar < semalar.Stok.kritik_stok_seviyesi)
-        else:
-            query = query.filter(semalar.Stok.miktar >= semalar.Stok.kritik_stok_seviyesi)
+    if stok_durumu is not None:
+        if stok_durumu: # Stokta Var
+            query = query.filter(semalar.Stok.miktar > 0)
+        else: # Stokta Yok
+            query = query.filter(semalar.Stok.miktar <= 0)
+            
+    if kritik_stok_altinda:
+        # Hata düzeltildi: kritik_stok_seviyesi -> min_stok_seviyesi
+        query = query.filter(semalar.Stok.miktar <= semalar.Stok.min_stok_seviyesi) 
 
     if aktif_durum is not None:
         query = query.filter(semalar.Stok.aktif == aktif_durum)
@@ -58,18 +60,49 @@ def read_stoklar(
     total_count = query.count()
     stoklar = query.offset(skip).limit(limit).all()
 
-    # Stok modellerini ilişkili verilerle birlikte dön
-    return {"items": [
-        modeller.StokRead.model_validate(stok, from_attributes=True)
-        for stok in stoklar
-    ], "total": total_count}
+    # Pydantic modeline dönüştürme ve ilişkili verileri ekleme
+    stok_read_models = []
+    for stok_item in stoklar:
+        # SQLAlchemy ORM objesini doğrudan Pydantic modeline dönüştür
+        stok_read_data = modeller.StokRead.model_validate(stok_item).model_dump()
+        
+        # İlişkili Nitelik verilerini ekleme (varsa)
+        if stok_item.kategori:
+            stok_read_data['kategori'] = modeller.UrunKategoriRead.model_validate(stok_item.kategori).model_dump()
+        if stok_item.marka:
+            stok_read_data['marka'] = modeller.UrunMarkaRead.model_validate(stok_item.marka).model_dump()
+        if stok_item.urun_grubu:
+            stok_read_data['urun_grubu'] = modeller.UrunGrubuRead.model_validate(stok_item.urun_grubu).model_dump()
+        if stok_item.birim:
+            stok_read_data['birim'] = modeller.UrunBirimiRead.model_validate(stok_item.birim).model_dump()
+        if stok_item.mense_ulke:
+            stok_read_data['mense_ulke'] = modeller.UlkeRead.model_validate(stok_item.mense_ulke).model_dump()
+            
+        stok_read_models.append(stok_read_data)
+
+    return {"items": stok_read_models, "total": total_count}
 
 @router.get("/{stok_id}", response_model=modeller.StokRead)
 def read_stok(stok_id: int, db: Session = Depends(get_db)):
     stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id).first()
     if not stok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı")
-    return modeller.StokRead.model_validate(stok, from_attributes=True)
+    
+    # Pydantic modeline dönüştürme ve ilişkili verileri ekleme
+    stok_read_data = modeller.StokRead.model_validate(stok).model_dump()
+    
+    if stok.kategori:
+        stok_read_data['kategori'] = modeller.UrunKategoriRead.model_validate(stok.kategori).model_dump()
+    if stok.marka:
+        stok_read_data['marka'] = modeller.UrunMarkaRead.model_validate(stok.marka).model_dump()
+    if stok.urun_grubu:
+        stok_read_data['urun_grubu'] = modeller.UrunGrubuRead.model_validate(stok.urun_grubu).model_dump()
+    if stok.birim:
+        stok_read_data['birim'] = modeller.UrunBirimiRead.model_validate(stok.birim).model_dump()
+    if stok.mense_ulke:
+        stok_read_data['mense_ulke'] = modeller.UlkeRead.model_validate(stok.mense_ulke).model_dump()
+        
+    return stok_read_data
 
 @router.put("/{stok_id}", response_model=modeller.StokRead)
 def update_stok(stok_id: int, stok: modeller.StokUpdate, db: Session = Depends(get_db)):

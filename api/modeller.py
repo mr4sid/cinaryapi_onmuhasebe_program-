@@ -1,3 +1,4 @@
+# api.zip/modeller.py dosyası içeriği
 from __future__ import annotations # Model referans sorunlarını çözmek için
 
 from pydantic import BaseModel, EmailStr, Field
@@ -8,7 +9,7 @@ from typing import List, Optional, Literal
 from .semalar import (
     FaturaTuruEnum, OdemeTuruEnum, CariTipiEnum, IslemYoneEnum,
     KasaBankaTipiEnum, StokIslemTipiEnum, SiparisTuruEnum, SiparisDurumEnum,
-    KaynakTipEnum
+    KaynakTipEnum, GelirGiderTipEnum # GelirGiderTipEnum eklendi
 )
 
 # Ortak Temel Modeller
@@ -496,15 +497,19 @@ class GiderSiniflandirmaRead(NitelikBase):
     id: int
 
 # Rapor Modelleri (Bu modeller ORM objelerinden türetilmediği için BaseModel olarak kalır)
-class DashboardSummary(BaseModel):
+class PanoOzetiYanit(BaseModel):
     toplam_satislar: float
     toplam_alislar: float
     toplam_tahsilatlar: float
     toplam_odemeler: float
-    kritik_stok_urun_sayisi: int
-    en_cok_satan_urunler: List[dict]
+    kritik_stok_sayisi: int
+    en_cok_satan_urunler: List[EnCokSatanUrun]
     vadesi_yaklasan_alacaklar_toplami: float
     vadesi_gecmis_borclar_toplami: float
+
+class EnCokSatanUrun(BaseModel):
+    ad: str
+    toplam_miktar: float
 
 class KarZararResponse(BaseModel):
     toplam_satis_geliri: float
