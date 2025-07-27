@@ -152,7 +152,8 @@ class StokHareket(Base):
     kaynak = Column(String) # KaynakTipEnum ile uyumlu olmalı
     kaynak_id = Column(Integer, nullable=True)
 
-    stok = relationship("Stok", back_populates="stok", cascade="all, delete-orphan")
+    # StokHareket.stok ilişkisinden `cascade="all, delete-orphan"` kaldırıldı
+    stok = relationship("Stok", back_populates="stok_hareketleri") # DÜZELTME BURADA
 
 class Musteri(Base):
     __tablename__ = 'musteriler'

@@ -82,38 +82,61 @@ class OnMuhasebe:
         self.app = app_ref
         logger.info(f"OnMuhasebe başlatıldı. API Base URL: {self.api_base_url}")
 
-    def _make_api_request(self, method: str, endpoint: str, data: dict = None, params: dict = None):
+    def _make_api_request(self, method: str, path: str, params: dict = None, json: dict = None):
         """
-        Genel API isteği gönderici.
+        Merkezi API isteği yapıcı metot.
+        API'den gelen yanıtı işler ve başarılı olursa JSON olarak döndürür.
+        Hata durumunda ValueError yükseltir.
+        
+        Args:
+            method (str): HTTP metodu (GET, POST, PUT, DELETE).
+            path (str): API endpoint yolu (örneğin "/stoklar/").
+            params (dict, optional): GET istekleri için URL parametreleri. Varsayılan None.
+            json (dict, optional): POST/PUT istekleri için JSON payload. Varsayılan None.
+        
+        Returns:
+            dict: API'den gelen JSON yanıtı.
+            
+        Raises:
+            ValueError: API'den hata yanıtı gelirse veya bağlantı sorunu olursa.
         """
-        url = f"{self.api_base_url}{endpoint}"
-        headers = {"Content-Type": "application/json"}
-
-        cleaned_params = {k: v for k, v in (params or {}).items() if v is not None and str(v).strip() != ""}
-
+        url = f"{self.api_base_url}{path}"
         try:
-            response = requests.request(method, url, json=data, params=cleaned_params, headers=headers)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"API'ye bağlanılamadı: {url}. Sunucunun çalıştığından emin olun. Hata: {e}")
-            raise ConnectionError(f"API'ye bağlanılamadı. Lütfen sunucunun çalıştığından emin olun.") from e
-        except requests.exceptions.Timeout as e:
-            logger.error(f"API isteği zaman aşımına uğradı: {url}. Hata: {e}")
-            raise TimeoutError(f"API isteği zaman aşımına uğradı.") from e
-        except requests.exceptions.HTTPError as e:
-            try:
-                error_detail = e.response.json().get('detail', str(e.response.content))
-            except json.JSONDecodeError:
-                error_detail = e.response.text
-            logger.error(f"API HTTP hatası: {url}, Durum Kodu: {e.response.status_code}, Yanıt: {error_detail}. Hata: {e}")
-            raise ValueError(f"API hatası ({e.response.status_code}): {error_detail}") from e
+            # method.upper() kullanıldı
+            if method.upper() == "GET":
+                response = requests.get(url, params=params)
+            elif method.upper() == "POST":
+                response = requests.post(url, json=json) # 'json' parametresi buraya iletildi
+            elif method.upper() == "PUT":
+                response = requests.put(url, json=json)   # 'json' parametresi buraya iletildi
+            elif method.upper() == "DELETE":
+                response = requests.delete(url, params=params) # DELETE için params da olabilir
+            else:
+                raise ValueError(f"Desteklenmeyen HTTP metodu: {method}")
+
+            response.raise_for_status() # HTTP 4xx veya 5xx durumları için hata fırlatır
+
+            # Yanıt boş değilse JSON'a çevir
+            if response.text:
+                return response.json()
+            return {} # Boş yanıtlar için boş sözlük döndür
+
         except requests.exceptions.RequestException as e:
-            logger.error(f"API isteği sırasında genel hata oluştu: {url}. Hata: {e}")
-            raise RuntimeError(f"API isteği sırasında bir hata oluştu: {e}") from e
+            error_detail = str(e)
+            if e.response is not None:
+                try:
+                    error_detail = e.response.json().get('detail', error_detail)
+                except ValueError: # JSON decode hatası
+                    error_detail = f"API'den beklenen JSON yanıtı alınamadı. Yanıt: {e.response.text[:200]}..."
+            logger.error(f"API isteği sırasında genel hata oluştu: {url}. Hata: {error_detail}", exc_info=True)
+            raise ValueError(f"API isteği sırasında bir hata oluştu: {error_detail}") from e
+        except ValueError as e:
+            # Desteklenmeyen metod hatası veya JSON decode hatası
+            logger.error(f"API isteği sırasında bir değer hatası oluştu: {e}", exc_info=True)
+            raise e
         except Exception as e:
-            logger.critical(f"Beklenmedik bir hata oluştu: {e}")
-            raise
+            logger.error(f"API isteği sırasında beklenmeyen bir hata oluştu: {url}. Hata: {e}", exc_info=True)
+            raise ValueError(f"API isteği sırasında beklenmeyen bir hata oluştu: {e}") from e
 
     # --- ŞİRKET BİLGİLERİ ---
     def sirket_bilgilerini_yukle(self):
@@ -362,13 +385,24 @@ class OnMuhasebe:
 
 
     # --- STOKLAR ---
-    def stok_ekle(self, data: dict):
+    def stok_ekle(self, stok_data: dict):
+        """
+        Yeni bir stok kaydını API'ye gönderir.
+        Dönüş: (bool, str) - İşlem başarılı mı, mesaj.
+        """
+        endpoint = "/stoklar/"
         try:
-            self._make_api_request("POST", "/stoklar/", data=data)
-            return True
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Stok eklenirken hata: {e}")
-            return False
+            response_data = self._make_api_request("POST", endpoint, json=stok_data)
+            # API'den dönen yanıtın ID içerdiğini varsayarak
+            if response_data and response_data.get("id"):
+                return True, f"'{stok_data['ad']}' adlı ürün başarıyla eklendi. ID: {response_data['id']}"
+            else:
+                return False, f"Ürün eklenirken beklenmeyen bir yanıt alındı: {response_data}"
+        except ValueError as e: # _make_api_request'ten gelen API hatalarını yakalar
+            return False, f"Ürün eklenemedi: {e}"
+        except Exception as e: # Diğer olası hataları yakalar
+            logger.error(f"Stok eklenirken beklenmeyen hata: {e}", exc_info=True)
+            return False, f"Ürün eklenirken beklenmeyen bir hata oluştu: {e}"
 
     def stok_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, 
                              kategori_id: int = None, marka_id: int = None, urun_grubu_id: int = None, 
@@ -476,17 +510,19 @@ class OnMuhasebe:
             logger.error(f"Fatura ID {fatura_id} kalemleri çekilirken hata: {e}")
             return []
 
-    def son_fatura_no_getir(self, fatura_turu):
-        # API'den veri çekmeli
+    def son_fatura_no_getir(self, fatura_turu: str):
+        path = f"/sistem/next_fatura_number/{fatura_turu.upper()}"
         try:
-            # Parametreyi doğrudan endpoint URL'ine ekliyoruz
-            endpoint_url = f"/sistem/next_fatura_number/{fatura_turu}"
-            response = self._make_api_request(method='GET', endpoint=endpoint_url) # params kaldırıldı
-            return response.get("fatura_no", "HATA")
-        except Exception as e:
+            # Düzeltildi: 'method' ve 'path' argümanları açıkça anahtar kelime olarak belirtildi
+            response_data = self._make_api_request(method="GET", path=path) 
+            return response_data.get("fatura_no", "FATURA_NO_HATA")
+        except ValueError as e:
             logger.error(f"Son fatura no API'den alınamadı: {e}")
-            return "HATA"
-        
+            return "FATURA_NO_HATA"
+        except Exception as e:
+            logger.error(f"Son fatura no API'den alınırken beklenmeyen hata: {e}", exc_info=True)
+            return "FATURA_NO_HATA"
+                
     # --- SİPARİŞLER ---
     def siparis_ekle(self, data: dict):
         try:
@@ -1092,3 +1128,15 @@ class OnMuhasebe:
         except Exception as e:
             logger.error(f"Sipariş listesi alınırken hata: {e}")
             raise # Hatayı yukarı fırlat
+
+    def get_gelir_gider_aylik_ozet(self, yil: int):
+        """
+        Belirtilen yıla ait aylık gelir ve gider özetini API'den alır.
+        """
+        endpoint = "/raporlar/gelir_gider_aylik_ozet"
+        params = {"yil": yil}
+        try:
+            return self._make_api_request("GET", endpoint, params=params)
+        except ValueError as e:
+            logger.error(f"Aylık gelir/gider özeti alınırken hata: {e}")
+            return {"aylik_ozet": []} # Hata durumunda boş liste dön        

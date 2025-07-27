@@ -1,3 +1,4 @@
+# yardimcilar.py dosyasının içeriği 
 import locale
 from datetime import datetime
 import calendar
@@ -31,7 +32,6 @@ setup_locale()
 # ve sortByColumn metodu kullanılacağı için artık bu dosyada tutulmayacaktır.
 # Benzer şekilde, Tkinter'a özgü numeric_input ve date_entry fonksiyonları da kaldırılmıştır.
 
-# normalize_turkish_chars fonksiyonu, UI kütüphanesinden bağımsız olduğu için olduğu gibi kalır.
 def normalize_turkish_chars(text):
     """
     Metindeki Türkçe özel karakterleri İngilizce karşılıklarına dönüştürür.
@@ -52,6 +52,41 @@ def normalize_turkish_chars(text):
     for old, new in replacements.items():
         text = text.replace(old, new)
     return text
+
+def safe_float(value):
+    """
+    Verilen değeri güvenli bir şekilde float'a dönüştürür.
+    Geçersiz girişlerde 0.0 döndürür.
+    """
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            # Türkçe ondalık ayracı (virgül) kullanarak dönüştürme
+            return float(value.replace('.', '').replace(',', '.'))
+        except ValueError:
+            return 0.0
+    return 0.0
+
+def format_numeric_text(value, decimals=2):
+    """
+    Sayısal değeri Türkçe para birimi formatına dönüştürür.
+    Örnek: 1234.56 -> 1.234,56
+    """
+    if not isinstance(value, (int, float)):
+        # float'a güvenli dönüşüm yapalım
+        value = safe_float(value)
+
+    # locale.format_string kullanmak daha iyi ama bazı sistemlerde locale sorunu yaratıyor.
+    # Alternatif olarak f-string ile formatlayıp virgül/nokta değişimi yapabiliriz.
+    try:
+        # Önce İngiliz formatında float olarak al, sonra ondalık basamakları ayarla
+        formatted_value = f"{value:,.{decimals}f}"
+        # İngilizce formatı (nokta ondalık, virgül binlik) Türkçeye çevir
+        formatted_value = formatted_value.replace(",", "X").replace(".", ",").replace("X", ".")
+        return formatted_value
+    except (ValueError, TypeError):
+        return "0,00"
 
 class DatePickerDialog(QDialog):
     # Seçilen tarihi dışarıya bildirmek için bir sinyal tanımlıyoruz.

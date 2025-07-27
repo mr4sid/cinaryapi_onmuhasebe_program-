@@ -8,12 +8,14 @@ import multiprocessing
 import threading
 from datetime import datetime, date, timedelta
 import locale # Yeni: Sayısal formatlama için eklendi
+
 # PySide6 modülleri
 from PySide6.QtWidgets import (
     QWidget,QDialog, QLabel, QPushButton, QTabWidget, QMessageBox,
     QGridLayout, QVBoxLayout, QHBoxLayout, QFrame,
     QLineEdit, QMainWindow, QFileDialog, QComboBox, QTreeWidget, QTreeWidgetItem, QAbstractItemView,
-    QHeaderView, QTextEdit, QScrollArea, QMenu, QTableWidgetItem, QCheckBox, QListWidgetItem)
+    QHeaderView, QTextEdit, QScrollArea, QMenu, QTableWidgetItem, QCheckBox, QListWidget, QListWidgetItem)
+
 from PySide6.QtCore import Qt, QTimer, Signal # Qt.Align* için Qt, QTimer ve Signal
 from PySide6.QtGui import QIcon, QPixmap, QFont, QBrush, QColor, QDoubleValidator # QBrush, QColor, QDoubleValidator eklendi
 # Üçüncü Parti Kütüphaneler (PySide6 ile uyumlu olanlar kalır)
@@ -525,15 +527,19 @@ class StokYonetimiSayfasi(QWidget):
                 self.app.set_status_message(f"Hata: Stok listesi yüklenemedi. {e}", "red")
 
     def yeni_urun_ekle_penceresi(self):
+        logger.info("Yeni ürün ekle butonu tıklandı. StokKartiPenceresi açılmaya çalışılıyor.") # EKLENDİ
         try:
             dialog = StokKartiPenceresi(
                 self, self.db, self.stok_listesini_yenile,
                 urun_duzenle=None, app_ref=self.app
             )
+            logger.info("StokKartiPenceresi başarıyla oluşturuldu. exec() çağrılıyor.") # EKLENDİ
             dialog.exec()
+            logger.info("StokKartiPenceresi kapatıldı.") # EKLENDİ
         except Exception as e:
+            logger.error(f"Yeni ürün ekleme penceresi açılırken beklenmeyen bir hata oluştu: {e}", exc_info=True) # LOG TİPİ ERROR YAPILDI
             QMessageBox.critical(self, "Hata", f"Yeni ürün ekleme penceresi açılırken bir hata oluştu:\n{e}")
-        
+                    
     def secili_urun_duzenle(self):
             # Düzeltildi: stok_table_widget yerine tree kullanıldı
             selected_items = self.tree.selectedItems()
@@ -2479,11 +2485,13 @@ class BaseFaturaListesi(QWidget):
             offset = (self.mevcut_sayfa - 1) * self.kayit_sayisi_per_sayfa
             limit = self.kayit_sayisi_per_sayfa
 
-            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
+            # Düzeltildi: Arama terimi boşsa None olarak ayarla
+            arama_param = arama_terimi if arama_terimi else None
+
             response_data = self.db.fatura_listesi_al(
                 skip=offset,
                 limit=limit,
-                arama=arama_terimi,
+                arama=arama_param, # BURASI DEĞİŞTİ: boş string yerine None gönder
                 fatura_turu=fatura_tipi_filter_val,
                 baslangic_tarihi=bas_t,
                 bitis_tarihi=bit_t,
@@ -5783,7 +5791,7 @@ class OdemeSayfasi(BaseFinansalIslemSayfasi):
     def __init__(self, parent, db_manager, app_ref):
         super().__init__(parent, db_manager, app_ref, islem_tipi='ODEME')
 
-class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
+class RaporlamaMerkeziSayfasi(QWidget):
     def __init__(self, parent, db_manager, app_ref):
         super().__init__(parent)
         self.db = db_manager
@@ -5815,7 +5823,7 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
         
         takvim_button_bas = QPushButton("🗓️")
         takvim_button_bas.setFixedWidth(30)
-        takvim_button_bas.clicked.connect(lambda: DatePickerDialog(self.app, self.bas_tarih_entry))
+        takvim_button_bas.clicked.connect(lambda: self._open_date_picker(self.bas_tarih_entry))
         filter_control_layout.addWidget(takvim_button_bas)
 
         filter_control_layout.addWidget(QLabel("Bitiş Tarihi:"))
@@ -5825,7 +5833,7 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
         
         takvim_button_bit = QPushButton("🗓️")
         takvim_button_bit.setFixedWidth(30)
-        takvim_button_bit.clicked.connect(lambda: DatePickerDialog(self.app, self.bit_tarih_entry))
+        takvim_button_bit.clicked.connect(lambda: self._open_date_picker(self.bit_tarih_entry))
         filter_control_layout.addWidget(takvim_button_bit)
 
         rapor_olustur_yenile_button = QPushButton("Rapor Oluştur/Yenile")
@@ -5901,12 +5909,20 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
 
         # Diyaloğu modal olarak çalıştır
         dialog.exec()
-
+        
     def _draw_plot(self, parent_frame, canvas_obj, ax_obj, title, labels, values, plot_type='bar', colors=None, bar_width=0.8, rotation=0, show_legend=True, label_prefix="", show_labels_on_bars=False, tight_layout_needed=True, group_labels=None):
         # Mevcut grafiği temizle (eğer varsa)
         if canvas_obj:
             canvas_obj.deleteLater() # PySide6'da widget'ı silmek için deleteLater kullanılır
             plt.close(ax_obj.figure)
+
+        # parent_frame'in mevcut layout'unu kontrol edin ve gerekirse temizleyin
+        if parent_frame.layout():
+            for i in reversed(range(parent_frame.layout().count())):
+                widget_to_remove = parent_frame.layout().itemAt(i).widget()
+                if widget_to_remove:
+                    widget_to_remove.setParent(None)
+                    widget_to_remove.deleteLater()
 
         parent_width = parent_frame.width() # QWidget'ın genişliğini al
         parent_height = parent_frame.height() # QWidget'ın yüksekliğini al
@@ -5939,6 +5955,9 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
             ax.set_yticks([])
             
             canvas = FigureCanvas(fig) # PySide6 için FigureCanvas
+            # Parent frame'in layout'u kontrol edilmiş ve temizlenmiş olduğundan, doğrudan ekleyebiliriz
+            if parent_frame.layout() is None: # Layout yoksa oluştur
+                parent_frame.setLayout(QVBoxLayout())
             parent_frame.layout().addWidget(canvas) # Layout'a ekle
             canvas.draw()
             return canvas, ax
@@ -5995,6 +6014,9 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
             fig.tight_layout()
 
         canvas = FigureCanvas(fig) # PySide6 için FigureCanvas
+        # Parent frame'in layout'u kontrol edilmiş ve temizlenmiş olduğundan, doğrudan ekleyebiliriz
+        if parent_frame.layout() is None: # Layout yoksa oluştur
+            parent_frame.setLayout(QVBoxLayout())
         parent_frame.layout().addWidget(canvas) # Layout'a ekle
         canvas.draw()
 
@@ -6007,30 +6029,95 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
         parent_layout.setColumnStretch(1, 1)
         parent_layout.setRowStretch(1, 1) # Grafik dikeyde genişlesin
 
+        # --- Metrik Kartlar Bölümü ---
         metrics_frame = QFrame(parent_frame)
         metrics_layout = QGridLayout(metrics_frame)
         parent_layout.addWidget(metrics_frame, 0, 0, 1, 2) # Row 0, Col 0, span 1 row, 2 cols
-        metrics_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed) # Genişlesin, yükseklik sabit
+        metrics_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
-        for i in range(4): # 4 metrik için
+        for i in range(6): # Daha fazla metrik için 6 sütun
             metrics_layout.setColumnStretch(i, 1)
 
-        self.card_total_sales = self._create_metric_card(metrics_frame, "Toplam Satış (KDV Dahil)", "0.00 TL", "sales")
-        metrics_layout.addWidget(self.card_total_sales, 0, 0)
+        # Metrik Kartları Oluşturma ve İsimlendirme (lbl_metric_ ile başlıyor)
+        self.card_total_sales = self._create_metric_card(metrics_frame, "Toplam Satış (KDV Dahil)", "0.00 TL", "total_sales")
+        metrics_layout.addWidget(self.card_total_sales, 0, 0) # lbl_metric_total_sales
 
-        self.card_total_collections = self._create_metric_card(metrics_frame, "Toplam Tahsilat", "0.00 TL", "collections")
-        metrics_layout.addWidget(self.card_total_collections, 0, 1)
+        self.card_total_purchases = self._create_metric_card(metrics_frame, "Toplam Alış (KDV Dahil)", "0.00 TL", "total_purchases")
+        metrics_layout.addWidget(self.card_total_purchases, 0, 1) # lbl_metric_total_purchases
 
-        self.card_total_payments = self._create_metric_card(metrics_frame, "Toplam Ödeme", "0.00 TL", "payments")
-        metrics_layout.addWidget(self.card_total_payments, 0, 2)
+        self.card_total_collections = self._create_metric_card(metrics_frame, "Toplam Tahsilat", "0.00 TL", "total_collections")
+        metrics_layout.addWidget(self.card_total_collections, 0, 2) # lbl_metric_total_collections
 
-        self.card_net_cash_flow = self._create_metric_card(metrics_frame, "Net Nakit Akışı", "0.00 TL", "net_cash")
-        metrics_layout.addWidget(self.card_net_cash_flow, 0, 3)
+        self.card_total_payments = self._create_metric_card(metrics_frame, "Toplam Ödeme", "0.00 TL", "total_payments")
+        metrics_layout.addWidget(self.card_total_payments, 0, 3) # lbl_metric_total_payments
 
+        self.card_approaching_receivables = self._create_metric_card(metrics_frame, "Vadesi Yaklaşan Alacaklar", "0.00 TL", "approaching_receivables")
+        metrics_layout.addWidget(self.card_approaching_receivables, 0, 4) # lbl_metric_approaching_receivables
+
+        self.card_overdue_payables = self._create_metric_card(metrics_frame, "Vadesi Geçmiş Borçlar", "0.00 TL", "overdue_payables")
+        metrics_layout.addWidget(self.card_overdue_payables, 0, 5) # lbl_metric_overdue_payables
+
+        # --- Finansal Özetler Bölümü ---
+        summary_frame = QFrame(parent_frame)
+        summary_layout = QGridLayout(summary_frame)
+        parent_layout.addWidget(summary_frame, 1, 0) # Row 1, Col 0
+        summary_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        summary_layout.addWidget(QLabel("Dönemlik Finansal Özetler", font=QFont("Segoe UI", 12, QFont.Bold)), 0, 0, 1, 2)
+
+        summary_layout.addWidget(QLabel("Dönem Gelirleri:", font=QFont("Segoe UI", 10, QFont.Bold)), 1, 0)
+        self.lbl_genel_bakis_donem_gelir = QLabel("0.00 TL")
+        summary_layout.addWidget(self.lbl_genel_bakis_donem_gelir, 1, 1)
+
+        summary_layout.addWidget(QLabel("Dönem Giderleri:", font=QFont("Segoe UI", 10, QFont.Bold)), 2, 0)
+        self.lbl_genel_bakis_donem_gider = QLabel("0.00 TL")
+        summary_layout.addWidget(self.lbl_genel_bakis_donem_gider, 2, 1)
+
+        summary_layout.addWidget(QLabel("Brüt Kâr:", font=QFont("Segoe UI", 10, QFont.Bold)), 3, 0)
+        self.lbl_genel_bakis_brut_kar = QLabel("0.00 TL")
+        summary_layout.addWidget(self.lbl_genel_bakis_brut_kar, 3, 1)
+        
+        summary_layout.addWidget(QLabel("Net Kâr:", font=QFont("Segoe UI", 10, QFont.Bold)), 4, 0)
+        self.lbl_genel_bakis_net_kar = QLabel("0.00 TL")
+        summary_layout.addWidget(self.lbl_genel_bakis_net_kar, 4, 1)
+
+        summary_layout.addWidget(QLabel("Nakit Girişleri:", font=QFont("Segoe UI", 10, QFont.Bold)), 5, 0)
+        self.lbl_genel_bakis_nakit_girisleri = QLabel("0.00 TL")
+        summary_layout.addWidget(self.lbl_genel_bakis_nakit_girisleri, 5, 1)
+
+        summary_layout.addWidget(QLabel("Nakit Çıkışları:", font=QFont("Segoe UI", 10, QFont.Bold)), 6, 0)
+        self.lbl_genel_bakis_nakit_cikislar = QLabel("0.00 TL")
+        summary_layout.addWidget(self.lbl_genel_bakis_nakit_cikislar, 6, 1)
+        
+        summary_layout.addWidget(QLabel("Net Nakit Akışı:", font=QFont("Segoe UI", 10, QFont.Bold)), 7, 0)
+        self.lbl_genel_bakis_net_nakit_akisi = QLabel("0.00 TL")
+        summary_layout.addWidget(self.lbl_genel_bakis_net_nakit_akisi, 7, 1)
+
+        summary_layout.setRowStretch(8, 1) # Boş alan dikeyde genişlesin
+
+        # --- Sağ Panel - Ek Bilgiler ve Listeler ---
+        right_panel = QFrame(parent_frame)
+        right_panel_layout = QVBoxLayout(right_panel)
+        parent_layout.addWidget(right_panel, 1, 1) # Row 1, Col 1
+        right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        right_panel_layout.addWidget(QLabel("Kasa/Banka Bakiyeleri", font=QFont("Segoe UI", 12, QFont.Bold)))
+        self.kasa_banka_list_widget = QListWidget()
+        right_panel_layout.addWidget(self.kasa_banka_list_widget)
+
+        right_panel_layout.addWidget(QLabel("En Çok Satan Ürünler", font=QFont("Segoe UI", 12, QFont.Bold)))
+        self.en_cok_satan_urunler_list_widget = QListWidget()
+        right_panel_layout.addWidget(self.en_cok_satan_urunler_list_widget)
+
+        right_panel_layout.addWidget(QLabel("Kritik Stok Ürünleri", font=QFont("Segoe UI", 12, QFont.Bold)))
+        self.kritik_stok_urunler_list_widget = QListWidget()
+        right_panel_layout.addWidget(self.kritik_stok_urunler_list_widget)
+
+        # --- Grafik Alanı ---
         self.genel_bakis_grafik_frame = QFrame(parent_frame)
-        self.genel_bakis_grafik_layout = QVBoxLayout(self.genel_bakis_grafik_frame) # Grafik çerçevesi layout'u
+        self.genel_bakis_grafik_layout = QVBoxLayout(self.genel_bakis_grafik_frame)
         self.genel_bakis_grafik_layout.addWidget(QLabel("Aylık Finansal Trendler (Satış, Gelir, Gider)", font=QFont("Segoe UI", 10, QFont.Bold)), alignment=Qt.AlignLeft)
-        parent_layout.addWidget(self.genel_bakis_grafik_frame, 1, 0, 1, 2) # Row 1, Col 0, span 1 row, 2 cols
+        parent_layout.addWidget(self.genel_bakis_grafik_frame, 2, 0, 1, 2) # Row 2, Col 0, span 1 row, 2 cols (Grafik en altta)
         self.genel_bakis_grafik_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.canvas_genel_bakis_main_plot = None
@@ -6059,7 +6146,7 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
         setattr(self, f"lbl_metric_{card_type}", value_label)
 
         return card_frame
-            
+                
     def _create_satis_raporlari_tab(self, parent_frame):
         parent_layout = QGridLayout(parent_frame)
         parent_layout.setColumnStretch(0, 2)
@@ -6444,37 +6531,31 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
             toplam_alislar = dashboard_summary.get("toplam_alislar", 0.0)
             toplam_tahsilatlar = dashboard_summary.get("toplam_tahsilatlar", 0.0)
             toplam_odemeler = dashboard_summary.get("toplam_odemeler", 0.0)
+            vadesi_yaklasan_alacaklar_toplami = dashboard_summary.get("vadesi_yaklasan_alacaklar_toplami", 0.0)
+            vadesi_gecmis_borclar_toplami = dashboard_summary.get("vadesi_gecmis_borclar_toplami", 0.0)
+            kritik_stok_sayisi = dashboard_summary.get("kritik_stok_sayisi", 0)
+            en_cok_satan_urunler = dashboard_summary.get("en_cok_satan_urunler", [])
 
             # Genel bakış metriklerini güncelle
-            self.lbl_toplam_satislar.setText(self.db._format_currency(toplam_satislar))
-            self.lbl_toplam_alislar.setText(self.db._format_currency(toplam_alislar))
-            self.lbl_toplam_tahsilatlar.setText(self.db._format_currency(toplam_tahsilatlar))
-            self.lbl_toplam_odemeler.setText(self.db._format_currency(toplam_odemeler))
+            self.lbl_metric_total_sales.setText(self.db._format_currency(toplam_satislar))
+            self.lbl_metric_total_purchases.setText(self.db._format_currency(toplam_alislar)) # Yeni metrik
+            self.lbl_metric_total_collections.setText(self.db._format_currency(toplam_tahsilatlar))
+            self.lbl_metric_total_payments.setText(self.db._format_currency(toplam_odemeler))
+            self.lbl_metric_approaching_receivables.setText(self.db._format_currency(vadesi_yaklasan_alacaklar_toplami)) # Yeni metrik
+            self.lbl_metric_overdue_payables.setText(self.db._format_currency(vadesi_gecmis_borclar_toplami)) # Yeni metrik
 
-            # Kar/Zarar verilerini çek
-            # Düzeltildi: get_kar_zarar_verileri metodu bir sözlük döndürür, bu yüzden doğrudan açılmaz.
+            # Kâr/Zarar verilerini çek
             kar_zarar_data = self.db.get_kar_zarar_verileri(bas_t_str, bit_t_str)
-            donem_gelir = kar_zarar_data.get("diger_gelirler", 0.0) # Varsayımsal olarak bu alanlar kullanıldı
-            donem_gider = kar_zarar_data.get("diger_giderler", 0.0) # Varsayımsal olarak bu alanlar kullanıldı
-            brut_kar = kar_zarar_data.get("brut_kar", 0.0)
-            net_kar = kar_zarar_data.get("net_kar", 0.0)
-
-            # Kar/Zarar bilgilerini güncelle
-            self.lbl_donem_gelir.setText(self.db._format_currency(donem_gelir))
-            self.lbl_donem_gider.setText(self.db._format_currency(donem_gider))
-            self.lbl_brut_kar.setText(self.db._format_currency(brut_kar))
-            self.lbl_net_kar.setText(self.db._format_currency(net_kar))
+            self.lbl_genel_bakis_donem_gelir.setText(self.db._format_currency(kar_zarar_data.get("diger_gelirler", 0.0)))
+            self.lbl_genel_bakis_donem_gider.setText(self.db._format_currency(kar_zarar_data.get("diger_giderler", 0.0)))
+            self.lbl_genel_bakis_brut_kar.setText(self.db._format_currency(kar_zarar_data.get("brut_kar", 0.0)))
+            self.lbl_genel_bakis_net_kar.setText(self.db._format_currency(kar_zarar_data.get("net_kar", 0.0)))
 
             # Nakit Akışı verilerini çek
             nakit_akis_data = self.db.get_nakit_akisi_verileri(bas_t_str, bit_t_str)
-            nakit_girisleri = nakit_akis_data.get("nakit_girisleri", 0.0)
-            nakit_cikislar = nakit_akis_data.get("nakit_cikislar", 0.0)
-            net_nakit_akisi = nakit_akis_data.get("net_nakit_akisi", 0.0)
-
-            # Nakit Akışı bilgilerini güncelle
-            self.lbl_nakit_girisleri.setText(self.db._format_currency(nakit_girisleri))
-            self.lbl_nakit_cikislar.setText(self.db._format_currency(nakit_cikislar))
-            self.lbl_net_nakit_akisi.setText(self.db._format_currency(net_nakit_akisi))
+            self.lbl_genel_bakis_nakit_girisleri.setText(self.db._format_currency(nakit_akis_data.get("nakit_girisleri", 0.0)))
+            self.lbl_genel_bakis_nakit_cikislar.setText(self.db._format_currency(nakit_akis_data.get("nakit_cikislar", 0.0)))
+            self.lbl_genel_bakis_net_nakit_akisi.setText(self.db._format_currency(nakit_akis_data.get("net_nakit_akisi", 0.0)))
 
             # Kasa/Banka bakiyeleri
             kasa_banka_bakiyeleri = self.db.get_tum_kasa_banka_bakiyeleri()
@@ -6485,7 +6566,6 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
                     hesap_adi = hesap.get("hesap_adi")
                     item_text = f"{hesap_adi}: {self.db._format_currency(bakiye)}"
                     item = QListWidgetItem(item_text)
-                    # Bakiyeye göre renk ayarı
                     if bakiye < 0:
                         item.setForeground(QBrush(QColor("red")))
                     self.kasa_banka_list_widget.addItem(item)
@@ -6493,12 +6573,9 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
                 self.kasa_banka_list_widget.addItem("Kasa/Banka Bakiyesi Bulunamadı.")
 
             # En çok satan ürünler (API'den geliyor)
-            top_selling_products = self.db.get_top_selling_products(bas_t_str, bit_t_str, limit=5)
             self.en_cok_satan_urunler_list_widget.clear()
-            if top_selling_products:
-                for urun in top_selling_products:
-                    # 'urun_adi' yerine 'ad' kullanıldı, 'satis_miktari' yerine 'toplam_miktar' kullanıldı.
-                    # API modellerine göre uyarlanmalı.
+            if en_cok_satan_urunler: # Dashboard summary'den gelen data
+                for urun in en_cok_satan_urunler:
                     item_text = f"{urun.get('ad', 'Bilinmeyen Ürün')} ({urun.get('toplam_miktar', 0):.0f} adet)"
                     self.en_cok_satan_urunler_list_widget.addItem(item_text)
             else:
@@ -6517,13 +6594,30 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
                 self.kritik_stok_urunler_list_widget.addItem("Kritik stok altında ürün bulunamadı.")
 
             # Grafikleri güncelle
-            self._update_all_charts(bas_t_str, bit_t_str)
+            # aylik_gelir_gider_ozet is needed for the plot
+            aylik_gelir_gider_ozet_data = self.db.get_gelir_gider_aylik_ozet(datetime.strptime(bas_t_str, '%Y-%m-%d').year)
+
+            aylar_labels = [item.get('ay_adi') for item in aylik_gelir_gider_ozet_data.get('aylik_ozet', [])]
+            toplam_gelirler = [item.get('toplam_gelir') for item in aylik_gelir_gider_ozet_data.get('aylik_ozet', [])]
+            toplam_giderler = [item.get('toplam_gider') for item in aylik_gelir_gider_ozet_data.get('aylik_ozet', [])]
+
+            self.canvas_genel_bakis_main_plot, self.ax_genel_bakis_main_plot = self._draw_plot(
+                self.genel_bakis_grafik_frame,
+                self.canvas_genel_bakis_main_plot,
+                self.ax_genel_bakis_main_plot,
+                "Aylık Finansal Trendler (Gelir ve Gider)",
+                aylar_labels,
+                [toplam_gelirler, toplam_giderler],
+                plot_type='grouped_bar',
+                group_labels=['Toplam Gelir', 'Toplam Gider'],
+                colors=['mediumseagreen', 'indianred'],
+                rotation=45
+            )
 
         except Exception as e:
             logger.error(f"Genel bakış sekmesi güncellenirken hata: {e}", exc_info=True)
             QMessageBox.critical(self, "Hata", f"Genel bakış sekmesi yüklenirken bir hata oluştu:\n{e}")
             
-
     def _update_satis_raporlari_tab(self, bas_t_str, bit_t_str):
         self.tree_satis_detay.clear() # QTreeWidget'ı temizle
 
@@ -6566,7 +6660,7 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
 
         top_selling_products = self.db.get_top_selling_products(bas_t_str, bit_t_str, limit=5)
         # API'den gelen liste elemanları dictionary ise
-        plot_labels_top_satan = [item.get('urun_adi') for item in top_selling_products]
+        plot_labels_top_satan = [item.get('ad') for item in top_selling_products] # 'urun_adi' yerine 'ad'
         plot_values_top_satan = [item.get('toplam_miktar') for item in top_selling_products]
 
         self.canvas_en_cok_satan, self.ax_en_cok_satan = self._draw_plot(
@@ -6576,8 +6670,11 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
             "En Çok Satan Ürünler (Miktar)",
             plot_labels_top_satan, plot_values_top_satan, plot_type='bar', rotation=30, show_labels_on_bars=True
         )
-        
+
     def _update_kar_zarar_tab(self, bas_t_str, bit_t_str):
+        # Bu metodun çağrıldığı yerde 'lbl_brut_kar', 'lbl_cogs', 'lbl_brut_kar_orani' zaten tanımlıdır.
+        # Bu yüzden burada tekrar tanımlanmasına gerek yoktur.
+        
         gross_profit, cogs, gross_profit_rate = self.db.get_gross_profit_and_cost(bas_t_str, bit_t_str)
         self.lbl_brut_kar.setText(self.db._format_currency(gross_profit))
         self.lbl_cogs.setText(self.db._format_currency(cogs))
@@ -6695,14 +6792,14 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
         self.cari_yaslandirma_data = self.db.get_cari_yaslandirma_verileri(bit_t_str)
 
         self.tree_cari_yaslandirma_alacak.clear() # QTreeWidget'ı temizle
-        self._populate_yaslandirma_treeview(self.tree_cari_yaslandirma_alacak, self.cari_yaslandirma_data.get('musteri_alacaklari', {}))
-
+        self._populate_yaslandirma_treeview(self.tree_cari_yaslandirma_alacak, self.cari_yaslandirma_data.get('musteri_alacaklar', {})) # musteri_alacaklar
+        
         self.tree_cari_yaslandirma_borc.clear() # QTreeWidget'ı temizle
-        self._populate_yaslandirma_treeview(self.tree_cari_yaslandirma_borc, self.cari_yaslandirma_data.get('tedarikci_borclari', {}))
+        self._populate_yaslandirma_treeview(self.tree_cari_yaslandirma_borc, self.cari_yaslandirma_data.get('tedarikci_borclar', {})) # tedarikci_borclar
 
         # Sum işlemleri için de .get() kullan
-        toplam_alacak = sum(item.get('tutar', 0.0) for group in self.cari_yaslandirma_data.get('musteri_alacaklari', {}).values() for item in group)
-        toplam_borc = sum(item.get('tutar', 0.0) for group in self.cari_yaslandirma_data.get('tedarikci_borclari', {}).values() for item in group)
+        toplam_alacak = sum(item.get('bakiye', 0.0) for item in self.cari_yaslandirma_data.get('musteri_alacaklar', []) if isinstance(item, dict))
+        toplam_borc = sum(item.get('bakiye', 0.0) for item in self.cari_yaslandirma_data.get('tedarikci_borclar', []) if isinstance(item, dict))
         net_bakiye_cari = toplam_alacak - toplam_borc
 
         self.lbl_toplam_alacak_cari.setText(f"Toplam Alacak: {self.db._format_currency(toplam_alacak)}")
@@ -6711,9 +6808,18 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
 
     def _populate_yaslandirma_treeview(self, tree, data_dict):
         # Clear existing items is handled by the caller
-        for period, items in data_dict.items():
+        if not data_dict: # Eğer veri boşsa
             header_item = QTreeWidgetItem(tree)
-            header_item.setText(0, f"--- {period} Gün ---")
+            header_item.setText(0, "Veri Bulunamadı")
+            for col_idx in range(tree.columnCount()):
+                header_item.setForeground(col_idx, QBrush(QColor("gray")))
+            return
+
+        # data_dict artık { '0-30': [item1, ...], '31-60': [...] } formatında bekleniyor.
+        # Bu yüzden dict.values() yerine dict.items() ile key'leri de alıyoruz.
+        for period_key, items in data_dict.items():
+            header_item = QTreeWidgetItem(tree)
+            header_item.setText(0, f"--- {period_key} Gün ---") # Period key'i kullan (örn: '0-30', '31-60')
             header_item.setFont(0, QFont("Segoe UI", 9, QFont.Bold))
             for col_idx in range(tree.columnCount()):
                 header_item.setBackground(col_idx, QBrush(QColor("#E0E0E0"))) # Arka plan
@@ -6722,13 +6828,32 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
             if items:
                 for item in items: # item: dictionary olmalı
                     child_item = QTreeWidgetItem(header_item)
-                    child_item.setText(0, item.get('cari_adi', '')) # Cari Adı
-                    child_item.setText(1, self.db._format_currency(item.get('tutar', 0.0))) # Tutar
-                    child_item.setText(2, str(item.get('vadesi_gecen_gun', ''))) # Vadesi Geçen Gün
+                    child_item.setText(0, item.get('cari_ad', '')) # Cari Adı
+                    child_item.setText(1, self.db._format_currency(item.get('bakiye', 0.0))) # Tutar (bakiyeyi kullan)
+                    
+                    # 'vadesi_gecen_gun' doğrudan API'den gelmeyebilir, client'ta hesaplanır veya None olabilir
+                    # Bu nedenle, basitçe boş bırakabiliriz veya bir placeholder koyabiliriz.
+                    vade_tarihi = item.get('vade_tarihi')
+                    if vade_tarihi:
+                        try:
+                            # Tarih string ise datetime objesine çevir
+                            if isinstance(vade_tarihi, str):
+                                vade_tarihi = datetime.strptime(vade_tarihi, '%Y-%m-%d').date()
+                            
+                            # Vadesi geçen gün sayısını hesapla
+                            delta = (date.today() - vade_tarihi).days
+                            if delta > 0:
+                                child_item.setText(2, f"{delta} gün")
+                            else:
+                                child_item.setText(2, "-") # Vadesi geçmemişse
+                        except (ValueError, TypeError):
+                            child_item.setText(2, "-") # Tarih formatı hatalıysa
+                    else:
+                        child_item.setText(2, "-") # Vade tarihi yoksa
 
                     # Sayısal sütunlar için sıralama anahtarları
-                    child_item.setData(1, Qt.UserRole, item.get('tutar', 0.0)) # Tutar
-                    child_item.setData(2, Qt.UserRole, item.get('vadesi_gecen_gun', 0)) # Vadesi Geçen Gün
+                    child_item.setData(1, Qt.UserRole, item.get('bakiye', 0.0)) # Tutar
+                    child_item.setData(2, Qt.UserRole, delta if vade_tarihi and delta > 0 else 0) # Vadesi Geçen Gün (sıralanabilir sayı)
             else:
                 child_item = QTreeWidgetItem(header_item)
                 child_item.setText(0, "Bu Kategori Boş")
@@ -6740,25 +6865,24 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
     def _update_stok_raporlari_tab(self, bas_t_str, bit_t_str):
         self.tree_stok_envanter.clear() # QTreeWidget'ı temizle
 
-        all_stock_items = self.db.stok_listesi_al() # limit ve offset parametreleri yok
-        # API'de musteri_listesi_al() ve tedarikci_listesi_al() gibi stok_listesi_al() da limit/offset alabilir
-        # veya tümünü çeker. Burada tüm stokları çekmesini bekliyoruz.
+        all_stock_items_response = self.db.stok_listesi_al(aktif_durum=True, limit=10000) # Tüm aktif stokları çek
+        all_stock_items = all_stock_items_response.get("items", []) # 'items' anahtarından listeyi al
 
         if all_stock_items:
             for item in all_stock_items: # item: dictionary olmalı
                 item_qt = QTreeWidgetItem(self.tree_stok_envanter)
-                item_qt.setText(0, item.get('urun_kodu', ''))
-                item_qt.setText(1, item.get('urun_adi', ''))
-                item_qt.setText(2, f"{item.get('stok_miktari', 0.0):.2f}".rstrip('0').rstrip('.'))
-                item_qt.setText(3, self.db._format_currency(item.get('alis_fiyati_kdv_dahil', 0.0)))
-                item_qt.setText(4, self.db._format_currency(item.get('satis_fiyati_kdv_dahil', 0.0)))
+                item_qt.setText(0, item.get('kod', '')) # 'urun_kodu' yerine 'kod'
+                item_qt.setText(1, item.get('ad', '')) # 'urun_adi' yerine 'ad'
+                item_qt.setText(2, f"{item.get('miktar', 0.0):.2f}".rstrip('0').rstrip('.'))
+                item_qt.setText(3, self.db._format_currency(item.get('alis_fiyati', 0.0))) # 'alis_fiyati_kdv_dahil' yerine 'alis_fiyati'
+                item_qt.setText(4, self.db._format_currency(item.get('satis_fiyati', 0.0))) # 'satis_fiyati_kdv_dahil' yerine 'satis_fiyati'
                 item_qt.setText(5, f"{item.get('kdv_orani', 0.0):.0f}%")
                 item_qt.setText(6, f"{item.get('min_stok_seviyesi', 0.0):.2f}".rstrip('0').rstrip('.'))
 
                 # Sayısal sütunlar için sıralama anahtarları
-                item_qt.setData(2, Qt.UserRole, item.get('stok_miktari', 0.0))
-                item_qt.setData(3, Qt.UserRole, item.get('alis_fiyati_kdv_dahil', 0.0))
-                item_qt.setData(4, Qt.UserRole, item.get('satis_fiyati_kdv_dahil', 0.0))
+                item_qt.setData(2, Qt.UserRole, item.get('miktar', 0.0))
+                item_qt.setData(3, Qt.UserRole, item.get('alis_fiyati', 0.0))
+                item_qt.setData(4, Qt.UserRole, item.get('satis_fiyati', 0.0))
                 item_qt.setData(5, Qt.UserRole, item.get('kdv_orani', 0.0))
                 item_qt.setData(6, Qt.UserRole, item.get('min_stok_seviyesi', 0.0))
         else:
@@ -6766,10 +6890,14 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
             item_qt.setText(2, "Veri Yok")
 
 
-        critical_items = self.db.get_critical_stock_items()
+        critical_items = self.db.get_critical_stock_items() # API'den gelen liste
+        
+        # Sadece aktif ürünleri sayıyoruz
+        num_critical_stock = len(critical_items)
+        num_normal_stock = len(all_stock_items) - num_critical_stock
 
         labels_kritik = ["Kritik Stokta", "Normal Stokta"]
-        values_kritik = [len(critical_items), len(all_stock_items) - len(critical_items)]
+        values_kritik = [num_critical_stock, num_normal_stock]
 
         self.canvas_stok_kritik, self.ax_stok_kritik = self._draw_plot(
             self.stok_kritik_grafik_frame,
@@ -6779,10 +6907,11 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
             labels_kritik, values_kritik, plot_type='pie', colors=['indianred', 'lightgreen']
         )
 
-        stock_value_by_category = self.db.get_stock_value_by_category()
-        # API'den gelen liste elemanları dictionary ise
-        labels_kategori = [item.get('kategori_adi') for item in stock_value_by_category]
-        values_kategori = [item.get('toplam_deger') for item in stock_value_by_category]
+        stock_value_by_category_response = self.db.get_stock_value_by_category() # API'den gelen liste
+        stock_value_by_category = stock_value_by_category_response.get("items", []) # items anahtarı
+
+        labels_kategori = [item.get('kategori_adi') for item in stock_value_by_category if item.get('kategori_adi')]
+        values_kategori = [item.get('toplam_deger') for item in stock_value_by_category if item.get('kategori_adi')]
 
         self.canvas_stok_kategori, self.ax_stok_kategori = self._draw_plot(
             self.stok_kategori_dagilim_frame,
@@ -6862,7 +6991,7 @@ class RaporlamaMerkeziSayfasi(QWidget): # ttk.Frame yerine QWidget
                 self.app.set_status_message(f"Hata: Rapor Excel'e aktarma - {e}")
         else:
             self.app.set_status_message("Excel kaydetme işlemi iptal edildi.")
-                
+                            
 class GelirGiderSayfasi(QWidget): # ttk.Frame yerine QWidget
     def __init__(self, parent, db_manager, app_ref):
         super().__init__(parent)

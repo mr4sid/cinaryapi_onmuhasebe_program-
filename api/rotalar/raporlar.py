@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, extract, case
-from datetime import date, timedelta
+from datetime import date, timedelta # timedelta eklendi
 from .. import modeller, semalar
 from ..veritabani import get_db
 from .musteriler import calculate_cari_net_bakiye # Musteriler router'dan helper fonksiyonu import et
@@ -9,19 +9,7 @@ from .tedarikciler import calculate_cari_net_bakiye as calculate_tedarikci_net_b
 
 router = APIRouter(prefix="/raporlar", tags=["Raporlar"])
 
-# api.zip/rotalar/raporlar.py dosyası içinde get_dashboard_ozet_endpoint metodunun tamamı:
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
-from datetime import date, datetime, timedelta
-from typing import Optional, List
-
-from .. import modeller, semalar
-from ..veritabani import get_db
-
-router = APIRouter(prefix="/raporlar", tags=["Raporlar"])
-
-@router.get("/dashboard_ozet", response_model=modeller.PanoOzetiYanit) # Düzeltildi: DashboardOzetiResponse yerine PanoOzetiYanit
+@router.get("/dashboard_ozet", response_model=modeller.PanoOzetiYanit)
 def get_dashboard_ozet_endpoint(
     baslangic_tarihi: date = Query(None, description="Başlangıç tarihi (YYYY-MM-DD)"),
     bitis_tarihi: date = Query(None, description="Bitiş tarihi (YYYY-MM-DD)"),
@@ -29,33 +17,27 @@ def get_dashboard_ozet_endpoint(
 ):
     query_fatura = db.query(semalar.Fatura)
     query_gelir_gider = db.query(semalar.GelirGider)
-    query_cari_hareket = db.query(semalar.CariHareket)
-    query_stok_hareket = db.query(semalar.StokHareket)
     query_stok = db.query(semalar.Stok)
 
     # Tarih filtrelerini uygula
     if baslangic_tarihi:
         query_fatura = query_fatura.filter(semalar.Fatura.tarih >= baslangic_tarihi)
         query_gelir_gider = query_gelir_gider.filter(semalar.GelirGider.tarih >= baslangic_tarihi)
-        query_cari_hareket = query_cari_hareket.filter(semalar.CariHareket.tarih >= baslangic_tarihi)
-        query_stok_hareket = query_stok_hareket.filter(semalar.StokHareket.tarih >= baslangic_tarihi)
     if bitis_tarihi:
         query_fatura = query_fatura.filter(semalar.Fatura.tarih <= bitis_tarihi)
         query_gelir_gider = query_gelir_gider.filter(semalar.GelirGider.tarih <= bitis_tarihi)
-        query_cari_hareket = query_cari_hareket.filter(semalar.CariHareket.tarih <= bitis_tarihi)
-        query_stok_hareket = query_stok_hareket.filter(semalar.StokHareket.tarih <= bitis_tarihi)
 
     # Toplam Satışlar (KDV Dahil)
-    toplam_satislar = query_fatura.filter(semalar.Fatura.fatura_turu == "SATIŞ").with_entities(func.sum(semalar.Fatura.toplam_kdv_dahil)).scalar() or 0.0
+    toplam_satislar = query_fatura.filter(semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS).with_entities(func.sum(semalar.Fatura.toplam_kdv_dahil)).scalar() or 0.0
 
     # Toplam Alışlar (KDV Dahil)
-    toplam_alislar = query_fatura.filter(semalar.Fatura.fatura_turu == "ALIŞ").with_entities(func.sum(semalar.Fatura.toplam_kdv_dahil)).scalar() or 0.0
+    toplam_alislar = query_fatura.filter(semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS).with_entities(func.sum(semalar.Fatura.toplam_kdv_dahil)).scalar() or 0.0
 
-    # Toplam Tahsilatlar (Cari hareketlerden veya direkt kasa/banka girişlerinden)
-    toplam_tahsilatlar = query_gelir_gider.filter(semalar.GelirGider.tip == "GELİR").with_entities(func.sum(semalar.GelirGider.tutar)).scalar() or 0.0
+    # Toplam Tahsilatlar (Gelir/Gider tablosundan GELİR olarak işaretlenmişler)
+    toplam_tahsilatlar = query_gelir_gider.filter(semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR).with_entities(func.sum(semalar.GelirGider.tutar)).scalar() or 0.0
 
-    # Toplam Ödemeler (Cari hareketlerden veya direkt kasa/banka çıkışlarından)
-    toplam_odemeler = query_gelir_gider.filter(semalar.GelirGider.tip == "GİDER").with_entities(func.sum(semalar.GelirGider.tutar)).scalar() or 0.0
+    # Toplam Ödemeler (Gelir/Gider tablosundan GİDER olarak işaretlenmişler)
+    toplam_odemeler = query_gelir_gider.filter(semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER).with_entities(func.sum(semalar.GelirGider.tutar)).scalar() or 0.0
 
     # En Çok Satan Ürünler (miktar bazında)
     en_cok_satan_urunler_query = db.query(
@@ -66,7 +48,7 @@ def get_dashboard_ozet_endpoint(
     ).join(
         semalar.Fatura, semalar.FaturaKalemi.fatura_id == semalar.Fatura.id
     ).filter(
-        semalar.Fatura.fatura_turu == "SATIŞ"
+        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS
     )
     if baslangic_tarihi:
         en_cok_satan_urunler_query = en_cok_satan_urunler_query.filter(semalar.Fatura.tarih >= baslangic_tarihi)
@@ -89,13 +71,32 @@ def get_dashboard_ozet_endpoint(
         semalar.Stok.miktar <= semalar.Stok.min_stok_seviyesi
     ).count()
 
+    # Vadesi Yaklaşan Alacaklar Toplamı
+    today = date.today()
+    # Şu anki tarihten 30 gün sonrasına kadar olan satış faturalarından alacaklar
+    vadesi_yaklasan_alacaklar_toplami = db.query(func.sum(semalar.Fatura.toplam_kdv_dahil)).filter(
+        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
+        semalar.Fatura.vade_tarihi >= today,
+        semalar.Fatura.vade_tarihi <= (today + timedelta(days=30))
+    ).scalar() or 0.0
+
+    # Vadesi Geçmiş Borçlar Toplamı
+    # Şu anki tarihten öncesi olan alış faturalarından borçlar
+    vadesi_gecmis_borclar_toplami = db.query(func.sum(semalar.Fatura.toplam_kdv_dahil)).filter(
+        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS,
+        semalar.Fatura.vade_tarihi < today
+    ).scalar() or 0.0
+
+
     return {
         "toplam_satislar": toplam_satislar,
         "toplam_alislar": toplam_alislar,
         "toplam_tahsilatlar": toplam_tahsilatlar,
         "toplam_odemeler": toplam_odemeler,
         "kritik_stok_sayisi": kritik_stok_sayisi,
-        "en_cok_satan_urunler": formatted_top_sellers
+        "en_cok_satan_urunler": formatted_top_sellers,
+        "vadesi_yaklasan_alacaklar_toplami": vadesi_yaklasan_alacaklar_toplami, # Eklendi
+        "vadesi_gecmis_borclar_toplami": vadesi_gecmis_borclar_toplami # Eklendi
     }
 
 @router.get("/satislar_detayli_rapor", response_model=modeller.FaturaListResponse)
@@ -106,7 +107,7 @@ def get_satislar_detayli_rapor_endpoint(
     db: Session = Depends(get_db)
 ):
     query = db.query(semalar.Fatura).filter(
-        semalar.Fatura.fatura_turu == "SATIŞ",
+        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
         semalar.Fatura.tarih >= baslangic_tarihi,
         semalar.Fatura.tarih <= bitis_tarihi
     ).order_by(semalar.Fatura.tarih.desc())
@@ -126,8 +127,8 @@ def get_kar_zarar_verileri_endpoint(
     db: Session = Depends(get_db)
 ):
     # Toplam Satış Geliri
-    toplam_satis_geliri = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
-        semalar.Fatura.fatura_turu == "SATIŞ",
+    toplam_satis_geliri = db.query(func.sum(semalar.Fatura.toplam_kdv_dahil)).filter( # genel_toplam yerine toplam_kdv_dahil kullanıldı
+        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
         semalar.Fatura.tarih >= baslangic_tarihi,
         semalar.Fatura.tarih <= bitis_tarihi
     ).scalar() or 0.0
@@ -135,34 +136,31 @@ def get_kar_zarar_verileri_endpoint(
     # Toplam Satış Maliyeti (satılan ürünlerin alış maliyeti)
     # Her fatura kalemindeki ürünün alış fiyatı ile miktarını çarpıp topluyoruz
     toplam_satis_maliyeti = db.query(
-        func.sum(semalar.FaturaKalemi.miktar * semalar.Stok.alis_fiyati_kdv_dahil)
+        func.sum(semalar.FaturaKalemi.miktar * semalar.FaturaKalemi.alis_fiyati_fatura_aninda) # semalar.Stok.alis_fiyati_kdv_dahil yerine FaturaKalemi.alis_fiyati_fatura_aninda
     ).join(semalar.Fatura, semalar.FaturaKalemi.fatura_id == semalar.Fatura.id) \
-     .join(semalar.Stok, semalar.FaturaKalemi.urun_id == semalar.Stok.id) \
      .filter(
-         semalar.Fatura.fatura_turu == "SATIŞ",
+         semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
          semalar.Fatura.tarih >= baslangic_tarihi,
          semalar.Fatura.tarih <= bitis_tarihi
      ).scalar() or 0.0
 
     # Toplam Alış Gideri
-    toplam_alis_gideri = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
-        semalar.Fatura.fatura_turu == "ALIŞ",
+    toplam_alis_gideri = db.query(func.sum(semalar.Fatura.toplam_kdv_dahil)).filter( # genel_toplam yerine toplam_kdv_dahil kullanıldı
+        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS,
         semalar.Fatura.tarih >= baslangic_tarihi,
         semalar.Fatura.tarih <= bitis_tarihi
     ).scalar() or 0.0
 
     # Diğer Gelirler
     diger_gelirler = db.query(func.sum(semalar.GelirGider.tutar)).filter(
-        semalar.GelirGider.islem_turu == "GELIR",
-        semalar.GelirGider.kategori != "Hızlı Gelir", # Fatura dışı gelirleri al
+        semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR, # islem_turu yerine tip kullanıldı
         semalar.GelirGider.tarih >= baslangic_tarihi,
         semalar.GelirGider.tarih <= bitis_tarihi
     ).scalar() or 0.0
 
     # Diğer Giderler
     diger_giderler = db.query(func.sum(semalar.GelirGider.tutar)).filter(
-        semalar.GelirGider.islem_turu == "GIDER",
-        semalar.GelirGider.kategori != "Hızlı Gider", # Fatura dışı giderleri al
+        semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER, # islem_turu yerine tip kullanıldı
         semalar.GelirGider.tarih >= baslangic_tarihi,
         semalar.GelirGider.tarih <= bitis_tarihi
     ).scalar() or 0.0
@@ -188,14 +186,14 @@ def get_nakit_akisi_raporu_endpoint(
 ):
     # Bu ayki girişler (tahsilatlar, satış faturalarından gelen nakit/banka)
     nakit_girisleri = db.query(func.sum(semalar.KasaBankaHareket.tutar)).filter(
-        semalar.KasaBankaHareket.islem_yone == "GIRIS",
+        semalar.KasaBankaHareket.islem_yone == semalar.IslemYoneEnum.GIRIS, # Enum kullanıldı
         semalar.KasaBankaHareket.tarih >= baslangic_tarihi,
         semalar.KasaBankaHareket.tarih <= bitis_tarihi
     ).scalar() or 0.0
 
     # Bu ayki çıkışlar (ödemeler, alış faturalarından giden nakit/banka)
     nakit_cikislar = db.query(func.sum(semalar.KasaBankaHareket.tutar)).filter(
-        semalar.KasaBankaHareket.islem_yone == "ÇIKIŞ",
+        semalar.KasaBankaHareket.islem_yone == semalar.IslemYoneEnum.CIKIS, # Enum kullanıldı
         semalar.KasaBankaHareket.tarih >= baslangic_tarihi,
         semalar.KasaBankaHareket.tarih <= bitis_tarihi
     ).scalar() or 0.0
@@ -218,7 +216,7 @@ def get_cari_yaslandirma_verileri_endpoint(db: Session = Depends(get_db)):
     # Tüm aktif müşterileri al
     musteriler = db.query(semalar.Musteri).filter(semalar.Musteri.aktif == True).all()
     for musteri in musteriler:
-        net_bakiye = calculate_cari_net_bakiye(db, musteri.id, "MUSTERI")
+        net_bakiye = calculate_cari_net_bakiye(db, musteri.id, semalar.CariTipiEnum.MUSTERI) # Enum kullanıldı
         if net_bakiye > 0: # Müşteriden alacaklıysak
             musteri_alacaklar.append({
                 "cari_id": musteri.id,
@@ -230,7 +228,7 @@ def get_cari_yaslandirma_verileri_endpoint(db: Session = Depends(get_db)):
     # Tüm aktif tedarikçileri al
     tedarikciler = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.aktif == True).all()
     for tedarikci in tedarikciler:
-        net_bakiye = calculate_tedarikci_net_bakiye(db, tedarikci.id, "TEDARIKCI")
+        net_bakiye = calculate_tedarikci_net_bakiye(db, tedarikci.id, semalar.CariTipiEnum.TEDARIKCI) # Enum kullanıldı
         if net_bakiye < 0: # Tedarikçiye borçluysak (bakiye eksi)
             tedarikci_borclar.append({
                 "cari_id": tedarikci.id,
@@ -250,8 +248,9 @@ def get_cari_yaslandirma_verileri_endpoint(db: Session = Depends(get_db)):
 
 @router.get("/stok_deger_raporu", response_model=modeller.StokDegerResponse)
 def get_stok_envanter_ozet_endpoint(db: Session = Depends(get_db)):
+    # Stok.alis_fiyati_kdv_dahil alanı kaldırıldı, alis_fiyati üzerinden devam edilecek
     toplam_stok_maliyeti = db.query(
-        func.sum(semalar.Stok.miktar * semalar.Stok.alis_fiyati_kdv_dahil)
+        func.sum(semalar.Stok.miktar * semalar.Stok.alis_fiyati) # alis_fiyati_kdv_dahil yerine alis_fiyati
     ).filter(semalar.Stok.aktif == True).scalar() or 0.0
 
     return {
@@ -265,8 +264,8 @@ def get_gelir_gider_aylik_ozet_endpoint(
 ):
     gelir_gider_ozet = db.query(
         extract('month', semalar.GelirGider.tarih).label('ay'),
-        func.sum(case((semalar.GelirGider.islem_turu == 'GELIR', semalar.GelirGider.tutar), else_=0)).label('toplam_gelir'),
-        func.sum(case((semalar.GelirGider.islem_turu == 'GIDER', semalar.GelirGider.tutar), else_=0)).label('toplam_gider')
+        func.sum(case((semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR, semalar.GelirGider.tutar), else_=0)).label('toplam_gelir'), # islem_turu yerine tip kullanıldı
+        func.sum(case((semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER, semalar.GelirGider.tutar), else_=0)).label('toplam_gider') # islem_turu yerine tip kullanıldı
     ).filter(extract('year', semalar.GelirGider.tarih) == yil) \
      .group_by(extract('month', semalar.GelirGider.tarih)) \
      .order_by(extract('month', semalar.GelirGider.tarih)) \
@@ -274,7 +273,14 @@ def get_gelir_gider_aylik_ozet_endpoint(
 
     aylik_data = []
     for i in range(1, 13): # 1'den 12'ye kadar her ay için veri oluştur
-        ay_adi = date(yil, i, 1).strftime("%B") # Ay adını al
+        # Ay adını alırken Türkçe locale sorunları olabileceği için manuel bir liste tercih edilebilir
+        # Şimdilik strftime kullanmaya devam edelim
+        ay_adlari_dict = {
+            1: "Ocak", 2: "Şubat", 3: "Mart", 4: "Nisan", 5: "Mayıs", 6: "Haziran",
+            7: "Temmuz", 8: "Ağustos", 9: "Eylül", 10: "Ekim", 11: "Kasım", 12: "Aralık"
+        }
+        ay_adi = ay_adlari_dict.get(i, f"{i}. Ay") # Türkçe ay adları için güncellendi
+        
         gelir = next((item.toplam_gelir for item in gelir_gider_ozet if item.ay == i), 0.0)
         gider = next((item.toplam_gider for item in gelir_gider_ozet if item.ay == i), 0.0)
         aylik_data.append({

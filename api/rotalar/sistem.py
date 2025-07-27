@@ -1,3 +1,4 @@
+# api/rotalar/sistem.py Dosyasının tam içeriği.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from .. import modeller, semalar

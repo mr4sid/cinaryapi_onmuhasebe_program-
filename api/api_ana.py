@@ -1,16 +1,18 @@
-# api_ana.py dosyasının TAMAMI
+# api/api_ana.py dosyasının TAMAMI
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import text # EKLENDİ: text objesi için import
 import logging
 from datetime import datetime
+from contextlib import asynccontextmanager # EKLENDİ: asynccontextmanager için import
 
 # Gerekli içe aktarmalar
 # Base ve engine, veritabani.py'den import edilmeli
 from .veritabani import SessionLocal, engine, Base
 
 # Başlangıç verileri için kullanılacak modeller
-from .semalar import Musteri, KasaBanka
+from .semalar import Musteri, KasaBanka, Tedarikci # EKLENDİ: Tedarikci modeli için import
 
 # Mevcut rotaların içe aktarılması
 from .rotalar import (
@@ -28,7 +30,6 @@ def get_db():
     db = SessionLocal()
     try:
         # Bağlantıyı test etmek için basit bir sorgu.
-        # Tablo oluşturma işlemi artık startup_event içinde olduğu için burada gerek yok.
         with engine.connect() as connection:
             connection.execute(text("SELECT 1")) 
         logger.info(f"PostgreSQL veritabanı bağlantısı başarılı: {engine.url.database}@{engine.url.host}:{engine.url.port}")
@@ -61,16 +62,33 @@ def create_initial_data():
         else:
             logger.info("Varsayılan 'Perakende Müşteri' zaten mevcut.")
 
+        # Varsayılan Genel Tedarikçi (YENİ EKLENEN KISIM)
+        genel_tedarikci = db.query(Tedarikci).filter(Tedarikci.kod == "GENEL_TEDARIKCI").first()
+        if not genel_tedarikci:
+            yeni_tedarikci = Tedarikci(
+                ad="Genel Tedarikçi",
+                kod="GENEL_TEDARIKCI",
+                aktif=True,
+                olusturma_tarihi=datetime.now()
+            )
+            db.add(yeni_tedarikci)
+            db.commit()
+            db.refresh(yeni_tedarikci)
+            logger.info("Varsayılan 'Genel Tedarikçi' başarıyla eklendi.")
+        else:
+            logger.info("Varsayılan 'Genel Tedarikçi' zaten mevcut.")
+
         # Varsayılan NAKİT hesabını kontrol et ve ekle
-        nakit_kasa = db.query(KasaBanka).filter(KasaBanka.kod == "NAKİT").first()
+        nakit_kasa = db.query(KasaBanka).filter(KasaBanka.kod == "NAKİT_KASA").first() # Kodu "NAKİT" yerine "NAKİT_KASA" olarak düzeltildi
         if not nakit_kasa:
             yeni_kasa = KasaBanka(
                 hesap_adi="NAKİT KASA",
-                kod="NAKİT",
+                kod="NAKİT_KASA", # Kodu "NAKİT" yerine "NAKİT_KASA" olarak düzeltildi
                 tip="KASA",
                 bakiye=0.0,
                 para_birimi="TL",
                 aktif=True,
+                varsayilan_odeme_turu="NAKİT",
                 olusturma_tarihi=datetime.now()
             )
             db.add(yeni_kasa)
@@ -107,30 +125,27 @@ async def startup_event():
     logger.info("API başlangıcı algılandı.")
 
     # VERİTABANI TABLOLARINI OLUŞTUR
-    # Tüm tabloların semalar.py'deki tanımlara göre oluşturulmasını sağlar.
-    # Eğer tablolar zaten varsa, bu komut onları tekrar oluşturmaya çalışmaz (hata vermez).
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("Veritabanı tabloları başarıyla oluşturuldu/güncellendi.")
     except Exception as e:
         logger.critical(f"Veritabanı tabloları oluşturulurken kritik hata: {e}")
-        # Uygulama başlatılamazsa burada bir hata fırlatılması gerekir.
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Veritabanı başlatma hatası: {e}")
 
     # VARSAYILAN VERİLERİ EKLE (Tablolar oluşturulduktan sonra çalışır)
     create_initial_data()
 
 # Router'ları ekle - İLGİLİ ROUTER DOSYALARI ZATEN PREFIX TANIMLADIĞI İÇİN BURADA PREFIX KULLANILMIYOR
-app.include_router(dogrulama.router, tags=["Doğrulama"]) # dogrulama.py içinde prefix var
-app.include_router(musteriler.router, tags=["Müşteriler"]) # musteriler.py içinde prefix var
-app.include_router(tedarikciler.router, tags=["Tedarikçiler"]) # tedarikciler.py içinde prefix var
-app.include_router(stoklar.router, tags=["Stoklar"]) # stoklar.py içinde prefix var
-app.include_router(kasalar_bankalar.router, tags=["Kasalar ve Bankalar"]) # kasalar_bankalar.py içinde prefix var
-app.include_router(faturalar.router, tags=["Faturalar"]) # faturalar.py içinde prefix var
-app.include_router(siparisler.router, tags=["Siparişler"]) # siparisler.py içinde prefix var
-app.include_router(cari_hareketler.router, tags=["Cari Hareketler"]) # cari_hareketler.py içinde prefix var
-app.include_router(gelir_gider.router, tags=["Gelir ve Giderler"]) # gelir_gider.py içinde prefix var
-app.include_router(nitelikler.router, tags=["Nitelikler"]) # nitelikler.py içinde prefix var
-app.include_router(sistem.router, tags=["Sistem"]) # sistem.py içinde prefix var
-app.include_router(raporlar.router, tags=["Raporlar"]) # raporlar.py içinde prefix var
-app.include_router(yedekleme.router, tags=["Yedekleme"]) # yedekleme.py içinde prefix var
+app.include_router(dogrulama.router, tags=["Doğrulama"])
+app.include_router(musteriler.router, tags=["Müşteriler"])
+app.include_router(tedarikciler.router, tags=["Tedarikçiler"])
+app.include_router(stoklar.router, tags=["Stoklar"])
+app.include_router(kasalar_bankalar.router, tags=["Kasalar ve Bankalar"])
+app.include_router(faturalar.router, tags=["Faturalar"])
+app.include_router(siparisler.router, tags=["Siparişler"])
+app.include_router(cari_hareketler.router, tags=["Cari Hareketler"])
+app.include_router(gelir_gider.router, tags=["Gelir ve Giderler"])
+app.include_router(nitelikler.router, tags=["Nitelikler"])
+app.include_router(sistem.router, tags=["Sistem"])
+app.include_router(raporlar.router, tags=["Raporlar"])
+app.include_router(yedekleme.router, tags=["Yedekleme"])
