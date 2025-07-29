@@ -1328,6 +1328,37 @@ class FaturaPenceresi(QDialog):
             return "Yeni Alış Faturası"
         return "Fatura"
 
+    def _varsayilan_degerleri_yukle(self):
+        # Varsayılan Perakende Müşteri'yi otomatik seç
+        if self.fatura_tipi == self.db.FATURA_TIP_SATIS:
+            perakende_musteri_id = self.db.get_perakende_musteri_id()
+            if perakende_musteri_id:
+                self._cari_sec_ui(perakende_musteri_id)
+        # Varsayılan Genel Tedarikçi'yi otomatik seç (alış faturası için)
+        elif self.fatura_tipi == self.db.FATURA_TIP_ALIS:
+            genel_tedarikci_id = self.db.get_genel_tedarikci_id()
+            if genel_tedarikci_id:
+                self._cari_sec_ui(genel_tedarikci_id)
+
+        # Varsayılan kasa/banka hesabını seç (Nakit ödeme türü için)
+        # Hata düzeltildi: get_varsayilan_kasa_banka yerine get_kasa_banka_by_odeme_turu kullanıldı
+        varsayilan_kb_info = self.db.get_kasa_banka_by_odeme_turu(self.db.ODEME_TURU_NAKIT)
+        if varsayilan_kb_info and varsayilan_kb_info[0]: # (id, ad) tuple döndüğü varsayımıyla
+            varsayilan_kb_id = varsayilan_kb_info[0]
+            # Kasa/Banka combobox'ında bu ID'yi seç
+            for i in range(self.kasa_banka_cb.count()):
+                if self.kasa_banka_cb.itemData(i) == varsayilan_kb_id:
+                    self.kasa_banka_cb.setCurrentIndex(i)
+                    break
+        else:
+            logging.warning("Varsayılan KB çekme hatası: get_kasa_banka_by_odeme_turu metodu boş veya yanlış formatta döndü.")
+
+        # Fatura numarası otomatik doldurma
+        if self.fatura_tipi == self.db.FATURA_TIP_SATIS:
+            self.fatura_no_input.setText(self.db.son_fatura_no_getir(self.db.FATURA_TIP_SATIS))
+        elif self.fatura_tipi == self.db.FATURA_TIP_ALIS:
+            self.fatura_no_input.setText(self.db.son_fatura_no_getir(self.db.FATURA_TIP_ALIS))
+
     def _create_ui(self):
         self.main_layout.setContentsMargins(10, 10, 10, 10)
         self.main_layout.setSpacing(15)
@@ -1342,6 +1373,7 @@ class FaturaPenceresi(QDialog):
         # SOL KISIM: Fatura Bilgileri GroupBox
         fatura_detay_groupbox = QGroupBox("Fatura Bilgileri", self)
         fatura_detay_groupbox.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        fatura_detay_groupbox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred) # Expanding yatayda
         fatura_detay_layout = QGridLayout(fatura_detay_groupbox)
         fatura_detay_layout.setContentsMargins(10, 20, 10, 10)
         fatura_detay_layout.setSpacing(8)
@@ -1459,6 +1491,8 @@ class FaturaPenceresi(QDialog):
         # SAĞ KISIM: Ürün Ekleme GroupBox
         urun_ekle_groupbox = QGroupBox("Ürün Ekleme", self)
         urun_ekle_groupbox.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        urun_ekle_groupbox.setMinimumWidth(350) # Minimum genişlik eklendi
+        urun_ekle_groupbox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred) # Genişlemesi için
         urun_ekle_layout = QGridLayout(urun_ekle_groupbox)
         urun_ekle_layout.setContentsMargins(10, 20, 10, 10)
         urun_ekle_layout.setSpacing(8)
@@ -1470,6 +1504,9 @@ class FaturaPenceresi(QDialog):
         self.urun_arama_entry = QLineEdit(urun_ekle_groupbox)
         self.urun_arama_entry.setPlaceholderText("Ürün kodu veya adı ile ara...")
         urun_ekle_layout.addWidget(self.urun_arama_entry, 0, 1)
+        urun_ekle_layout.setColumnStretch(0, 0) # Etiket için sabit genişlik
+        urun_ekle_layout.setColumnStretch(1, 1) # Giriş kutusu için esnek genişlik
+
 
         self.urun_arama_sonuclari_tree = QTreeWidget(urun_ekle_groupbox)
         self.urun_arama_sonuclari_tree.setHeaderLabels(["Ürün Adı", "Kod", "Fiyat", "Stok"])
@@ -1667,7 +1704,6 @@ class FaturaPenceresi(QDialog):
         
         footer_main_h_layout.addWidget(btn_kaydet_frame_wrapper) # Wrapper frame'i ekle
         footer_main_h_layout.setStretchFactor(btn_kaydet_frame_wrapper, 0) # Sabit genişlik
-
 
         # Diğer alt butonlar için ayrı bir layout
         button_layout = QHBoxLayout()
@@ -1915,9 +1951,10 @@ class FaturaPenceresi(QDialog):
 
         if is_pesin_odeme:
             try:
-                varsayilan_kb_list_response = self.db.get_varsayilan_kasa_banka(selected_odeme_turu)
-                if varsayilan_kb_list_response:
-                    varsayilan_kb_id = varsayilan_kb_list_response.get('id')
+                # Hata düzeltildi: get_varsayilan_kasa_banka yerine get_kasa_banka_by_odeme_turu kullanıldı
+                varsayilan_kb_info = self.db.get_kasa_banka_by_odeme_turu(selected_odeme_turu)
+                if varsayilan_kb_info and varsayilan_kb_info[0]: # (id, ad) tuple döndüğü varsayımıyla
+                    varsayilan_kb_id = varsayilan_kb_info[0]
                     for i in range(self.islem_hesap_cb.count()):
                         if self.islem_hesap_cb.itemData(i) == varsayilan_kb_id:
                             self.islem_hesap_cb.setCurrentIndex(i)
@@ -1930,6 +1967,8 @@ class FaturaPenceresi(QDialog):
                 if self.islem_hesap_cb.count() > 0: self.islem_hesap_cb.setCurrentIndex(0)
         else:
             self.islem_hesap_cb.clear()
+            self.islem_hesap_cb.addItem("Hesap Yok", None)
+            self.islem_hesap_cb.setEnabled(False)
 
         is_perakende_satis_current = (self.islem_tipi == self.FATURA_TIP_SATIS and
                                       self.secili_cari_id == self.perakende_musteri_id)
@@ -4063,16 +4102,18 @@ class KategoriMarkaYonetimiPenceresi(QDialog):
     def _kategori_listesini_yukle(self):
         self.kategori_tree.clear()
         try:
-            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
-            kategoriler = self.db.kategori_listele() 
-            for kat in kategoriler: 
+            kategoriler_response = self.db.kategori_listele() # API'den gelen tam yanıt
+            kategoriler_list = kategoriler_response.get("items", []) # "items" listesini alıyoruz
+
+            for kat_item in kategoriler_list: # kategoriler_list üzerinde döngü
                 item_qt = QTreeWidgetItem(self.kategori_tree)
-                item_qt.setText(0, str(kat.get('id')))
-                item_qt.setText(1, kat.get('ad')) # 'kategori_adi' yerine 'ad' kullanıldı
-                item_qt.setData(0, Qt.UserRole, kat.get('id')) # ID'yi UserRole olarak sakla
-        except Exception as e: # Düzeltildi: requests.exceptions.RequestException yerine daha genel hata yakalandı
-            QMessageBox.critical(self, "API Hatası", f"Kategori listesi çekilirken hata: {e}")
-            logging.error(f"Kategori listesi yükleme hatası: {e}")
+                item_qt.setText(0, str(kat_item.get('id'))) # .get() ile güvenli erişim
+                item_qt.setText(1, kat_item.get('ad')) # .get() ile güvenli erişim
+                item_qt.setData(0, Qt.UserRole, kat_item.get('id'))
+            self.kategori_tree.sortByColumn(1, Qt.AscendingOrder)
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Hatası", f"Kategori listesi çekilirken hata: {e}")
+            logging.error(f"Kategori listesi yükleme hatası: {e}", exc_info=True)
 
     def _on_kategori_select(self):
         selected_items = self.kategori_tree.selectedItems()
@@ -4387,17 +4428,19 @@ class UrunNitelikYonetimiPenceresi(QDialog):
     def _urun_grubu_listesini_yukle(self):
         self.urun_grubu_tree.clear()
         try:
-            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
-            urun_gruplari = self.db.urun_grubu_listele()
-            for grup in urun_gruplari:
+            urun_gruplari_response = self.db.urun_grubu_listele() # API'den gelen tam yanıt
+            urun_gruplari_list = urun_gruplari_response.get("items", []) # "items" listesini alıyoruz
+
+            for grup_item in urun_gruplari_list: # urun_gruplari_list üzerinde döngü
                 item_qt = QTreeWidgetItem(self.urun_grubu_tree)
-                item_qt.setText(0, str(grup.get('id')))
-                item_qt.setText(1, grup.get('ad')) # 'grup_adi' yerine 'ad' kullanıldı
-                item_qt.setData(0, Qt.UserRole, grup.get('id'))
-        except Exception as e: # Düzeltildi: requests.exceptions.RequestException yerine daha genel hata yakalandı
-            QMessageBox.critical(self, "API Hatası", f"Ürün grubu listesi çekilirken hata: {e}")
-            logging.error(f"Ürün grubu listesi yükleme hatası: {e}")
-            
+                item_qt.setText(0, str(grup_item.get('id'))) # .get() ile güvenli erişim
+                item_qt.setText(1, grup_item.get('ad')) # .get() ile güvenli erişim
+                item_qt.setData(0, Qt.UserRole, grup_item.get('id'))
+            self.urun_grubu_tree.sortByColumn(1, Qt.AscendingOrder)
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Hatası", f"Ürün grubu listesi çekilirken hata: {e}")
+            logging.error(f"Ürün grubu listesi yükleme hatası: {e}", exc_info=True)
+
     def _on_urun_grubu_select(self):
         selected_items = self.urun_grubu_tree.selectedItems()
         if selected_items:
@@ -4472,16 +4515,18 @@ class UrunNitelikYonetimiPenceresi(QDialog):
     def _urun_birimi_listesini_yukle(self):
         self.urun_birimi_tree.clear()
         try:
-            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
-            urun_birimleri = self.db.urun_birimi_listele()
-            for birim in urun_birimleri:
+            urun_birimleri_response = self.db.urun_birimi_listele()
+            urun_birimleri_list = urun_birimleri_response.get("items", []) # "items" listesini alıyoruz
+
+            for birim_item in urun_birimleri_list: # urun_birimleri_list üzerinde döngü
                 item_qt = QTreeWidgetItem(self.urun_birimi_tree)
-                item_qt.setText(0, str(birim.get('id')))
-                item_qt.setText(1, birim.get('ad')) # 'birim_adi' yerine 'ad' kullanıldı
-                item_qt.setData(0, Qt.UserRole, birim.get('id'))
-        except Exception as e: # Düzeltildi: requests.exceptions.RequestException yerine daha genel hata yakalandı
-            QMessageBox.critical(self, "API Hatası", f"Ürün birimi listesi çekilirken hata: {e}")
-            logging.error(f"Ürün birimi listesi yükleme hatası: {e}")
+                item_qt.setText(0, str(birim_item.get('id'))) # .get() ile güvenli erişim
+                item_qt.setText(1, birim_item.get('ad')) # .get() ile güvenli erişim
+                item_qt.setData(0, Qt.UserRole, birim_item.get('id'))
+            self.urun_birimi_tree.sortByColumn(1, Qt.AscendingOrder)
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Hatası", f"Ürün birimi listesi çekilirken hata: {e}")
+            logging.error(f"Ürün birimi listesi yükleme hatası: {e}", exc_info=True)
 
     def _on_urun_birimi_select(self):
         selected_items = self.urun_birimi_tree.selectedItems()
@@ -4585,16 +4630,18 @@ class UrunNitelikYonetimiPenceresi(QDialog):
     def _ulke_listesini_yukle(self):
         self.ulke_tree.clear()
         try:
-            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
-            ulkeler = self.db.ulke_listele()
-            for ulke in ulkeler:
+            ulkeler_response = self.db.ulke_listele()
+            ulkeler_list = ulkeler_response.get("items", []) # "items" listesini alıyoruz
+
+            for ulke_item in ulkeler_list: # ulkeler_list üzerinde döngü
                 item_qt = QTreeWidgetItem(self.ulke_tree)
-                item_qt.setText(0, str(ulke.get('id')))
-                item_qt.setText(1, ulke.get('ad')) # 'ulke_adi' yerine 'ad' kullanıldı
-                item_qt.setData(0, Qt.UserRole, ulke.get('id'))
-        except Exception as e: # Düzeltildi: requests.exceptions.RequestException yerine daha genel hata yakalandı
-            QMessageBox.critical(self, "API Hatası", f"Ülke listesi çekilirken hata: {e}")
-            logging.error(f"Ülke listesi yükleme hatası: {e}")
+                item_qt.setText(0, str(ulke_item.get('id'))) # .get() ile güvenli erişim
+                item_qt.setText(1, ulke_item.get('ad')) # .get() ile güvenli erişim
+                item_qt.setData(0, Qt.UserRole, ulke_item.get('id'))
+            self.ulke_tree.sortByColumn(1, Qt.AscendingOrder)
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Hatası", f"Ülke listesi çekilirken hata: {e}")
+            logging.error(f"Ülke listesi yükleme hatası: {e}", exc_info=True)
             
     def _on_ulke_select(self):
         selected_items = self.ulke_tree.selectedItems()

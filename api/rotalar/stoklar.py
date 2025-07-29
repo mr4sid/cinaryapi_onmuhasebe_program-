@@ -4,6 +4,8 @@ from sqlalchemy import func, and_
 from .. import modeller, semalar
 from ..veritabani import get_db
 from typing import List, Optional
+from datetime import datetime # datetime objesi için eklendi
+
 router = APIRouter(prefix="/stoklar", tags=["Stoklar"])
 
 @router.post("/", response_model=modeller.StokRead)
@@ -131,6 +133,68 @@ def get_anlik_stok_miktari_endpoint(stok_id: int, db: Session = Depends(get_db))
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı")
     
     return {"anlik_miktar": stok.miktar}
+
+@router.post("/{stok_id}/hareket", response_model=modeller.StokHareketRead)
+def create_stok_hareket(stok_id: int, hareket: modeller.StokHareketCreate, db: Session = Depends(get_db)):
+    db_stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id).first()
+    if not db_stok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı.")
+    
+    if hareket.miktar <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Miktar pozitif bir değer olmalıdır.")
+
+    db.begin_nested() # Transaction başlat
+
+    try:
+        # Stok miktarını güncelle
+        stok_degisim_net = 0.0
+        if hareket.islem_tipi in [
+            modeller.StokIslemTipiEnum.GIRIS_MANUEL_DUZELTME,
+            modeller.StokIslemTipiEnum.SAYIM_FAZLASI,
+            modeller.StokIslemTipiEnum.IADE_GIRIS,
+            modeller.StokIslemTipiEnum.FATURA_ALIS # Eğer manuel olarak buraya alış faturası girişi yapılacaksa
+        ]:
+            stok_degisim_net = hareket.miktar
+        elif hareket.islem_tipi in [
+            modeller.StokIslemTipiEnum.CIKIS_MANUEL_DUZELTME,
+            modeller.StokIslemTipiEnum.SAYIM_EKSIGI,
+            modeller.StokIslemTipiEnum.ZAYIAT,
+            modeller.StokIslemTipiEnum.FATURA_SATIS # Eğer manuel olarak buraya satış faturası çıkışı yapılacaksa
+        ]:
+            stok_degisim_net = -hareket.miktar
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz işlem tipi.")
+        
+        # Stok hareketini oluşturmadan önceki stok miktarını kaydet
+        onceki_stok_miktari = db_stok.miktar
+
+        db_stok.miktar += stok_degisim_net
+        db.add(db_stok) # Değişikliği veritabanına yansıt
+
+        # Stok hareketi kaydını oluştur
+        db_hareket = semalar.StokHareket(
+            stok_id=stok_id,
+            tarih=hareket.tarih,
+            islem_tipi=hareket.islem_tipi,
+            miktar=hareket.miktar,
+            birim_fiyat=hareket.birim_fiyat, # Birim fiyatı da kaydet
+            aciklama=hareket.aciklama,
+            kaynak=modeller.KaynakTipEnum.MANUEL, # Manuel işlem olduğunu belirt
+            kaynak_id=None, # Manuel olduğu için kaynak ID'si olmaz
+            olusturma_tarihi_saat=datetime.now(),
+            onceki_stok=onceki_stok_miktari, # Önceki stok miktarını kaydet
+            sonraki_stok=db_stok.miktar # Sonraki stok miktarını kaydet
+        )
+        db.add(db_hareket)
+
+        db.commit() # Değişiklikleri kaydet
+        db.refresh(db_hareket) # Oluşturulan objeyi yenile
+        return modeller.StokHareketRead.model_validate(db_hareket, from_attributes=True) # Oluşturulan hareketi döndür
+
+    except Exception as e:
+        db.rollback() # Hata olursa tüm işlemleri geri al
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Stok hareketi oluşturulurken hata: {str(e)}")
+
 
 @router.get("/{stok_id}/hareketler", response_model=modeller.StokHareketListResponse)
 def get_stok_hareketleri_endpoint(

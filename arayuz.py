@@ -379,27 +379,29 @@ class StokYonetimiSayfasi(QWidget):
     def _yukle_filtre_comboboxlari_stok_yonetimi(self):
         try:
             # Kategorileri yükle
-            # Düzeltildi: self.db.nitelik_listesi_al yerine self.db.kategori_listele çağrıldı
-            kategoriler = self.db.kategori_listele() 
-            self.kategoriler = [{"id": k.get("id"), "ad": k.get("ad")} for k in kategoriler]
-            self.kategori_filter_cb.clear() # Tutarlı isim
-            self.kategori_filter_cb.addItem("Tümü", userData=None) # userData ile ID sakla
+            # self.db.kategori_listele() artık {"items": [...], "total": X} dönüyor
+            kategoriler_response = self.db.kategori_listele() 
+            # API yanıtından 'items' listesini al
+            kategoriler_list = kategoriler_response.get("items", []) # Hata düzeltildi: .get("items", []) eklendi
+            self.kategoriler = [{"id": k.get("id"), "ad": k.get("ad")} for k in kategoriler_list] 
+            self.kategori_filter_cb.clear() 
+            self.kategori_filter_cb.addItem("Tümü", userData=None) 
             for kategori in self.kategoriler:
                 self.kategori_filter_cb.addItem(kategori["ad"], userData=kategori["id"])
 
             # Markaları yükle
-            # Düzeltildi: self.db.nitelik_listesi_al yerine self.db.marka_listele çağrıldı
-            markalar = self.db.marka_listele() 
-            self.markalar = [{"id": m.get("id"), "ad": m.get("ad")} for m in markalar]
-            self.marka_filter_cb.clear() # Tutarlı isim
+            markalar_response = self.db.marka_listele() 
+            markalar_list = markalar_response.get("items", []) # Hata düzeltildi: .get("items", []) eklendi
+            self.markalar = [{"id": m.get("id"), "ad": m.get("ad")} for m in markalar_list] 
+            self.marka_filter_cb.clear() 
             self.marka_filter_cb.addItem("Tümü", userData=None)
             for marka in self.markalar:
                 self.marka_filter_cb.addItem(marka["ad"], userData=marka["id"])
 
             # Ürün Gruplarını yükle
-            # Düzeltildi: self.db.nitelik_listesi_al yerine self.db.urun_grubu_listele çağrıldı
-            urun_gruplari = self.db.urun_grubu_listele() 
-            self.urun_gruplari = [{"id": g.get("id"), "ad": g.get("ad")} for g in urun_gruplari]
+            urun_gruplari_response = self.db.urun_grubu_listele() 
+            urun_gruplari_list = urun_gruplari_response.get("items", []) # Hata düzeltildi: .get("items", []) eklendi
+            self.urun_gruplari = [{"id": g.get("id"), "ad": g.get("ad")} for g in urun_gruplari_list] 
             self.urun_grubu_filter_cb.clear()
             self.urun_grubu_filter_cb.addItem("Tümü", userData=None)
             for grup in self.urun_gruplari:
@@ -408,7 +410,7 @@ class StokYonetimiSayfasi(QWidget):
         except Exception as e:
             logger.error(f"Kategori/Marka/Ürün Grubu yüklenirken hata oluştu: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Kategori/Marka/Ürün Grubu yüklenemedi. {e}", "red")
-
+            
     def _filtreleri_temizle(self):
         self.arama_entry.clear()
         self.kategori_filter_cb.setCurrentText("TÜMÜ")
@@ -5845,9 +5847,8 @@ class RaporlamaMerkeziSayfasi(QWidget):
         filter_control_layout.addWidget(rapor_yazdir_pdf_button)
 
         rapor_disa_aktar_excel_button = QPushButton("Raporu Dışa Aktar (Excel)")
-        rapor_disa_aktar_excel_button.clicked.connect(self.raporu_excel_aktar_placeholder)
+        rapor_disa_aktar_excel_button.clicked.connect(self.raporu_excel_aktar)
         filter_control_layout.addWidget(rapor_disa_aktar_excel_button)
-
 
         # Rapor sekmeleri için ana QTabWidget
         self.report_notebook = QTabWidget(self)
@@ -6962,36 +6963,69 @@ class RaporlamaMerkeziSayfasi(QWidget):
         else:
             self.app.set_status_message("PDF kaydetme işlemi iptal edildi.")
 
-    def raporu_excel_aktar_placeholder(self):
-        # Raporu Excel olarak kaydetme işlemi için dosya kaydetme diyaloğu
-        initial_file_name = f"Rapor_Ozeti_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        file_path, _ = QFileDialog.getSaveFileName(self,
-                                                 "Raporu Excel olarak kaydet",
+    def raporu_excel_aktar(self): # Metot adı güncellendi
+        bas_t_str = self.bas_tarih_entry.text()
+        bit_t_str = self.bit_tarih_entry.text()
+
+        if not bas_t_str or not bit_t_str:
+            QMessageBox.warning(self.app, "Uyarı", "Lütfen başlangıç ve bitiş tarihi seçin.")
+            return
+
+        # Kullanıcının raporu kaydedeceği yerel yolu seçmesini sağla
+        initial_file_name = f"satis_raporu_{bas_t_str}_{bit_t_str}.xlsx"
+        file_path, _ = QFileDialog.getSaveFileName(self.app, # parent self.app olmalı
+                                                 "Satış Raporunu Excel Olarak Kaydet",
                                                  initial_file_name,
                                                  "Excel Dosyaları (*.xlsx);;Tüm Dosyalar (*)")
 
         if file_path:
-            try:
-                # Hangi sekmenin aktif olduğunu kontrol et
-                current_tab_text = self.report_notebook.tabText(self.report_notebook.currentIndex())
+            # Bekleme penceresini göster
+            from pencereler import BeklemePenceresi # BeklemePenceresi import edildi
+            bekleme_penceresi = BeklemePenceresi(self.app, message="Rapor oluşturuluyor ve indiriliyor, lütfen bekleyiniz...")
+            
+            # İşlemi ayrı bir thread'de çalıştır
+            def islem_thread():
+                try:
+                    # 1. Sunucu tarafında rapor oluşturulmasını tetikle
+                    # self.cari_filter_cb.currentData() uygunsa cari_id de eklenebilir
+                    # current_cari_id = self.cari_filter_cb.currentData() if self.cari_filter_cb.currentData() else None
+                    success_gen, message_gen, server_filepath = self.db.satis_raporu_excel_olustur_api_den(
+                        bas_t_str, bit_t_str # , cari_id=current_cari_id # Cari ID'yi de geçirebilirsiniz
+                    )
 
-                success = False
-                message = f"'{current_tab_text}' raporu için Excel'e aktarma özelliği henüz tam olarak entegre edilmedi."
+                    if not success_gen or not server_filepath:
+                        raise Exception(f"Rapor oluşturma başarısız: {message_gen}")
+                    
+                    # Sadece dosya adını al
+                    server_only_filename = os.path.basename(server_filepath)
 
-                if success:
-                    QMessageBox.information(self, "Başarılı", message)
-                    self.app.set_status_message(message)
-                else:
-                    QMessageBox.warning(self, "Bilgi", message) # Placeholder için uyarı
-                    self.app.set_status_message(f"Excel'e aktarma iptal edildi/geliştirilmedi: {message}")
+                    # 2. Oluşturulan raporu sunucudan indir
+                    api_download_path = f"/raporlar/download_report/{server_only_filename}"
+                    success_download, message_download = self.db.dosya_indir_api_den(api_download_path, file_path)
 
-            except Exception as e:
-                logging.error(f"Raporu Excel olarak dışa aktarırken beklenmeyen bir hata oluştu: {e}\n{traceback.format_exc()}")
-                QMessageBox.critical(self, "Kritik Hata", f"Raporu Excel olarak dışa aktarırken beklenmeyen bir hata oluştu:\n{e}")
-                self.app.set_status_message(f"Hata: Rapor Excel'e aktarma - {e}")
+                    # İşlem bittiğinde veya hata oluştuğunda UI güncellemelerini ana thread'e gönder
+                    if success_download:
+                        self.app.after(0, lambda: QMessageBox.information(self.app, "Başarılı", f"Rapor başarıyla kaydedildi:\n{file_path}"))
+                        self.app.after(0, lambda: self.app.set_status_message(f"Rapor başarıyla indirildi: {file_path}", "green"))
+                    else:
+                        self.app.after(0, lambda: QMessageBox.critical(self.app, "Hata", f"Rapor indirme başarısız:\n{message_download}"))
+                        self.app.after(0, lambda: self.app.set_status_message(f"Rapor indirme başarısız: {message_download}", "red"))
+
+                except Exception as e:
+                    self.app.after(0, lambda: QMessageBox.critical(self.app, "Rapor Oluşturma Hatası", f"Rapor oluşturulurken veya indirilirken bir hata oluştu:\n{e}"))
+                    self.app.after(0, lambda: self.app.set_status_message(f"Rapor oluşturulurken hata: {e}", "red"))
+                finally:
+                    # Bekleme penceresini kapat
+                    self.app.after(0, bekleme_penceresi.kapat)
+
+            # Thread'i başlat ve bekleme penceresini göster
+            thread = threading.Thread(target=islem_thread)
+            thread.start()
+            bekleme_penceresi.exec() # Modalı olarak göster
+
         else:
-            self.app.set_status_message("Excel kaydetme işlemi iptal edildi.")
-                            
+            self.app.set_status_message("Rapor kaydetme işlemi iptal edildi.", "blue")
+                                        
 class GelirGiderSayfasi(QWidget): # ttk.Frame yerine QWidget
     def __init__(self, parent, db_manager, app_ref):
         super().__init__(parent)
@@ -7690,17 +7724,21 @@ class KategoriMarkaYonetimiSekmesi(QWidget): # ttk.Frame yerine QWidget
                 self.app.set_status_message(f"Kategori silinirken hata: {e}")
 
     # Marka Yönetimi Metotları
-    def _marka_listesini_yukle(self):
-        self.marka_tree.clear()
-        markalar = self.db.marka_listele() # API'den dictionary listesi dönmeli
-        for mar in markalar: # API'den gelen dict objesi
-            mar_id = mar.get('id')
-            mar_ad = mar.get('marka_adi')
-            item_qt = QTreeWidgetItem(self.marka_tree)
-            item_qt.setText(0, str(mar_id))
-            item_qt.setText(1, mar_ad)
-            item_qt.setData(0, Qt.UserRole, mar_id) # ID için sıralama verisi
-        self.marka_tree.sortByColumn(1, Qt.AscendingOrder) # Marka adına göre sırala
+    def _urun_grubu_listesini_yukle(self):
+        self.urun_grubu_tree.clear()
+        try:
+            urun_gruplari_response = self.db.urun_grubu_listele() # API'den gelen tam yanıt
+            urun_gruplari_list = urun_gruplari_response.get("items", []) # "items" listesini alıyoruz
+
+            for grup_item in urun_gruplari_list: # urun_gruplari_list üzerinde döngü
+                item_qt = QTreeWidgetItem(self.urun_grubu_tree)
+                item_qt.setText(0, str(grup_item.get('id'))) # .get() ile güvenli erişim
+                item_qt.setText(1, grup_item.get('ad')) # .get() ile güvenli erişim
+                item_qt.setData(0, Qt.UserRole, grup_item.get('id'))
+            self.urun_grubu_tree.sortByColumn(1, Qt.AscendingOrder)
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Hatası", f"Ürün grubu listesi çekilirken hata: {e}")
+            logging.error(f"Ürün grubu listesi yükleme hatası: {e}", exc_info=True)
 
     def _on_marka_select(self): # event=None kaldırıldı
         selected_items = self.marka_tree.selectedItems()
@@ -7964,13 +8002,19 @@ class UrunNitelikYonetimiSekmesi(QWidget): # ttk.Frame yerine QWidget
     # Ürün Grubu Yönetimi Metotları
     def _urun_grubu_listesini_yukle(self):
         self.urun_grubu_tree.clear()
-        urun_gruplari = self.db.urun_grubu_listele()
-        for grup_id, grup_ad in urun_gruplari:
-            item_qt = QTreeWidgetItem(self.urun_grubu_tree)
-            item_qt.setText(0, str(grup_id))
-            item_qt.setText(1, grup_ad)
-            item_qt.setData(0, Qt.UserRole, grup_id)
-        self.urun_grubu_tree.sortByColumn(1, Qt.AscendingOrder)
+        try:
+            urun_gruplari_response = self.db.urun_grubu_listele() # API'den gelen tam yanıt
+            urun_gruplari_list = urun_gruplari_response.get("items", []) # "items" listesini alıyoruz
+
+            for grup_item in urun_gruplari_list: # urun_gruplari_list üzerinde döngü
+                item_qt = QTreeWidgetItem(self.urun_grubu_tree)
+                item_qt.setText(0, str(grup_item.get('id'))) # .get() ile güvenli erişim
+                item_qt.setText(1, grup_item.get('ad')) # .get() ile güvenli erişim
+                item_qt.setData(0, Qt.UserRole, grup_item.get('id'))
+            self.urun_grubu_tree.sortByColumn(1, Qt.AscendingOrder)
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Hatası", f"Ürün grubu listesi çekilirken hata: {e}")
+            logging.error(f"Ürün grubu listesi yükleme hatası: {e}", exc_info=True)
 
     def _on_urun_grubu_select(self): # event=None kaldırıldı
         selected_items = self.urun_grubu_tree.selectedItems()
@@ -8035,13 +8079,19 @@ class UrunNitelikYonetimiSekmesi(QWidget): # ttk.Frame yerine QWidget
     # Ürün Birimi Yönetimi Metotları
     def _urun_birimi_listesini_yukle(self):
         self.urun_birimi_tree.clear()
-        urun_birimleri = self.db.urun_birimi_listele()
-        for birim_id, birim_ad in urun_birimleri:
-            item_qt = QTreeWidgetItem(self.urun_birimi_tree)
-            item_qt.setText(0, str(birim_id))
-            item_qt.setText(1, birim_ad)
-            item_qt.setData(0, Qt.UserRole, birim_id)
-        self.urun_birimi_tree.sortByColumn(1, Qt.AscendingOrder)
+        try:
+            urun_birimleri_response = self.db.urun_birimi_listele()
+            urun_birimleri_list = urun_birimleri_response.get("items", []) # "items" listesini alıyoruz
+
+            for birim_item in urun_birimleri_list:
+                item_qt = QTreeWidgetItem(self.urun_birimi_tree)
+                item_qt.setText(0, str(birim_item.get('id')))
+                item_qt.setText(1, birim_item.get('ad'))
+                item_qt.setData(0, Qt.UserRole, birim_item.get('id'))
+            self.urun_birimi_tree.sortByColumn(1, Qt.AscendingOrder)
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Hatası", f"Ürün birimi listesi çekilirken hata: {e}")
+            logging.error(f"Ürün birimi listesi yükleme hatası: {e}", exc_info=True)
 
     def _on_urun_birimi_select(self): # event=None kaldırıldı
         selected_items = self.urun_birimi_tree.selectedItems()
@@ -8106,13 +8156,19 @@ class UrunNitelikYonetimiSekmesi(QWidget): # ttk.Frame yerine QWidget
     # Ülke Yönetimi Metotları
     def _ulke_listesini_yukle(self):
         self.ulke_tree.clear()
-        ulkeler = self.db.ulke_listele()
-        for ulke_id, ulke_ad in ulkeler:
-            item_qt = QTreeWidgetItem(self.ulke_tree)
-            item_qt.setText(0, str(ulke_id))
-            item_qt.setText(1, ulke_ad)
-            item_qt.setData(0, Qt.UserRole, ulke_id)
-        self.ulke_tree.sortByColumn(1, Qt.AscendingOrder)
+        try:
+            ulkeler_response = self.db.ulke_listele()
+            ulkeler_list = ulkeler_response.get("items", []) # "items" listesini alıyoruz
+
+            for ulke_item in ulkeler_list: # ulkeler_list üzerinde döngü
+                item_qt = QTreeWidgetItem(self.ulke_tree)
+                item_qt.setText(0, str(ulke_item.get('id'))) # .get() ile güvenli erişim
+                item_qt.setText(1, ulke_item.get('ad')) # .get() ile güvenli erişim
+                item_qt.setData(0, Qt.UserRole, ulke_item.get('id'))
+            self.ulke_tree.sortByColumn(1, Qt.AscendingOrder)
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Hatası", f"Ülke listesi çekilirken hata: {e}")
+            logging.error(f"Ülke listesi yükleme hatası: {e}", exc_info=True)
 
     def _on_ulke_select(self): # event=None kaldırıldı
         selected_items = self.ulke_tree.selectedItems()

@@ -43,11 +43,18 @@ def create_tables():
     temp_engine = create_engine(temp_database_url)
 
     try:
-
-        pass 
+        # Veritabanı varsa silin
+        if database_exists(DATABASE_URL):
+            logger.info(f"Veritabanı '{DB_NAME}' bulunuyor, siliniyor...")
+            drop_database(DATABASE_URL)
+            logger.info(f"Veritabanı '{DB_NAME}' başarıyla silindi.")
+        
+        # Veritabanını yeniden oluştur
+        logger.info(f"Veritabanı '{DB_NAME}' oluşturuluyor...")
+        create_database(DATABASE_URL)
+        logger.info(f"Veritabanı '{DB_NAME}' başarıyla oluşturuldu.")
 
         # Şimdi, asıl uygulamanın bağlanacağı veritabanına bir engine oluşturun.
-        # Bu engine artık mevcut olan 'on_muhasebe_prod' veritabanına başarıyla bağlanabilir.
         engine = create_engine(DATABASE_URL)
 
         # Tüm tabloları oluştur

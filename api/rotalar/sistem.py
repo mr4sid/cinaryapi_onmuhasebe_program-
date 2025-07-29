@@ -117,3 +117,57 @@ def get_next_fatura_number_endpoint(fatura_turu: str, db: Session = Depends(get_
 
     next_fatura_no = f"{prefix}{next_sequence:09d}" # SF000000001 formatı
     return {"fatura_no": next_fatura_no}
+
+@router.get("/next_musteri_code", response_model=dict)
+def get_next_musteri_code_endpoint(db: Session = Depends(get_db)):
+    last_musteri = db.query(semalar.Musteri).order_by(semalar.Musteri.kod.desc()).first()
+
+    prefix = "M" # Prefix for customer codes
+    next_sequence = 1
+    if last_musteri and last_musteri.kod and last_musteri.kod.startswith(prefix):
+        try:
+            current_sequence_str = last_musteri.kod[len(prefix):]
+            current_sequence = int(current_sequence_str)
+            next_sequence = current_sequence + 1
+        except ValueError:
+            # If format is broken, start from 1
+            pass
+
+    next_musteri_code = f"{prefix}{next_sequence:09d}" # M000000001 format
+    return {"next_code": next_musteri_code}
+
+@router.get("/next_tedarikci_code", response_model=dict)
+def get_next_tedarikci_code_endpoint(db: Session = Depends(get_db)):
+    last_tedarikci = db.query(semalar.Tedarikci).order_by(semalar.Tedarikci.kod.desc()).first()
+
+    prefix = "T" # Prefix for supplier codes
+    next_sequence = 1
+    if last_tedarikci and last_tedarikci.kod and last_tedarikci.kod.startswith(prefix):
+        try:
+            current_sequence_str = last_tedarikci.kod[len(prefix):]
+            current_sequence = int(current_sequence_str)
+            next_sequence = current_sequence + 1
+        except ValueError:
+            # If format is broken, start from 1
+            pass
+
+    next_tedarikci_code = f"{prefix}{next_sequence:09d}" # T000000001 format
+    return {"next_code": next_tedarikci_code}
+
+@router.get("/next_stok_code", response_model=dict)
+def get_next_stok_code_endpoint(db: Session = Depends(get_db)):
+    last_stok = db.query(semalar.Stok).order_by(semalar.Stok.kod.desc()).first()
+
+    prefix = "STK" # Prefix for stock codes
+    next_sequence = 1
+    if last_stok and last_stok.kod and last_stok.kod.startswith(prefix):
+        try:
+            current_sequence_str = last_stok.kod[len(prefix):]
+            current_sequence = int(current_sequence_str)
+            next_sequence = current_sequence + 1
+        except ValueError:
+            # If format is broken, start from 1
+            pass
+
+    next_stok_code = f"{prefix}{next_sequence:09d}" # STK000000001 format
+    return {"next_code": next_stok_code}

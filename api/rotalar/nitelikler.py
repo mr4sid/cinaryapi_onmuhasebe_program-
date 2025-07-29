@@ -14,10 +14,12 @@ def create_kategori(kategori: modeller.UrunKategoriCreate, db: Session = Depends
     db.refresh(db_kategori)
     return db_kategori
 
-@router.get("/kategoriler", response_model=list[modeller.UrunKategoriRead])
+@router.get("/kategoriler", response_model=dict) # response_model dict olarak değiştirildi
 def read_kategoriler(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    kategoriler = db.query(semalar.UrunKategori).offset(skip).limit(limit).all()
-    return kategoriler
+    query = db.query(semalar.UrunKategori)
+    total_count = query.count() # Toplam kayıt sayısı alındı
+    kategoriler = query.offset(skip).limit(limit).all()
+    return {"items": kategoriler, "total": total_count} # Yeni dönüş formatı
 
 @router.get("/kategoriler/{kategori_id}", response_model=modeller.UrunKategoriRead)
 def read_kategori(kategori_id: int, db: Session = Depends(get_db)):
@@ -55,10 +57,12 @@ def create_marka(marka: modeller.UrunMarkaCreate, db: Session = Depends(get_db))
     db.refresh(db_marka)
     return db_marka
 
-@router.get("/markalar", response_model=list[modeller.UrunMarkaRead])
+@router.get("/markalar", response_model=dict)
 def read_markalar(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    markalar = db.query(semalar.UrunMarka).offset(skip).limit(limit).all()
-    return markalar
+    query = db.query(semalar.UrunMarka)
+    total_count = query.count()
+    markalar = query.offset(skip).limit(limit).all()
+    return {"items": markalar, "total": total_count}
 
 @router.get("/markalar/{marka_id}", response_model=modeller.UrunMarkaRead)
 def read_marka(marka_id: int, db: Session = Depends(get_db)):
@@ -96,10 +100,12 @@ def create_urun_grubu(urun_grubu: modeller.UrunGrubuCreate, db: Session = Depend
     db.refresh(db_urun_grubu)
     return db_urun_grubu
 
-@router.get("/urun_gruplari", response_model=list[modeller.UrunGrubuRead])
+@router.get("/urun_gruplari", response_model=dict)
 def read_urun_gruplari(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    urun_gruplari = db.query(semalar.UrunGrubu).offset(skip).limit(limit).all()
-    return urun_gruplari
+    query = db.query(semalar.UrunGrubu)
+    total_count = query.count()
+    urun_gruplari = query.offset(skip).limit(limit).all()
+    return {"items": urun_gruplari, "total": total_count}
 
 @router.get("/urun_gruplari/{grup_id}", response_model=modeller.UrunGrubuRead)
 def read_urun_grubu(grup_id: int, db: Session = Depends(get_db)):
@@ -137,10 +143,12 @@ def create_urun_birimi(urun_birimi: modeller.UrunBirimiCreate, db: Session = Dep
     db.refresh(db_urun_birimi)
     return db_urun_birimi
 
-@router.get("/urun_birimleri", response_model=list[modeller.UrunBirimiRead])
+@router.get("/urun_birimleri", response_model=dict)
 def read_urun_birimleri(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    urun_birimleri = db.query(semalar.UrunBirimi).offset(skip).limit(limit).all()
-    return urun_birimleri
+    query = db.query(semalar.UrunBirimi)
+    total_count = query.count()
+    urun_birimleri = query.offset(skip).limit(limit).all()
+    return {"items": urun_birimleri, "total": total_count}
 
 @router.get("/urun_birimleri/{birim_id}", response_model=modeller.UrunBirimiRead)
 def read_urun_birimi(birim_id: int, db: Session = Depends(get_db)):
@@ -178,10 +186,26 @@ def create_ulke(ulke: modeller.UlkeCreate, db: Session = Depends(get_db)):
     db.refresh(db_ulke)
     return db_ulke
 
-@router.get("/ulkeler", response_model=list[modeller.UlkeRead])
+@router.get("/ulkeler", response_model=dict)
 def read_ulkeler(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    ulkeler = db.query(semalar.Ulke).offset(skip).limit(limit).all()
-    return ulkeler
+    query = db.query(semalar.Ulke)
+    total_count = query.count()
+    ulkeler = query.offset(skip).limit(limit).all()
+    return {"items": ulkeler, "total": total_count}
+
+@router.get("/gelir_siniflandirmalari", response_model=dict)
+def read_gelir_siniflandirmalari(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    query = db.query(semalar.GelirSiniflandirma)
+    total_count = query.count()
+    siniflandirmalar = query.offset(skip).limit(limit).all()
+    return {"items": siniflandirmalar, "total": total_count}
+
+@router.get("/gider_siniflandirmalari", response_model=dict)
+def read_gider_siniflandirmalari(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    query = db.query(semalar.GiderSiniflandirma)
+    total_count = query.count()
+    siniflandirmalar = query.offset(skip).limit(limit).all()
+    return {"items": siniflandirmalar, "total": total_count}
 
 @router.get("/ulkeler/{ulke_id}", response_model=modeller.UlkeRead)
 def read_ulke(ulke_id: int, db: Session = Depends(get_db)):

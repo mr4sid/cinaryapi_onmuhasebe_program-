@@ -290,6 +290,10 @@ class Fatura(Base):
     genel_iskonto_degeri = Column(Float, default=0.0)
     original_fatura_id = Column(Integer, ForeignKey('faturalar.id'), nullable=True)
 
+    genel_toplam = Column(Float, nullable=False, default=0.0)
+    toplam_kdv_haric = Column(Float, nullable=False, default=0.0)
+    toplam_kdv_dahil = Column(Float, nullable=False, default=0.0)
+
     # YENİ EKLENDİ: Toplam KDV Hariç ve Toplam KDV Dahil alanları - Bu alanlar daha önce eksikti
     toplam_kdv_haric = Column(Float, nullable=False, default=0.0)
     toplam_kdv_dahil = Column(Float, nullable=False, default=0.0)
