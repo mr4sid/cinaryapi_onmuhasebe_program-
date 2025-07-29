@@ -1,4 +1,4 @@
-# api.zip/semalar.py dosyasının TAMAMI - Lütfen TÜM içeriği bununla değiştirin
+# api.zip/semalar.py dosyasının TAMAMI -
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text, Enum,
     create_engine, and_

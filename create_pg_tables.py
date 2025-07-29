@@ -2,9 +2,10 @@
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy_utils import database_exists, create_database, drop_database # Buraya 'drop_database' eklendi
 import logging
+from datetime import datetime
 
 # Loglama ayarları
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -13,7 +14,12 @@ logger = logging.getLogger(__name__)
 # FastAPI modelleri yerine doğrudan SQLAlchemy modellerini içe aktarın.
 # Bu script, API'ye bağımlı olmadan tabloları oluşturmalıdır.
 # Sizin api/semalar.py dosyanızdaki Base objesini ve tanımlanmış modelleri kullanmalıyız.
-from api.semalar import Base, Kullanici, Sirket, Musteri, Tedarikci, Stok, KasaBanka, Fatura, FaturaKalemi, Siparis, SiparisKalemi, CariHareket, GelirGider
+from api.semalar import (
+    Base, Kullanici, Sirket, Musteri, Tedarikci, Stok, KasaBanka, Fatura,
+    FaturaKalemi, Siparis, SiparisKalemi, CariHareket, GelirGider,
+    UrunKategori, UrunMarka, UrunGrubu, UrunBirimi, Ulke,
+    GelirSiniflandirma, GiderSiniflandirma
+)
 
 # .env dosyasındaki ortam değişkenlerini yükle
 load_dotenv()
@@ -60,6 +66,38 @@ def create_tables():
         # Tüm tabloları oluştur
         Base.metadata.create_all(bind=engine)
         logger.info("Tüm veritabanı tabloları başarıyla oluşturuldu/güncellendi.")
+
+        # Varsayılan verileri ekle
+        Session = sessionmaker(bind=engine)
+        db = Session()
+        try:
+            logger.info("Varsayılan nitelik verileri ekleniyor...")
+
+            # Nitelikler
+            kategoriler = ["Elektronik", "Giyim", "Gıda", "Ev Eşyası", "Kitap"]
+            markalar = ["ABC", "XYZ", "TechGen", "ModaEvim", "GourmetFoods"]
+            urun_gruplari = ["Akıllı Telefon", "Laptop", "Ayakkabı", "Gömlek", "Süt Ürünleri"]
+            urun_birimleri = ["Adet", "Metre", "Kilogram", "Litre", "Kutu"]
+            ulkeler = ["Türkiye", "ABD", "Almanya", "Çin", "Fransa"]
+            gelir_siniflandirmalari = ["Satış Geliri", "Faiz Geliri", "Diğer Gelirler"]
+            gider_siniflandirmalari = ["Kira Gideri", "Personel Gideri", "Fatura Gideri", "Pazarlama Gideri"]
+
+            for ad in kategoriler: db.add(UrunKategori(ad=ad))
+            for ad in markalar: db.add(UrunMarka(ad=ad))
+            for ad in urun_gruplari: db.add(UrunGrubu(ad=ad))
+            for ad in urun_birimleri: db.add(UrunBirimi(ad=ad))
+            for ad in ulkeler: db.add(Ulke(ad=ad))
+            for ad in gelir_siniflandirmalari: db.add(GelirSiniflandirma(ad=ad))
+            for ad in gider_siniflandirmalari: db.add(GiderSiniflandirma(ad=ad))
+
+            db.commit()
+            logger.info("Varsayılan nitelikler başarıyla eklendi.")
+
+        except Exception as e:
+            logger.error(f"Varsayılan veriler eklenirken hata oluştu: {e}")
+            db.rollback()
+        finally:
+            db.close()
 
     except Exception as e:
         logger.critical(f"Veritabanı tabloları oluşturulurken hata: {e}")

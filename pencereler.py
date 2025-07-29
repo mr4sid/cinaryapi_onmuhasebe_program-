@@ -5313,12 +5313,20 @@ class StokKartiPenceresi(QDialog):
     def _load_combobox_data(self):
         """Kategori, Marka, Ürün Grubu, Birim ve Ülke combobox'larını API'den gelen verilerle doldurur."""
         try:
-            # self.db.kategori_listele() gibi metotların API'den direkt dictionary listesi dönmesini bekliyoruz.
-            kategoriler = self.db.kategori_listele() #
-            markalar = self.db.marka_listele() #
-            urun_gruplari = self.db.urun_grubu_listele() #
-            urun_birimleri = self.db.urun_birimi_listele() #
-            ulkeler = self.db.ulke_listele() #
+            # API'den gelen yanıtlar artık {"items": [...], "total": X} formatında bir sözlük dönüyor.
+            # Bu sözlükten 'items' listesini almamız gerekiyor.
+            kategoriler_response = self.db.kategori_listele()
+            markalar_response = self.db.marka_listele()
+            urun_gruplari_response = self.db.urun_grubu_listele()
+            urun_birimleri_response = self.db.urun_birimi_listele()
+            ulkeler_response = self.db.ulke_listele()
+
+            kategoriler = kategoriler_response.get("items", []) # 'items' listesini al
+            markalar = markalar_response.get("items", []) # 'items' listesini al
+            urun_gruplari = urun_gruplari_response.get("items", []) # 'items' listesini al
+            urun_birimleri = urun_birimleri_response.get("items", []) # 'items' listesini al
+            ulkeler = ulkeler_response.get("items", []) # 'items' listesini al
+
 
             self.kategori_combo.clear()
             self.marka_combo.clear()
@@ -5332,15 +5340,24 @@ class StokKartiPenceresi(QDialog):
             self.birim_combo.addItem("Seçiniz...", userData=None)
             self.mensei_ulke_combo.addItem("Seçiniz...", userData=None)
 
+            # Nitelik tiplerini ve ilgili combobox'ları eşle
+            # Her nitelik türü için ayrı ayrı listeleme yapıldı.
             for item in kategoriler: self.kategori_combo.addItem(item.get('ad'), userData=item.get('id'))
             for item in markalar: self.marka_combo.addItem(item.get('ad'), userData=item.get('id'))
             for item in urun_gruplari: self.urun_grubu_combo.addItem(item.get('ad'), userData=item.get('id'))
             for item in urun_birimleri: self.birim_combo.addItem(item.get('ad'), userData=item.get('id'))
             for item in ulkeler: self.mensei_ulke_combo.addItem(item.get('ad'), userData=item.get('id'))
+            
+            logger.info(f"Kategori combobox başarıyla yüklendi. Toplam {len(kategoriler)} öğe.")
+            logger.info(f"Marka combobox başarıyla yüklendi. Toplam {len(markalar)} öğe.")
+            logger.info(f"Ürün Grubu combobox başarıyla yüklendi. Toplam {len(urun_gruplari)} öğe.")
+            logger.info(f"Birim combobox başarıyla yüklendi. Toplam {len(urun_birimleri)} öğe.")
+            logger.info(f"Menşe Ülke combobox başarıyla yüklendi. Toplam {len(ulkeler)} öğe.")
+
 
         except Exception as e:
-            QMessageBox.critical(self, "Veri Yükleme Hatası", f"Nitelik verileri yüklenirken hata oluştu: {e}")
             logger.error(f"StokKartiPenceresi: Nitelik verileri yüklenirken hata: {e}", exc_info=True)
+            QMessageBox.critical(self, "Veri Yükleme Hatası", f"Nitelik verileri yüklenirken bir hata oluştu: {e}") # QMessageBox eklendi
 
     def resizeEvent(self, event):
         """Pencere boyutu değiştiğinde resmi yeniden boyutlandırır."""

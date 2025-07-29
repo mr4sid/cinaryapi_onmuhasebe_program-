@@ -1,7 +1,8 @@
+#main.py Dosyasının. Tam içeriği.
 import sys
 import os
 import json
-import logging
+import logging  
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QFileDialog,
     QWidget, QMenuBar, QStatusBar, QTabWidget # QTabWidget eklendi

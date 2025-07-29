@@ -19,7 +19,9 @@ def read_kategoriler(skip: int = 0, limit: int = 100, db: Session = Depends(get_
     query = db.query(semalar.UrunKategori)
     total_count = query.count() # Toplam kayıt sayısı alındı
     kategoriler = query.offset(skip).limit(limit).all()
-    return {"items": kategoriler, "total": total_count} # Yeni dönüş formatı
+    
+    # ORM objelerini Pydantic modellerine dönüştürerek döndür
+    return {"items": [modeller.UrunKategoriRead.model_validate(k, from_attributes=True) for k in kategoriler], "total": total_count}
 
 @router.get("/kategoriler/{kategori_id}", response_model=modeller.UrunKategoriRead)
 def read_kategori(kategori_id: int, db: Session = Depends(get_db)):
@@ -62,7 +64,9 @@ def read_markalar(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
     query = db.query(semalar.UrunMarka)
     total_count = query.count()
     markalar = query.offset(skip).limit(limit).all()
-    return {"items": markalar, "total": total_count}
+    
+    # ORM objelerini Pydantic modellerine dönüştürerek döndür
+    return {"items": [modeller.UrunMarkaRead.model_validate(m, from_attributes=True) for m in markalar], "total": total_count}
 
 @router.get("/markalar/{marka_id}", response_model=modeller.UrunMarkaRead)
 def read_marka(marka_id: int, db: Session = Depends(get_db)):
@@ -105,7 +109,9 @@ def read_urun_gruplari(skip: int = 0, limit: int = 100, db: Session = Depends(ge
     query = db.query(semalar.UrunGrubu)
     total_count = query.count()
     urun_gruplari = query.offset(skip).limit(limit).all()
-    return {"items": urun_gruplari, "total": total_count}
+    
+    # ORM objelerini Pydantic modellerine dönüştürerek döndür
+    return {"items": [modeller.UrunGrubuRead.model_validate(g, from_attributes=True) for g in urun_gruplari], "total": total_count}
 
 @router.get("/urun_gruplari/{grup_id}", response_model=modeller.UrunGrubuRead)
 def read_urun_grubu(grup_id: int, db: Session = Depends(get_db)):
@@ -148,7 +154,9 @@ def read_urun_birimleri(skip: int = 0, limit: int = 100, db: Session = Depends(g
     query = db.query(semalar.UrunBirimi)
     total_count = query.count()
     urun_birimleri = query.offset(skip).limit(limit).all()
-    return {"items": urun_birimleri, "total": total_count}
+    
+    # ORM objelerini Pydantic modellerine dönüştürerek döndür
+    return {"items": [modeller.UrunBirimiRead.model_validate(b, from_attributes=True) for b in urun_birimleri], "total": total_count}
 
 @router.get("/urun_birimleri/{birim_id}", response_model=modeller.UrunBirimiRead)
 def read_urun_birimi(birim_id: int, db: Session = Depends(get_db)):
@@ -191,7 +199,9 @@ def read_ulkeler(skip: int = 0, limit: int = 100, db: Session = Depends(get_db))
     query = db.query(semalar.Ulke)
     total_count = query.count()
     ulkeler = query.offset(skip).limit(limit).all()
-    return {"items": ulkeler, "total": total_count}
+    
+    # ORM objelerini Pydantic modellerine dönüştürerek döndür
+    return {"items": [modeller.UlkeRead.model_validate(u, from_attributes=True) for u in ulkeler], "total": total_count}
 
 @router.get("/gelir_siniflandirmalari", response_model=dict)
 def read_gelir_siniflandirmalari(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):

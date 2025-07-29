@@ -3385,49 +3385,90 @@ class BaseIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
             self.lbl_cari_bakiye.setStyleSheet("color: black;")
 
     def _urunleri_yukle_ve_cachele_ve_goster(self):
-        # Stok listesini API'den çekmek için kullanılacak parametreleri belirle
+        """
+        Ürün listesini API'den çeker, önbelleğe alır ve arama sonuçları ağacını günceller.
+        """
         params = {
-            'limit': 10000, # Geniş bir limit koyalım, arama filtresi UI'da yapılacak
+            'limit': 10000,
             'skip': 0,
-            'aktif_durum': True # Sadece aktif ürünleri getirmesi varsayıldı
+            'aktif_durum': True
         }
         try:
-            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
+            # self.db.stok_listesi_al metodunu çağırıyoruz
+            # Bu metodun {"items": [...], "total": X} formatında bir dict döndürmesi beklenir
             stok_listeleme_sonucu = self.db.stok_listesi_al(**params)
 
-            urunler = []
+            urunler_listesi_api = []
             if isinstance(stok_listeleme_sonucu, dict) and "items" in stok_listeleme_sonucu:
-                urunler = stok_listeleme_sonucu["items"]
-            elif isinstance(stok_listeleme_sonucu, list): # Eğer API doğrudan liste dönüyorsa
-                urunler = stok_listeleme_sonucu
-                self.app.set_status_message("Uyarı: Stok listesi API yanıtı beklenen formatta değil. Doğrudan liste olarak işleniyor.", "orange")
+                urunler_listesi_api = stok_listeleme_sonucu["items"]
+            elif isinstance(stok_listeleme_sonucu, list): # API doğrudan liste döndürüyorsa
+                urunler_listesi_api = stok_listeleme_sonucu
+                self.app.set_status_message("Uyarı: Stok listesi API yanıtı beklenen formatta değil (doğrudan liste).", "orange")
             else: # Beklenmeyen bir format gelirse
                 self.app.set_status_message("Hata: Stok listesi API'den alınamadı veya formatı geçersiz.", "red")
-                logging.error(f"Stok listesi API'den beklenen formatta gelmedi: {type(stok_listeleme_sonucu)} - {stok_listeleme_sonucu}")
-                return # Hata durumunda fonksiyonu sonlandır
+                logger.error(f"Stok listesi API'den beklenen formatta gelmedi: {type(stok_listeleme_sonucu)} - {stok_listeleme_sonucu}")
+                self.tum_urunler_cache = [] # Önbelleği boşalt
+                self._urun_listesini_filtrele_anlik() # UI'ı güncelle
+                return
 
-            self.tum_urunler_cache = urunler
-            self._urun_listesini_filtrele_anlik() # UI'daki arama kutusuna göre listeyi filtrele ve göster
-            self.app.set_status_message(f"{len(self.tum_urunler_cache)} ürün API'den önbelleğe alındı.")
-
-        except Exception as e: # Düzeltildi: requests.exceptions.RequestException yerine daha genel hata yakalandı
-            QMessageBox.critical(self.app, "API Bağlantı Hatası", f"Ürün listesi API'den alınamadı:\n{e}")
-            self.app.set_status_message(f"Hata: Ürün listesi önbelleğe alınamadı - {e}")
+            self.tum_urunler_cache.clear() # Önceki önbelleği temizle
+            for urun_data in urunler_listesi_api:
+                # API'den gelen ürün verisinin uygun anahtarlara sahip olduğundan emin olun
+                # Örneğin, 'id', 'kod', 'ad', 'satis_fiyati', 'alis_fiyati', 'kdv_orani', 'miktar'
+                # ve ilişki objeleri (örn. 'birim' için 'ad')
                 
+                # 'urun_kodu', 'urun_adi', 'stok_miktari' gibi eski anahtar isimlerini kontrol edip
+                # yeni semalardaki 'kod', 'ad', 'miktar' gibi isimlere uyarlıyoruz
+                urun_id = urun_data.get('id')
+                urun_kod = urun_data.get('kod')
+                urun_ad = urun_data.get('ad')
+                urun_miktar = urun_data.get('miktar', 0.0)
+                urun_satis_fiyati = urun_data.get('satis_fiyati', 0.0)
+                urun_alis_fiyati = urun_data.get('alis_fiyati', 0.0)
+                urun_kdv_orani = urun_data.get('kdv_orani', 0.0)
+                
+                # Birim adını almak için 'birim' objesine erişiyoruz
+                birim_obj = urun_data.get('birim')
+                birim_ad = birim_obj.get('ad', '') if birim_obj else ''
+
+                if urun_id is not None and urun_kod and urun_ad:
+                    # 'tum_urunler_cache' içine tutarlı bir dictionary formatında ekleyin
+                    self.tum_urunler_cache.append({
+                        'id': urun_id,
+                        'kod': urun_kod,
+                        'ad': urun_ad,
+                        'miktar': urun_miktar,
+                        'alis_fiyati': urun_alis_fiyati,
+                        'satis_fiyati': urun_satis_fiyati,
+                        'kdv_orani': urun_kdv_orani,
+                        'birim': {'ad': birim_ad} # Birim bilgisini de tutarlı şekilde sakla
+                    })
+                else:
+                    logger.warning(f"API'den eksik ürün verisi geldi: {urun_data}. Bu ürün önbelleğe alınmadı.")
+
+
+            self._urun_listesini_filtrele_anlik() # Önbellek güncellendikten sonra UI'ı filtrele ve göster
+            self.app.set_status_message(f"{len(self.tum_urunler_cache)} ürün API'den önbelleğe alındı.", "green")
+
+        except Exception as e:
+            logger.error(f"Ürün listesi yüklenirken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Ürünler yüklenemedi. Detay: {e}", "red")
+
     def _urun_listesini_filtrele_anlik(self): # event=None kaldırıldı
         arama_terimi = self.urun_arama_entry.text().lower().strip()
         self.urun_arama_sonuclari_tree.clear() # QTreeWidget'ı temizle
 
         self.urun_map_filtrelenmis.clear()
-        filtered_items_iids = []
+        
+        print(f"DEBUG: Arama terimi: '{arama_terimi}', Cache boyutu: {len(self.tum_urunler_cache)}") # Hata ayıklama çıktısı
 
         for urun_item in self.tum_urunler_cache:
             urun_id = urun_item['id'] # Dictionary olarak erişim
-            urun_kodu_db = urun_item['urun_kodu']
-            urun_adi_db = urun_item['urun_adi']
-            fiyat_to_display = urun_item['fiyat'] # satis_fiyati_kdv_dahil veya alis_fiyati_kdv_dahil
+            urun_kodu_db = urun_item['kod'] # 'urun_kodu' yerine 'kod' kullanıldı
+            urun_adi_db = urun_item['ad'] # 'urun_adi' yerine 'ad' kullanıldı
+            fiyat_to_display = urun_item['satis_fiyati'] if self.islem_tipi == self.db.FATURA_TIP_SATIS else urun_item['alis_fiyati'] # Fiyat seçimi düzenlendi
             kdv_db = urun_item['kdv_orani']
-            stok_db = urun_item['stok_miktari']
+            stok_db = urun_item['miktar'] # 'stok_miktari' yerine 'miktar' kullanıldı
 
             if (not arama_terimi or
                 (urun_adi_db and arama_terimi in urun_adi_db.lower()) or
@@ -3442,19 +3483,18 @@ class BaseIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
                 item_qt.setText(3, f"{stok_db:.2f}".rstrip('0').rstrip('.')) # Stok
 
                 # Sayısal sütunlar için sıralama anahtarları
-                item_qt.setData(0, Qt.UserRole, urun_kodu_db) # Koda göre sıralama
+                item_qt.setData(0, Qt.UserRole, urun_id) # ID'yi doğrudan sakla
                 item_qt.setData(2, Qt.UserRole, fiyat_to_display) # Fiyata göre sıralama
                 item_qt.setData(3, Qt.UserRole, stok_db) # Stoğa göre sıralama
 
                 self.urun_map_filtrelenmis[item_iid] = {"id": urun_id, "kod": urun_kodu_db, "ad": urun_adi_db, "fiyat": fiyat_to_display, "kdv": kdv_db, "stok": stok_db}
-                filtered_items_iids.append(item_iid)
+        
+        print(f"DEBUG: Filtreleme sonrası bulunan ürün: {len(self.urun_map_filtrelenmis)}") # Hata ayıklama çıktısı
+        
+        # Bu satırı her zaman görünür yapmak için değiştiriyoruz
+        self.urun_arama_sonuclari_tree.setVisible(True) # TEST İÇİN HER ZAMAN GÖRÜNÜR YAPILDI
 
-        # Eğer filtreleme sonrası sadece bir ürün kalmışsa, o ürünü otomatik seç ve odakla
-        if len(filtered_items_iids) == 1:
-            self.urun_arama_sonuclari_tree.setCurrentItem(self.urun_arama_sonuclari_tree.topLevelItem(0))
-            self.urun_arama_sonuclari_tree.setFocus()
-
-        self.secili_urun_bilgilerini_goster_arama_listesinden(None) # Seçimi güncelle (item=None geçerli)
+        self.secili_urun_bilgilerini_goster_arama_listesinden() # Seçimi güncelle (item=None geçerli)
 
     def secili_urun_bilgilerini_goster_arama_listesinden(self, item): # item itemSelectionChanged sinyalinden gelir
         selected_items = self.urun_arama_sonuclari_tree.selectedItems()
@@ -7174,7 +7214,7 @@ class StokHareketleriSekmesi(QWidget): # ttk.Frame yerine QWidget
                                                   self.db.STOK_ISLEM_TIP_ZAYIAT, 
                                                   self.db.STOK_ISLEM_TIP_IADE_GIRIS, 
                                                   self.db.STOK_ISLEM_TIP_FATURA_ALIS, 
-                                                  self.db.STOK_ISLEM_TIP_FATURA_SATIS])
+                                                  self.db.STOK_ISLEM_TIP_FATURA_SATIŞ]) # HATALI SABİT DÜZELTİLDİ: 'FATURA_SATIS' yerine 'FATURA_SATIŞ'
         self.stok_hareket_tip_filter_cb.setCurrentText("TÜMÜ")
         self.stok_hareket_tip_filter_cb.currentIndexChanged.connect(self._load_stok_hareketleri)
         filter_layout.addWidget(self.stok_hareket_tip_filter_cb)

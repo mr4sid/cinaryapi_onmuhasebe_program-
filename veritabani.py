@@ -101,6 +101,10 @@ class OnMuhasebe:
             ValueError: API'den hata yanıtı gelirse veya bağlantı sorunu olursa.
         """
         url = f"{self.api_base_url}{path}"
+        
+        # DEBUG: API isteğinin başlangıcını logla
+        print(f"DEBUG_MAKE_API_REQUEST: İstek Başladı - Metot: {method}, URL: {url}, Paramlar: {params}, JSON: {json}")
+
         try:
             # method.upper() kullanıldı
             if method.upper() == "GET":
@@ -118,7 +122,13 @@ class OnMuhasebe:
 
             # Yanıt boş değilse JSON'a çevir
             if response.text:
-                return response.json()
+                response_json = response.json()
+                # DEBUG: Başarılı API yanıtını logla
+                print(f"DEBUG_MAKE_API_REQUEST: İstek Başarılı - URL: {url}, Durum Kodu: {response.status_code}, Yanıt Uzunluğu: {len(str(response_json))}")
+                return response_json
+            
+            # DEBUG: Boş başarılı yanıtı logla
+            print(f"DEBUG_MAKE_API_REQUEST: İstek Başarılı (Boş Yanıt) - URL: {url}, Durum Kodu: {response.status_code}")
             return {} # Boş yanıtlar için boş sözlük döndür
 
         except requests.exceptions.RequestException as e:
@@ -128,16 +138,22 @@ class OnMuhasebe:
                     error_detail = e.response.json().get('detail', error_detail)
                 except ValueError: # JSON decode hatası
                     error_detail = f"API'den beklenen JSON yanıtı alınamadı. Yanıt: {e.response.text[:200]}..."
+            
+            # DEBUG: API isteği hatasını logla
+            print(f"DEBUG_MAKE_API_REQUEST: İstek Hatası - URL: {url}, Hata: {error_detail}")
             logger.error(f"API isteği sırasında genel hata oluştu: {url}. Hata: {error_detail}", exc_info=True)
             raise ValueError(f"API isteği sırasında bir hata oluştu: {error_detail}") from e
         except ValueError as e:
             # Desteklenmeyen metod hatası veya JSON decode hatası
+            print(f"DEBUG_MAKE_API_REQUEST: Value Hata - Hata: {e}")
             logger.error(f"API isteği sırasında bir değer hatası oluştu: {e}", exc_info=True)
             raise e
         except Exception as e:
+            # DEBUG: Beklenmeyen API isteği hatasını logla
+            print(f"DEBUG_MAKE_API_REQUEST: Beklenmeyen Hata - URL: {url}, Hata: {e}")
             logger.error(f"API isteği sırasında beklenmeyen bir hata oluştu: {url}. Hata: {e}", exc_info=True)
             raise ValueError(f"API isteği sırasında beklenmeyen bir hata oluştu: {e}") from e
-
+        
     # --- ŞİRKET BİLGİLERİ ---
     def sirket_bilgilerini_yukle(self):
         try:
@@ -409,7 +425,22 @@ class OnMuhasebe:
             "kritik_stok_altinda": kritik_stok_altinda,
             "aktif_durum": aktif_durum
         }
-        return self._make_api_request("GET", "/stoklar/", params=params)
+        # None olan veya boş string olan parametreleri temizle (API'ye sadece geçerli filtreleri gönder)
+        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
+
+        # DEBUG: İstemci tarafından API çağrısını logla
+        print(f"DEBUG_CLIENT: stok_listesi_al API çağrısı yapılıyor. Params: {cleaned_params}")
+
+        try:
+            response = self._make_api_request("GET", "/stoklar/", params=cleaned_params)
+            # DEBUG: İstemciye dönen API yanıtını logla
+            print(f"DEBUG_CLIENT: stok_listesi_al API yanıtı alındı. Uzunluk: {len(response.get('items', []))}, Toplam: {response.get('total', 0)}")
+            return response
+        except Exception as e:
+            logger.error(f"Stok listesi alınırken hata: {e}", exc_info=True)
+            # Hata durumunda boş bir liste/dict döndürmek yerine hatayı tekrar fırlatıyoruz,
+            # böylece çağıran fonksiyon (arayuz.py) hatayı yakalayabilir.
+            raise # Hatayı yukarı fırlat
 
     def stok_getir_by_id(self, stok_id: int):
         try:

@@ -31,6 +31,11 @@ def read_stoklar(
 ):
     query = db.query(semalar.Stok)
 
+    # DEBUG_API: Gelen filtreleri ve başlangıç sorgusunu logla
+    print(f"DEBUG_API: Stoklar filtreler: arama={arama}, kategori_id={kategori_id}, marka_id={marka_id}, urun_grubu_id={urun_grubu_id}, stok_durumu={stok_durumu}, kritik_stok_altinda={kritik_stok_altinda}, aktif_durum={aktif_durum}")
+    print(f"DEBUG_API: Başlangıç sorgusu (SQL): {str(query.statement.compile(compile_kwargs={'literal_binds': True}))}")
+
+
     if arama:
         query = query.filter(
             (semalar.Stok.ad.ilike(f"%{arama}%")) |
@@ -52,20 +57,27 @@ def read_stoklar(
         else: # Stokta Yok
             query = query.filter(semalar.Stok.miktar <= 0)
             
+    # Kritik stok filtresi, sadece True olarak açıkça belirtilirse uygulansın
+    # Varsayılan olarak False olduğu için bu if bloğuna girmez ve filtre uygulamaz.
     if kritik_stok_altinda:
-        # Hata düzeltildi: kritik_stok_seviyesi -> min_stok_seviyesi
         query = query.filter(semalar.Stok.miktar <= semalar.Stok.min_stok_seviyesi) 
 
+    # Aktif durum filtresi, sadece True veya False olarak belirtilirse uygulansın
+    # Varsayılan olarak True geldiği için her zaman aktif ürünleri çekeriz.
     if aktif_durum is not None:
         query = query.filter(semalar.Stok.aktif == aktif_durum)
+
+    # DEBUG_API: Filtreler uygulandıktan sonraki sorguyu logla
+    print(f"DEBUG_API: Filtrelenmiş sorgu (SQL): {str(query.statement.compile(compile_kwargs={'literal_binds': True}))}")
 
     total_count = query.count()
     stoklar = query.offset(skip).limit(limit).all()
 
-    # Pydantic modeline dönüştürme ve ilişkili verileri ekleme
+    # DEBUG_API: API'den çekilen ürün sayısını ve toplam kaydı logla
+    print(f"DEBUG_API: Çekilen ürün sayısı: {len(stoklar)}, Toplam kayıt: {total_count}")
+
     stok_read_models = []
     for stok_item in stoklar:
-        # SQLAlchemy ORM objesini doğrudan Pydantic modeline dönüştür
         stok_read_data = modeller.StokRead.model_validate(stok_item).model_dump()
         
         # İlişkili Nitelik verilerini ekleme (varsa)
@@ -81,6 +93,9 @@ def read_stoklar(
             stok_read_data['mense_ulke'] = modeller.UlkeRead.model_validate(stok_item.mense_ulke).model_dump()
             
         stok_read_models.append(stok_read_data)
+
+    # DEBUG_API: API yanıtını logla
+    print(f"DEBUG_API: StokListResponse items count: {len(stok_read_models)}, total: {total_count}")
 
     return {"items": stok_read_models, "total": total_count}
 

@@ -9,10 +9,10 @@ router = APIRouter(prefix="/faturalar", tags=["Faturalar"])
 
 @router.post("/", response_model=modeller.FaturaRead)
 def create_fatura(fatura: modeller.FaturaCreate, db: Session = Depends(get_db)):
-    # original_fatura_id parametresi eklenmeli ve model_dump'tan hariç tutulmamalı.
-    # Ancak FaturaCreate modelinde original_fatura_id yok, FaturaBase'de var.
-    # Pydantic v2'de model_dump ile tüm alanlar zaten dahil gelir, `exclude` kullanılırsa hariç bırakılır.
-    # Burada direkt atama yapalım:
+    # original_fatura_id'yi güvenli bir şekilde alın.
+    # Eğer fatura objesinde bu özellik yoksa (yani istekte gönderilmediyse), None kullanırız.
+    original_fatura_id_val = getattr(fatura, 'original_fatura_id', None)
+
     db_fatura = semalar.Fatura(
         fatura_no=fatura.fatura_no,
         fatura_turu=fatura.fatura_turu,
@@ -25,7 +25,7 @@ def create_fatura(fatura: modeller.FaturaCreate, db: Session = Depends(get_db)):
         fatura_notlari=fatura.fatura_notlari,
         genel_iskonto_tipi=fatura.genel_iskonto_tipi,
         genel_iskonto_degeri=fatura.genel_iskonto_degeri,
-        original_fatura_id=fatura.original_fatura_id # Yeni eklenen alan
+        original_fatura_id=original_fatura_id_val # Güvenli yoldan alınan değer kullanıldı
     )
 
     # Toplam KDV Hariç ve Toplam KDV Dahil değerlerini hesapla
@@ -84,7 +84,7 @@ def create_fatura(fatura: modeller.FaturaCreate, db: Session = Depends(get_db)):
 
                 if db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS: # ENUM kullanıldı
                     db_stok.miktar -= miktar_degisimi
-                    islem_tipi = semalar.StokIslemTipiEnum.FATURA_SATIS
+                    islem_tipi = semalar.StokIslemTipiEnum.FATURA_SATIŞ
                 elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS: # ENUM kullanıldı
                     db_stok.miktar += miktar_degisimi
                     islem_tipi = semalar.StokIslemTipiEnum.FATURA_ALIS
@@ -116,7 +116,7 @@ def create_fatura(fatura: modeller.FaturaCreate, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Fatura oluşturulurken bir hata oluştu: {e}")
-
+    
 @router.get("/", response_model=modeller.FaturaListResponse)
 def read_faturalar(
     skip: int = 0,
