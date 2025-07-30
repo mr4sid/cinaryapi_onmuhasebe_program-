@@ -161,6 +161,92 @@ class FaturaService:
             logger.error(f"Fatura listesi alınırken hata: {e}")
             raise
 
+class CariService:
+    def __init__(self, db_manager):
+        """
+        Müşteri ve tedarikçi (cari) verilerini yöneten servis sınıfı.
+        db_manager ile API üzerinden iletişim kurar.
+        """
+        self.db = db_manager
+        logger.info("CariService başlatıldı.")
+
+    def musteri_listesi_al(self):
+        """Müşteri listesini API'den alır ve döndürür."""
+        try:
+            return self.db.musteri_listesi_al()
+        except Exception as e:
+            logger.error(f"Müşteri listesi alınırken hata: {e}")
+            raise
+
+    def tedarikci_listesi_al(self):
+        """Tedarikçi listesini API'den alır ve döndürür."""
+        try:
+            return self.db.tedarikci_listesi_al()
+        except Exception as e:
+            logger.error(f"Tedarikçi listesi alınırken hata: {e}")
+            raise
+
+    def musteri_ekle(self, musteri_data):
+        """Yeni müşteri ekler."""
+        try:
+            return self.db.musteri_ekle(musteri_data)
+        except Exception as e:
+            logger.error(f"Müşteri eklenirken hata: {e}")
+            raise
+
+    def tedarikci_ekle(self, tedarikci_data):
+        """Yeni tedarikçi ekler."""
+        try:
+            return self.db.tedarikci_ekle(tedarikci_data)
+        except Exception as e:
+            logger.error(f"Tedarikçi eklenirken hata: {e}")
+            raise
+    
+    def musteri_guncelle(self, musteri_id, musteri_data):
+        """Müşteri günceller."""
+        try:
+            return self.db.musteri_guncelle(musteri_id, musteri_data)
+        except Exception as e:
+            logger.error(f"Müşteri güncellenirken hata: {e}")
+            raise
+
+    def tedarikci_guncelle(self, tedarikci_id, tedarikci_data):
+        """Tedarikçi günceller."""
+        try:
+            return self.db.tedarikci_guncelle(tedarikci_id, tedarikci_data)
+        except Exception as e:
+            logger.error(f"Tedarikçi güncellenirken hata: {e}")
+            raise
+    
+    def musteri_sil(self, musteri_id):
+        """Müşteri siler."""
+        try:
+            return self.db.musteri_sil(musteri_id)
+        except Exception as e:
+            logger.error(f"Müşteri silinirken hata: {e}")
+            raise
+
+    def tedarikci_sil(self, tedarikci_id):
+        """Tedarikçi siler."""
+        try:
+            return self.db.tedarikci_sil(tedarikci_id)
+        except Exception as e:
+            logger.error(f"Tedarikçi silinirken hata: {e}")
+            raise
+    
+    def cari_getir_by_id(self, cari_id, tip):
+        """Belirli bir cari hesabı ID'sine göre getirir (Müşteri veya Tedarikçi)."""
+        try:
+            if tip == "MUSTERI":
+                return self.db.musteri_getir_by_id(cari_id)
+            elif tip == "TEDARIKCI":
+                return self.db.tedarikci_getir_by_id(cari_id)
+            else:
+                raise ValueError("Geçersiz cari tipi. 'MUSTERI' veya 'TEDARIKCI' olmalı.")
+        except Exception as e:
+            logger.error(f"Cari ({tip}, ID:{cari_id}) getirilirken hata: {e}")
+            raise
+
 class TopluIslemService:
     def __init__(self, db_manager):
         """

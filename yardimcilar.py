@@ -1,10 +1,9 @@
-# yardimcilar.py dosyasının içeriği 
 import locale
 from datetime import datetime
 import calendar
 
 # PySide6 tabanlı UI bileşenleri için gerekli import'lar
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QCalendarWidget, QPushButton, QLineEdit
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QCalendarWidget, QPushButton, QLineEdit, QMessageBox 
 from PySide6.QtCore import QDate, Signal, Slot, Qt
 from PySide6.QtGui import QDoubleValidator # Sayısal giriş doğrulaması için
 
@@ -89,32 +88,32 @@ def format_numeric_text(value, decimals=2):
         return "0,00"
 
 class DatePickerDialog(QDialog):
-    # Seçilen tarihi dışarıya bildirmek için bir sinyal tanımlıyoruz.
-    # Bu sinyal, PySide6'daki QLineEdit'e veya başka bir widget'a bağlanabilir.
-    date_selected = Signal(str)
+    date_selected = Signal(str) # Seçilen tarihi string olarak yayacak sinyal
 
-    def __init__(self, parent=None, initial_date_str=None):
+    def __init__(self, parent=None, initial_date=None):
         super().__init__(parent)
         self.setWindowTitle("Tarih Seç")
-        self.setModal(True) # Diyaloğu modal yapar (ana pencereyi engeller)
-        self.setFixedSize(300, 300) # Diyalog penceresinin sabit boyutu
+        self.setGeometry(100, 100, 300, 250)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint) # Yardım butonunu kaldır
 
-        self.layout = QVBoxLayout(self) # Ana layout
+        self.layout = QVBoxLayout(self)
 
-        self.calendar = QCalendarWidget(self) # PySide6 takvim widget'ı
+        self.calendar = QCalendarWidget(self)
         self.layout.addWidget(self.calendar)
 
-        # Başlangıç tarihini ayarla
-        if initial_date_str:
+        if initial_date:
             try:
-                dt_obj = datetime.strptime(initial_date_str, '%Y-%m-%d')
-                self.calendar.setSelectedDate(QDate(dt_obj.year, dt_obj.month, dt_obj.day))
-            except ValueError:
-                # Geçersiz format ise varsayılan bugünün tarihi veya kalendarın varsayılanı kalır.
-                pass
+                # 'yyyy-MM-dd' formatında gelen string'i QDate objesine çevir
+                qdate_initial = QDate.fromString(initial_date, "yyyy-MM-dd")
+                self.calendar.setSelectedDate(qdate_initial)
+            except Exception as e:
+                print(f"Hata: Geçersiz başlangıç tarihi formatı. {initial_date} - {e}")
+                # Varsayılan olarak bugünün tarihini ayarla
+                self.calendar.setSelectedDate(QDate.currentDate())
+        else:
+            self.calendar.setSelectedDate(QDate.currentDate()) # Başlangıç tarihi yoksa bugünü seç
 
-        # Takvimde bir tarih tıklandığında (clicked sinyali) veya "Seç" butonuna basıldığında
-        # tarihi yakalamak için bir slot bağlıyoruz.
+        # Takvimde bir tarihe tıklamak için bir slot bağlıyoruz.
         self.calendar.clicked.connect(self._on_date_clicked)
 
         self.select_button = QPushButton("Seç", self) # Seç butonu
@@ -144,3 +143,31 @@ class DatePickerDialog(QDialog):
         """Diyalog "İptal" (Reject) ile kapatıldığında çağrılır."""
         self.selected_final_date_str = None # İptal edilirse tarihi sıfırla
         super().reject() # QDialog'un kendi reject metodunu çağırır
+
+def format_numeric_line_edit(line_edit, app_instance=None):
+    """
+    QLineEdit içindeki sayısal değeri formatlar.
+    Virgül yerine nokta kullanır, binlik ayıracı ekler ve ondalık basamakları düzenler.
+    Hata durumunda uyarı mesajı gösterir.
+    app_instance: QMessageBox için ana uygulama objesi.
+    """
+    try:
+        text = line_edit.text().replace(".", "").replace(",", ".")
+        if text:
+            value = float(text)
+            # locale kullanarak sayı formatlama, binlik ayıracı ve ondalık basamak
+            # Python'ın kendi format string'i ile daha tutarlı kontrol
+            formatted_value = "{:,.2f}".format(value)
+            # locale'e göre ondalık ayıracı tekrar virgül yap
+            if locale.localeconv()['decimal_point'] == ',':
+                formatted_value = formatted_value.replace('.', '#').replace(',', '.').replace('#', ',')
+            
+            line_edit.setText(formatted_value)
+        else:
+            line_edit.setText("0,00") # Boşsa varsayılan değer
+    except ValueError:
+        if app_instance:
+            QMessageBox.warning(app_instance, "Geçersiz Giriş", "Lütfen geçerli bir sayısal değer girin.")
+        else:
+            print("Geçersiz Giriş: Lütfen geçerli bir sayısal değer girin.")
+        line_edit.setText("0,00") # Hatalı girişte varsayılan değer

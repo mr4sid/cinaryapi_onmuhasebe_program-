@@ -29,9 +29,9 @@ from matplotlib.figure import Figure
 
 # Yerel Uygulama Modülleri
 from veritabani import OnMuhasebe
-from hizmetler import FaturaService, TopluIslemService
+from hizmetler import FaturaService, TopluIslemService, CariService 
 from pencereler import YeniMusteriEklePenceresi, YeniTedarikciEklePenceresi, StokKartiPenceresi,YeniKasaBankaEklePenceresi
-from yardimcilar import DatePickerDialog, normalize_turkish_chars, setup_locale
+from yardimcilar import DatePickerDialog, normalize_turkish_chars, setup_locale,format_numeric_line_edit
 from datetime import datetime
 import requests 
 from PySide6.QtWidgets import (

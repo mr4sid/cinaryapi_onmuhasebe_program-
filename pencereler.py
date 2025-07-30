@@ -21,7 +21,7 @@ import logging
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill 
 from veritabani import OnMuhasebe
-from yardimcilar import DatePickerDialog, normalize_turkish_chars, setup_locale
+from yardimcilar import DatePickerDialog, normalize_turkish_chars, setup_locale, format_numeric_line_edit
 from config import API_BASE_URL # Bu UI tarafında doğrudan kullanılmamalı, OnMuhasebe sınıfı kullanmalı
 # Logger kurulumu
 logger = logging.getLogger(__name__)
