@@ -18,7 +18,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 @router.post("/login", response_model=modeller.Token)
-def authenticate_user(user_login: modeller.UserLogin, db: Session = Depends(get_db)):
+def authenticate_user(user_login: modeller.KullaniciLogin, db: Session = Depends(get_db)): # <-- BURASI DÜZELTİLDİ: modeller.UserLogin -> modeller.KullaniciLogin
     # Kullanıcı adı ile veritabanında kullanıcıyı bul
     user = db.query(semalar.Kullanici).filter(semalar.Kullanici.kullanici_adi == user_login.kullanici_adi).first()
 
@@ -42,8 +42,8 @@ def authenticate_user(user_login: modeller.UserLogin, db: Session = Depends(get_
     return {"access_token": user.kullanici_adi, "token_type": "bearer"}
 
 # Geçici kullanıcı oluşturma (GELİŞTİRME AMAÇLI, ÜRETİMDE KULLANILMAMALI!)
-@router.post("/register_temp", response_model=modeller.UserRead)
-def register_temporary_user(user_create: modeller.UserCreate, db: Session = Depends(get_db)):
+@router.post("/register_temp", response_model=modeller.KullaniciRead) # <-- modeller.UserRead -> modeller.KullaniciRead
+def register_temporary_user(user_create: modeller.KullaniciCreate, db: Session = Depends(get_db)): # <-- modeller.UserCreate -> modeller.KullaniciCreate
     db_user = db.query(semalar.Kullanici).filter(semalar.Kullanici.kullanici_adi == user_create.kullanici_adi).first()
     if db_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kullanıcı adı zaten mevcut")

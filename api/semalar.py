@@ -3,7 +3,7 @@ from sqlalchemy import (
     Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text, Enum,
     create_engine, and_
 )
-from sqlalchemy.orm import relationship, declarative_base, sessionmaker # <-- 'foreign' kaldırıldı
+from sqlalchemy.orm import relationship, declarative_base, sessionmaker, foreign # <-- 'foreign' tekrar eklendi
 from sqlalchemy.dialects import postgresql # PostgreSQL'e özgü tipler için eklendi (örnekte kullanılmasa da kalsın)
 from datetime import datetime
 import enum
@@ -108,11 +108,11 @@ class CariHareket(Base):
     __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
-    cari_id = Column(Integer, index=True)
+    cari_id = Column(Integer, index=True) # Bu, ForeignKey olarak belirtilmeyen, ancak ilişkide kullanılan sütun.
     cari_turu = Column(Enum(CariTipiEnum), index=True)
     tarih = Column(Date)
     islem_turu = Column(String) # Enum olabilir, ama şimdilik string kalsın. (FATURA, TAHSİLAT, ÖDEME, VERESİYE_BORÇ)
-    islem_yone = Column(Enum(IslemYoneEnum)) # BURASI DOĞRU
+    islem_yone = Column(Enum(IslemYoneEnum))
     tutar = Column(Float)
     aciklama = Column(Text, nullable=True)
     kaynak = Column(String) # KaynakTipEnum ile uyumlu olmalı
@@ -124,18 +124,20 @@ class CariHareket(Base):
     olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
-    # Dairesel bağımlılıklar için primaryjoin ve overlaps kullanıldı (foreign kaldırıldı)
+    # Dairesel bağımlılıklar için primaryjoin'de foreign() annotasyonu kullanıldı.
+    # Bu, cari_id'nin bir ForeignKey olarak tanımlanmamış olmasına rağmen,
+    # bu ilişkide bir yabancı anahtar sütunu olarak davrandığını belirtir.
     musteri_iliski = relationship(
         "Musteri", 
-        primaryjoin="CariHareket.cari_id == Musteri.id and CariHareket.cari_turu == 'MUSTERI'",
+        primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_turu == 'MUSTERI'),
         viewonly=True,
-        overlaps="cari_hareketler" # Overlaps eklendi
+        overlaps="cari_hareketler" # Musteri sınıfındaki 'cari_hareketler' ile çakışmayı belirtir
     )
     tedarikci_iliski = relationship(
         "Tedarikci", 
-        primaryjoin="CariHareket.cari_id == Tedarikci.id and CariHareket.cari_turu == 'TEDARIKCI'",
+        primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_turu == 'TEDARIKCI'),
         viewonly=True,
-        overlaps="cari_hareketler" # Overlaps eklendi
+        overlaps="cari_hareketler" # Tedarikci sınıfındaki 'cari_hareketler' ile çakışmayı belirtir
     )
     kasa_banka_hesabi = relationship("KasaBanka", backref="cari_hareketler_iliski")
 
@@ -147,14 +149,15 @@ class StokHareket(Base):
     id = Column(Integer, primary_key=True, index=True)
     stok_id = Column(Integer, ForeignKey('stoklar.id'), index=True)
     tarih = Column(Date)
-    islem_turu = Column(Enum(StokIslemTipiEnum))
+    islem_tipi = Column(Enum(StokIslemTipiEnum))
     miktar = Column(Float)
     birim_fiyat = Column(Float) # Bu alan Stok tablosundan farklı olarak, hareket anındaki birim fiyatı tutar.
     aciklama = Column(Text, nullable=True)
     kaynak = Column(String) # KaynakTipEnum ile uyumlu olmalı
     kaynak_id = Column(Integer, nullable=True)
+    onceki_stok = Column(Float, nullable=True) # Eklendi
+    sonraki_stok = Column(Float, nullable=True) # Eklendi
 
-    # StokHareket.stok ilişkisinden `cascade="all, delete-orphan"` kaldırıldı
     stok = relationship("Stok", back_populates="stok_hareketleri") 
 
 class Musteri(Base):
@@ -171,17 +174,15 @@ class Musteri(Base):
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
 
-    # Dairesel bağımlılıklar için primaryjoin ve overlaps kullanıldı
     cari_hareketler = relationship(
         "CariHareket",
-        primaryjoin="Musteri.id == CariHareket.cari_id and CariHareket.cari_turu == 'MUSTERI'", 
+        primaryjoin=lambda: and_(Musteri.id == foreign(CariHareket.cari_id), CariHareket.cari_turu == 'MUSTERI'), 
         back_populates="musteri_iliski",
         cascade="all, delete-orphan",
-        overlaps="cari_hareketler_iliski,tedarikci_iliski" # Yeni overlaps eklendi
+        overlaps="musteri_iliski" # Kendi ilişki adı ile çakışır
     )
-    # DEĞİŞİKLİK BURADA: back_populates değeri 'ilgili_musteri' olarak ayarlandı
-    faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ İADE'])", back_populates="ilgili_musteri", cascade="all, delete-orphan", overlaps="ilgili_tedarikci,ilgili_musteri")
-    siparisler = relationship("Siparis", foreign_keys="Siparis.cari_id", primaryjoin="Musteri.id == Siparis.cari_id and Siparis.siparis_turu == 'SATIŞ_SIPARIS'", back_populates="musteri_siparis", overlaps="tedarikci_siparis")
+    faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ_IADE'])", back_populates="ilgili_musteri", cascade="all, delete-orphan", overlaps="ilgili_musteri")
+    siparisler = relationship("Siparis", foreign_keys="Siparis.cari_id", primaryjoin="Musteri.id == Siparis.cari_id and Siparis.siparis_turu == 'SATIŞ_SIPARIS'", back_populates="musteri_siparis", overlaps="musteri_siparis")
 
 class Tedarikci(Base):
     __tablename__ = 'tedarikciler'
@@ -197,29 +198,27 @@ class Tedarikci(Base):
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
 
-    # Dairesel bağımlılıklar için primaryjoin ve overlaps kullanıldı
     cari_hareketler = relationship(
         "CariHareket",
-        primaryjoin="Tedarikci.id == CariHareket.cari_id and CariHareket.cari_turu == 'TEDARIKCI'",
+        primaryjoin=lambda: and_(Tedarikci.id == foreign(CariHareket.cari_id), CariHareket.cari_turu == 'TEDARIKCI'),
         back_populates="tedarikci_iliski",
         cascade="all, delete-orphan",
-        overlaps="cari_hareketler_iliski,musteri_iliski" # Yeni overlaps eklendi
+        overlaps="tedarikci_iliski" # Kendi ilişki adı ile çakışır
     )
-    # DEĞİŞİKLİK BURADA: back_populates değeri 'ilgili_tedarikci' olarak ayarlandı
     faturalar = relationship(
         "Fatura",
         foreign_keys="[Fatura.cari_id]",
-        primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])",
+        primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ_IADE', 'DEVİR GİRİŞ'])",
         back_populates="ilgili_tedarikci",
         cascade="all, delete-orphan",
-        overlaps="ilgili_musteri,ilgili_tedarikci"
+        overlaps="ilgili_tedarikci"
     )
     siparisler = relationship(
         "Siparis",
         foreign_keys="Siparis.cari_id",
         primaryjoin="Tedarikci.id == Siparis.cari_id and Siparis.siparis_turu == 'ALIŞ_SIPARIS'",
         back_populates="tedarikci_siparis",
-        overlaps="musteri_siparis"
+        overlaps="tedarikci_siparis"
     )
 
 class KasaBanka(Base):
@@ -229,7 +228,7 @@ class KasaBanka(Base):
     id = Column(Integer, primary_key=True, index=True)
     hesap_adi = Column(String, index=True)
     kod = Column(String, unique=True, index=True, nullable=True)
-    tip = Column(String, default="KASA") # KasaBankaTipiEnum olmalıydı, string yapıldı
+    tip = Column(String, default="KASA")
     bakiye = Column(Float, default=0.0)
     para_birimi = Column(String, default="TL")
     banka_adi = Column(String, nullable=True)
@@ -270,7 +269,6 @@ class Stok(Base):
     birim = relationship("UrunBirimi", back_populates="stoklar")
     mense_ulke = relationship("Ulke", back_populates="stoklar")
 
-    # StokHareket sınıfı artık Stok'tan önce tanımlandığı için direkt referans verebilir
     stok_hareketleri = relationship("StokHareket", back_populates="stok", cascade="all, delete-orphan")
     fatura_kalemleri = relationship("FaturaKalemi", back_populates="urun", cascade="all, delete-orphan")
     siparis_kalemleri = relationship("SiparisKalemi", back_populates="urun", cascade="all, delete-orphan")
@@ -297,7 +295,6 @@ class Fatura(Base):
     toplam_kdv_haric = Column(Float, nullable=False, default=0.0)
     toplam_kdv_dahil = Column(Float, nullable=False, default=0.0)
 
-    # YENİ EKLENDİ: Toplam KDV Hariç ve Toplam KDV Dahil alanları - Bu alanlar daha önce eksikti
     toplam_kdv_haric = Column(Float, nullable=False, default=0.0)
     toplam_kdv_dahil = Column(Float, nullable=False, default=0.0)
 
@@ -310,10 +307,8 @@ class Fatura(Base):
     olusturan_kullanici = relationship("Kullanici", foreign_keys=[olusturan_kullanici_id])
     son_guncelleyen_kullanici = relationship("Kullanici", foreign_keys=[son_guncelleyen_kullanici_id])
 
-    # DEĞİŞİKLİK BURADA: İlişki adı 'ilgili_musteri' olarak değiştirildi ve back_populates 'faturalar' olarak ayarlandı
-    ilgili_musteri = relationship("Musteri", foreign_keys=[cari_id], primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ İADE'])", back_populates="faturalar", viewonly=True, overlaps="faturalar")
-    # DEĞİŞİKLİK BURADA: İlişki adı 'ilgili_tedarikci' olarak değiştirildi ve back_populates 'faturalar' olarak ayarlandı
-    ilgili_tedarikci = relationship("Tedarikci", foreign_keys=[cari_id], primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ İADE', 'DEVİR GİRİŞ'])", back_populates="faturalar", viewonly=True, overlaps="faturalar")
+    ilgili_musteri = relationship("Musteri", foreign_keys=[cari_id], primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ_IADE'])", back_populates="faturalar", viewonly=True, overlaps="faturalar")
+    ilgili_tedarikci = relationship("Tedarikci", foreign_keys=[cari_id], primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ_IADE', 'DEVİR GİRİŞ'])", back_populates="faturalar", viewonly=True, overlaps="faturalar")
 
     kalemler = relationship("FaturaKalemi", back_populates="fatura", cascade="all, delete-orphan")
 
@@ -392,7 +387,7 @@ class GelirGider(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tarih = Column(Date)
-    tip = Column(Enum(GelirGiderTipEnum), index=True) # DÜZELTİLDİ: IslemYoneEnum yerine GelirGiderTipEnum
+    tip = Column(Enum(GelirGiderTipEnum), index=True)
     aciklama = Column(Text)
     tutar = Column(Float)
     odeme_turu = Column(Enum(OdemeTuruEnum), nullable=True)

@@ -27,8 +27,17 @@ def setup_locale():
 # Uygulama başladığında locale ayarını yap
 setup_locale()
 
-# NOT: sort_treeview_column fonksiyonu PySide6'da QTreeWidget'ın kendi sıralama özelliği (setSortingEnabled)
-# ve sortByColumn metodu kullanılacağı için artık bu...
+def normalize_turkish_chars(text):
+    """Türkçe karakterleri İngilizce eşdeğerlerine dönüştürür."""
+    if not isinstance(text, str):
+        return text
+    text = text.replace('ı', 'i').replace('İ', 'I')
+    text = text.replace('ş', 's').replace('Ş', 'S')
+    text = text.replace('ğ', 'g').replace('Ğ', 'G')
+    text = text.replace('ç', 'c').replace('Ç', 'C')
+    text = text.replace('ö', 'o').replace('Ö', 'O')
+    text = text.replace('ü', 'u').replace('Ü', 'U')
+    return text
 
 class DatePickerDialog(QDialog):
     date_selected = Signal(str) # Seçilen tarihi string olarak yayacak sinyal
@@ -81,7 +90,6 @@ class DatePickerDialog(QDialog):
             # Bu sinyal, çağıran PySide6 penceresindeki QLineEdit'e bağlanacaktır.
             self.date_selected.emit(self.selected_final_date_str)
         super().accept() # QDialog'un kabul metodu çağrılır.
-
 
 # Yeni ve merkezi sayısal giriş formatlama/doğrulama fonksiyonu
 def format_and_validate_numeric_input(line_edit, app_instance=None):
