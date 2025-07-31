@@ -387,7 +387,7 @@ class StokYonetimiSayfasi(QWidget):
             # self.db.kategori_listele() artık {"items": [...], "total": X} dönüyor
             kategoriler_response = self.db.kategori_listele() 
             # API yanıtından 'items' listesini al
-            kategoriler_list = kategoriler_response
+            kategoriler_list = kategoriler_response.get("items", []) 
             self.kategoriler = [{"id": k.get("id"), "ad": k.get("ad")} for k in kategoriler_list] 
             self.kategori_filter_cb.clear() 
             self.kategori_filter_cb.addItem("Tümü", userData=None) 
@@ -396,7 +396,7 @@ class StokYonetimiSayfasi(QWidget):
 
             # Markaları yükle
             markalar_response = self.db.marka_listele() 
-            markalar_list = markalar_response
+            markalar_list = markalar_response.get("items", []) 
             self.markalar = [{"id": m.get("id"), "ad": m.get("ad")} for m in markalar_list] 
             self.marka_filter_cb.clear() 
             self.marka_filter_cb.addItem("Tümü", userData=None)
@@ -405,7 +405,7 @@ class StokYonetimiSayfasi(QWidget):
 
             # Ürün Gruplarını yükle
             urun_gruplari_response = self.db.urun_grubu_listele() 
-            urun_gruplari_list = urun_gruplari_response
+            urun_gruplari_list = urun_gruplari_response.get("items", []) 
             self.urun_gruplari = [{"id": g.get("id"), "ad": g.get("ad")} for g in urun_gruplari_list] 
             self.urun_grubu_filter_cb.clear()
             self.urun_grubu_filter_cb.addItem("Tümü", userData=None)
@@ -5553,8 +5553,9 @@ class BaseFinansalIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
 
         try:
             # Doğrudan requests yerine db_manager metodu kullanıldı
-            recent_data_response = self.db.cari_hareketleri_listele( 
+            recent_data_response = self.db.cari_hareketleri_listele( # <-- BURASI GÜNCELLENDİ
                 cari_id=cari_id,
+                cari_tip=self.cari_tip, # self.cari_tip doğruysa
                 limit=10
             )
             
@@ -7829,7 +7830,7 @@ class KategoriMarkaYonetimiSekmesi(QWidget): # ttk.Frame yerine QWidget
         self.urun_grubu_tree.clear()
         try:
             urun_gruplari_response = self.db.urun_grubu_listele() # API'den gelen tam yanıt
-            urun_gruplari_list = urun_gruplari_response
+            urun_gruplari_list = urun_gruplari_response.get("items", []) # "items" listesini alıyoruz
 
             for grup_item in urun_gruplari_list: # urun_gruplari_list üzerinde döngü
                 item_qt = QTreeWidgetItem(self.urun_grubu_tree)
@@ -8182,7 +8183,7 @@ class UrunNitelikYonetimiSekmesi(QWidget): # ttk.Frame yerine QWidget
         self.urun_birimi_tree.clear()
         try:
             urun_birimleri_response = self.db.urun_birimi_listele()
-            urun_birimleri_list = urun_birimleri_response
+            urun_birimleri_list = urun_birimleri_response.get("items", []) # "items" listesini alıyoruz
 
             for birim_item in urun_birimleri_list:
                 item_qt = QTreeWidgetItem(self.urun_birimi_tree)
@@ -8259,7 +8260,7 @@ class UrunNitelikYonetimiSekmesi(QWidget): # ttk.Frame yerine QWidget
         self.ulke_tree.clear()
         try:
             ulkeler_response = self.db.ulke_listele()
-            ulkeler_list = ulkeler_response
+            ulkeler_list = ulkeler_response.get("items", []) # "items" listesini alıyoruz
 
             for ulke_item in ulkeler_list: # ulkeler_list üzerinde döngü
                 item_qt = QTreeWidgetItem(self.ulke_tree)

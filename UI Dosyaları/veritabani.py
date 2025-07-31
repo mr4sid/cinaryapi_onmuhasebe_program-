@@ -720,26 +720,44 @@ class OnMuhasebe:
             logger.error(f"Cari hesap ekstresi API'den alınamadı: {e}")
             return [], 0.0, False, f"Ekstre alınırken hata: {e}"
 
-    def cari_hareketleri_listele(self, cari_id: int = None):
+    # YENİ EKLENEN METOT: cari_hareketleri_listele
+    def cari_hareketleri_listele(self, skip: int = 0, limit: int = 100, cari_id: Optional[int] = None, 
+                                 baslangic_tarihi: Optional[str] = None, bitis_tarihi: Optional[str] = None,
+                                 arama: Optional[str] = None, kaynak_tipi: Optional[str] = None,
+                                 cari_tip: Optional[str] = None): # YENİ EKLENEN PARAMETRE
         """
-        API'den cari hareketleri listeler.
-        Belirli bir cari_id verilirse, o cariye ait hareketleri filtreler.
+        API'den cari hareket listesini çeker.
+        Args:
+            skip (int): Kaç kaydın atlanacağı.
+            limit (int): Kaç kaydın getirileceği.
+            cari_id (Optional[int]): Filtrelemek için cari ID.
+            baslangic_tarihi (Optional[str]): Filtrelemek için başlangıç tarihi (YYYY-MM-DD).
+            bitis_tarihi (Optional[str]): Filtrelemek için bitiş tarihi (YYYY-MM-DD).
+            arama (Optional[str]): Açıklama veya referans numarasına göre arama.
+            kaynak_tipi (Optional[str]): Hareketin kaynak tipine göre filtreleme.
+            cari_tip (Optional[str]): Cari tipi (MUSTERI/TEDARIKCI) filtreleme için. YENİ
+        Returns:
+            dict: API'den gelen JSON yanıtı (genellikle {'items': [...], 'total': N}).
         """
-        endpoint = f"{self.api_base_url}/cari_hareketler/"
-        params = {}
-        if cari_id is not None:
-            params["cari_id"] = cari_id
+        params = {
+            "skip": skip,
+            "limit": limit,
+            "cari_id": cari_id,
+            "baslangic_tarihi": baslangic_tarihi,
+            "bitis_tarihi": bitis_tarihi,
+            "arama": arama,
+            "kaynak_tipi": kaynak_tipi,
+            "cari_tip": cari_tip # YENİ EKLENEN PARAMETRE
+        }
+        # None olan veya boş string olan parametreleri temizle
+        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
 
         try:
-            response = self.session.get(endpoint, params=params)
-            response.raise_for_status()  # HTTP hatalarını yakala
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Cari hareketleri listelenirken API hatası: {e}")
-            return {"error": str(e)}
-        except ValueError as e:
-            logging.error(f"Cari hareketleri JSON dönüştürme hatası: {e}")
-            return {"error": "API'den geçersiz yanıt alındı."}
+            return self._make_api_request("GET", "/cari_hareketler/", params=cleaned_params)
+        except Exception as e:
+            logger.error(f"Cari hareket listesi alınırken hata: {e}")
+            return {"items": [], "total": 0}
+
 
     # --- NİTELİKLER (Kategori, Marka, Grup, Birim, Ülke, Gelir/Gider Sınıflandırma) ---
     def nitelik_ekle(self, nitelik_tipi: str, data: dict):
