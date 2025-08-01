@@ -42,14 +42,16 @@ class KasaBankaTipiEnum(str, enum.Enum):
     BANKA = "BANKA"
 
 class StokIslemTipiEnum(str, enum.Enum):
-    GIRIS_MANUEL_DUZELTME = "GİRİŞ_MANUEL_DÜZELTME"
-    CIKIS_MANUEL_DUZELTME = "ÇIKIŞ_MANUEL_DÜZELTME"
-    FATURA_ALIS = "FATURA_ALIŞ"
-    FATURA_SATIS = "FATURA_SATIŞ"
+    GİRİŞ = "GİRİŞ"
+    ÇIKIŞ = "ÇIKIŞ"
     SAYIM_FAZLASI = "SAYIM_FAZLASI"
-    SAYIM_EKSIGI = "SAYIM_EKSİĞİ"
-    ZAYIAT = "ZAYİAT"
-    IADE_GIRIS = "İADE_GİRİŞ"
+    SAYIM_EKSİĞİ = "SAYIM_EKSİĞİ"
+    SATIŞ = "SATIŞ"
+    ALIŞ = "ALIŞ"
+    SATIŞ_İADE = "SATIŞ_İADE"
+    ALIŞ_İADE = "ALIŞ_İADE"
+    KONSİNYE_GİRİŞ = "KONSİNYE_GİRİŞ"
+    KONSİNYE_ÇIKIŞ = "KONSİNYE_ÇIKIŞ"
 
 class SiparisTuruEnum(str, enum.Enum):
     SATIS_SIPARIS = "SATIŞ_SIPARIS"

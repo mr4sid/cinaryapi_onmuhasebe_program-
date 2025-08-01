@@ -527,7 +527,7 @@ class OnMuhasebe:
             logger.error(f"Fatura eklenirken hata: {e}")
             raise
 
-    def fatura_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, fatura_turu: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, cari_id: int = None):
+    def fatura_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, fatura_turu: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, cari_id: int = None, odeme_turu: str = None, kasa_banka_id: int = None):
         params = {
             "skip": skip,
             "limit": limit,
@@ -535,11 +535,13 @@ class OnMuhasebe:
             "fatura_turu": fatura_turu,
             "baslangic_tarihi": baslangic_tarihi,
             "bitis_tarihi": bitis_tarihi,
-            "cari_id": cari_id
+            "cari_id": cari_id,
+            "odeme_turu": odeme_turu,
+            "kasa_banka_id": kasa_banka_id
         }
         cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
         return self._make_api_request("GET", "/faturalar/", params=cleaned_params)
-
+                
     def fatura_getir_by_id(self, fatura_id: int):
         try:
             return self._make_api_request("GET", f"/faturalar/{fatura_id}")
