@@ -356,6 +356,21 @@ class App(QMainWindow):
         self.statusBar().showMessage(message)
         logger.info(f"Durum Mesajı ({color}): {message}")
 
+    def _stok_karti_penceresi_ac(self, urun_data):
+        """
+        Stok Kartı penceresini açar.
+        Bu metod, StokYonetimiSayfasi tarafından düzenleme modunda çağrılır.
+        """
+        from pencereler import StokKartiPenceresi
+        dialog = StokKartiPenceresi(
+            self.tab_widget, 
+            self.db,
+            self.stok_yonetimi_sayfasi.stok_listesini_yenile,
+            urun_duzenle=urun_data,
+            app_ref=self
+        )
+        dialog.exec()
+        
     def show_order_form(self, siparis_tipi, siparis_id_duzenle=None, initial_data=None):
         """Sipariş oluşturma/düzenleme penceresini açar."""
         from pencereler import SiparisPenceresi # Bu import burada yapılmalı
@@ -403,15 +418,6 @@ class App(QMainWindow):
     def _set_default_dates(self):
         # Bu metod ilgili sayfalara taşınacak.
         pass
-
-    # Pencereleri açma metodları (Menü Action'ları için)
-    def _stok_karti_penceresi_ac(self):
-        from pencereler import StokKartiPenceresi
-        self.stok_karti_penceresi = StokKartiPenceresi(self, self.db_manager, app_ref=self)
-        self.stok_karti_penceresi.show()
-        # Stok kartı penceresi kapatıldığında ilgili stok listesini yenileme mekanizması kurulmalı
-        if hasattr(self.stok_yonetimi_sayfasi, 'stok_listesini_yenile'):
-            self.stok_karti_penceresi.data_updated.connect(self.stok_yonetimi_sayfasi.stok_listesini_yenile)
 
     def _musteri_karti_penceresi_ac(self):
         from pencereler import YeniMusteriEklePenceresi

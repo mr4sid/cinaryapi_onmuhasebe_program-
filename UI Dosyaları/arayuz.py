@@ -384,10 +384,9 @@ class StokYonetimiSayfasi(QWidget):
     def _yukle_filtre_comboboxlari_stok_yonetimi(self):
         try:
             # Kategorileri yükle
-            # self.db.kategori_listele() artık {"items": [...], "total": X} dönüyor
             kategoriler_response = self.db.kategori_listele() 
-            # API yanıtından 'items' listesini al
-            kategoriler_list = kategoriler_response.get("items", []) 
+            # API yanıtından 'items' listesini alıyoruz, API'nin {"items": [...], "total": 0} dönmesi beklenir
+            kategoriler_list = kategoriler_response.get("items", []) # Güvenli erişim
             self.kategoriler = [{"id": k.get("id"), "ad": k.get("ad")} for k in kategoriler_list] 
             self.kategori_filter_cb.clear() 
             self.kategori_filter_cb.addItem("Tümü", userData=None) 
@@ -396,7 +395,8 @@ class StokYonetimiSayfasi(QWidget):
 
             # Markaları yükle
             markalar_response = self.db.marka_listele() 
-            markalar_list = markalar_response.get("items", []) 
+            # API yanıtından 'items' listesini alıyoruz
+            markalar_list = markalar_response.get("items", []) # Güvenli erişim
             self.markalar = [{"id": m.get("id"), "ad": m.get("ad")} for m in markalar_list] 
             self.marka_filter_cb.clear() 
             self.marka_filter_cb.addItem("Tümü", userData=None)
@@ -405,7 +405,8 @@ class StokYonetimiSayfasi(QWidget):
 
             # Ürün Gruplarını yükle
             urun_gruplari_response = self.db.urun_grubu_listele() 
-            urun_gruplari_list = urun_gruplari_response.get("items", []) 
+            # API yanıtından 'items' listesini alıyoruz
+            urun_gruplari_list = urun_gruplari_response.get("items", []) # Güvenli erişim
             self.urun_gruplari = [{"id": g.get("id"), "ad": g.get("ad")} for g in urun_gruplari_list] 
             self.urun_grubu_filter_cb.clear()
             self.urun_grubu_filter_cb.addItem("Tümü", userData=None)
@@ -414,7 +415,7 @@ class StokYonetimiSayfasi(QWidget):
 
         except Exception as e:
             logger.error(f"Kategori/Marka/Ürün Grubu yüklenirken hata oluştu: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Kategori/Marka/Ürün Grubu yüklenemedi. {e}") 
+            self.app.set_status_message(f"Hata: Kategori/Marka/Ürün Grubu yüklenemedi. {e}")
 
     def _filtreleri_temizle(self):
         self.arama_entry.clear()
@@ -548,30 +549,26 @@ class StokYonetimiSayfasi(QWidget):
             QMessageBox.critical(self, "Hata", f"Yeni ürün ekleme penceresi açılırken bir hata oluştu:\n{e}")
                     
     def secili_urun_duzenle(self):
-            # Düzeltildi: stok_table_widget yerine tree kullanıldı
-            selected_items = self.tree.selectedItems()
-            if not selected_items:
-                self.app.set_status_message("Lütfen düzenlemek istediğiniz ürünü seçin.", "orange")
+        selected_items = self.tree.selectedItems()
+        if not selected_items:
+            self.app.set_status_message("Lütfen düzenlemek istediğiniz ürünü seçin.", "orange")
+            return
+
+        urun_id = int(selected_items[0].text(0))
+
+        try:
+            urun_data = self.db.stok_getir_by_id(urun_id)
+            if not urun_data:
+                self.app.set_status_message(f"Hata: ID {urun_id} olan ürün bulunamadı.", "red")
                 return
+        except Exception as e:
+            logger.error(f"Ürün bilgileri çekilirken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Ürün bilgileri yüklenemedi. {e}", "red")
+            return
 
-            # Düzeltildi: item(row, 0).text() yerine selected_items[0].text(0)
-            urun_id = int(selected_items[0].text(0))
-
-            # Yeni Kod: self.db.stok_getir_by_id metodunu kullanıyoruz
-            try:
-                urun_data = self.db.stok_getir_by_id(urun_id)
-                if not urun_data:
-                    self.app.set_status_message(f"Hata: ID {urun_id} olan ürün bulunamadı.", "red")
-                    return
-            except Exception as e:
-                logger.error(f"Ürün bilgileri çekilirken hata oluştu: {e}", exc_info=True)
-                self.app.set_status_message(f"Hata: Ürün bilgileri yüklenemedi. {e}", "red")
-                return
-
-            # StokKartiPenceresini aç ve verileri yükle
-            self.app._stok_karti_penceresi_ac(urun_data) # Sadece urun_data gönderin, db ve app zaten app'de var
-            self.stok_listesini_yenile() # Güncelleme sonrası listeyi yenile
-        
+        self.app._stok_karti_penceresi_ac(urun_data)
+        self.stok_listesini_yenile()
+                        
     def secili_urun_sil(self):
             # Düzeltildi: stok_table_widget yerine tree kullanıldı
             selected_items = self.tree.selectedItems()
@@ -1561,12 +1558,15 @@ class FaturaListesiSayfasi(QWidget):
         if hasattr(selected_widget, 'fatura_listesini_yukle'):
             selected_widget.fatura_listesini_yukle()
 
-class SiparisListesiSayfasi(QWidget): # ttk.Frame yerine QWidget
+class SiparisListesiSayfasi(QWidget):
     def __init__(self, parent, db_manager, app_ref):
         super().__init__(parent)
         self.db = db_manager
         self.app = app_ref
-        self.main_layout = QVBoxLayout(self) # Ana layout QVBoxLayout
+        from hizmetler import CariService # Bu import zaten olabilir, kontrol edin
+        self.cari_service = CariService(self.db) # <-- BU SATIR EKLENECEK
+        self.main_layout = QVBoxLayout(self)
+
 
         self.after_timer = QTimer(self)
         self.after_timer.setSingleShot(True)
@@ -3311,28 +3311,47 @@ class BaseIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
         self.cari_map_display_to_id = {}
         self.cari_id_to_display_map = {}
         
-        if self.islem_tipi in ['SATIŞ', 'SATIŞ_SIPARIS', 'SATIŞ İADE']:
-            cariler_db = self.db.musteri_listesi_al(perakende_haric=False) 
-            kod_anahtari_db = 'kod' 
-        elif self.islem_tipi in ['ALIŞ', 'ALIŞ_SIPARIS', 'ALIŞ İADE']:
-            cariler_db = self.db.tedarikci_listesi_al()
-            kod_anahtari_db = 'tedarikci_kodu' 
-        else:
-            cariler_db = []
-            kod_anahtari_db = '' 
+        try:
+            cariler_response = None
+            kod_anahtari_db = ''
 
-        for c in cariler_db: # c: sqlite3.Row objesi
-            cari_id = c['id']
-            cari_ad = c['ad']
-            
-            cari_kodu_gosterim = c[kod_anahtari_db] if kod_anahtari_db in c else ''
-            
-            display_text = f"{cari_ad} (Kod: {cari_kodu_gosterim})" 
-            self.cari_map_display_to_id[display_text] = str(cari_id)
-            self.cari_id_to_display_map[str(cari_id)] = display_text
-            self.tum_cariler_cache_data.append(c)
+            if self.islem_tipi in [self.db.FATURA_TIP_SATIS, self.db.SIPARIS_TIP_SATIS, self.db.FATURA_TIP_SATIS_IADE]:
+                # CariService.musteri_listesi_al çağrısı. 'perakende_haric' kaldırıldı.
+                cariler_response = self.app.cari_service.musteri_listesi_al(limit=10000) 
+                kod_anahtari_db = 'kod' 
+            elif self.islem_tipi in [self.db.FATURA_TIP_ALIS, self.db.SIPARIS_TIP_ALIS, self.db.FATURA_TIP_ALIS_IADE]:
+                # CariService.tedarikci_listesi_al çağrısı.
+                cariler_response = self.app.cari_service.tedarikci_listesi_al(limit=10000)
+                kod_anahtari_db = 'kod' 
+            else:
+                self.app.set_status_message("Uyarı: Geçersiz işlem tipi için cari listesi yüklenemedi.", "orange") 
+                logging.warning(f"BaseIslemSayfasi._carileri_yukle_ve_cachele: Geçersiz self.islem_tipi: {self.islem_tipi}")
+                return # Fonksiyonu sonlandır
 
-        logging.debug(f"BaseIslemSayfasi: _carileri_yukle_ve_cachele bitiş. Yüklenen cari sayısı: {len(self.tum_cariler_cache_data)}")
+            cariler_list = []
+            if isinstance(cariler_response, dict) and "items" in cariler_response:
+                cariler_list = cariler_response["items"]
+            elif isinstance(cariler_response, list): # Eğer API doğrudan liste dönüyorsa (eski davranış)
+                cariler_list = cariler_response
+                self.app.set_status_message("Uyarı: Cari listesi API yanıtı beklenen formatta değil (doğrudan liste olarak işleniyor).", "orange") 
+
+            for c in cariler_list: # c: dict objesi
+                cari_id = c.get('id')
+                cari_ad = c.get('ad')
+                
+                cari_kodu_gosterim = c.get(kod_anahtari_db, "")
+                
+                display_text = f"{cari_ad} (Kod: {cari_kodu_gosterim})" 
+                self.cari_map_display_to_id[display_text] = str(cari_id)
+                self.cari_id_to_display_map[str(cari_id)] = display_text
+                self.tum_cariler_cache_data.append(c)
+
+            logging.debug(f"BaseIslemSayfasi: _carileri_yukle_ve_cachele bitiş. Yüklenen cari sayısı: {len(self.tum_cariler_cache_data)}")
+            self.app.set_status_message(f"{len(self.tum_cariler_cache_data)} cari API'den önbelleğe alındı.", "black") 
+
+        except Exception as e: # Genel hata yakalama eklendi
+            logger.error(f"Cari listesi yüklenirken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Cari listesi yüklenemedi. Detay: {e}", "red")
         
     def _cari_secim_penceresi_ac(self):
         # NOT: pencereler.py dosyasındaki CariSecimPenceresi ve TedarikciSecimDialog'un PySide6'ya dönüştürülmüş olması gerekmektedir.
@@ -5553,9 +5572,8 @@ class BaseFinansalIslemSayfasi(QWidget): # ttk.Frame yerine QWidget
 
         try:
             # Doğrudan requests yerine db_manager metodu kullanıldı
-            recent_data_response = self.db.cari_hareketleri_listele( # <-- BURASI GÜNCELLENDİ
+            recent_data_response = self.db.cari_hareketleri_listele( 
                 cari_id=cari_id,
-                cari_tip=self.cari_tip, # self.cari_tip doğruysa
                 limit=10
             )
             
@@ -7830,7 +7848,7 @@ class KategoriMarkaYonetimiSekmesi(QWidget): # ttk.Frame yerine QWidget
         self.urun_grubu_tree.clear()
         try:
             urun_gruplari_response = self.db.urun_grubu_listele() # API'den gelen tam yanıt
-            urun_gruplari_list = urun_gruplari_response.get("items", []) # "items" listesini alıyoruz
+            urun_gruplari_list = urun_gruplari_response
 
             for grup_item in urun_gruplari_list: # urun_gruplari_list üzerinde döngü
                 item_qt = QTreeWidgetItem(self.urun_grubu_tree)
@@ -8183,7 +8201,8 @@ class UrunNitelikYonetimiSekmesi(QWidget): # ttk.Frame yerine QWidget
         self.urun_birimi_tree.clear()
         try:
             urun_birimleri_response = self.db.urun_birimi_listele()
-            urun_birimleri_list = urun_birimleri_response.get("items", []) # "items" listesini alıyoruz
+            # API'den gelen yanıtın "items" anahtarını içerdiğinden emin ol
+            urun_birimleri_list = urun_birimleri_response.get("items", [])
 
             for birim_item in urun_birimleri_list:
                 item_qt = QTreeWidgetItem(self.urun_birimi_tree)
@@ -8260,7 +8279,8 @@ class UrunNitelikYonetimiSekmesi(QWidget): # ttk.Frame yerine QWidget
         self.ulke_tree.clear()
         try:
             ulkeler_response = self.db.ulke_listele()
-            ulkeler_list = ulkeler_response.get("items", []) # "items" listesini alıyoruz
+            # API'den gelen yanıtın "items" anahtarını içerdiğinden emin ol
+            ulkeler_list = ulkeler_response.get("items", [])
 
             for ulke_item in ulkeler_list: # ulkeler_list üzerinde döngü
                 item_qt = QTreeWidgetItem(self.ulke_tree)

@@ -5,7 +5,7 @@ import json
 import logging  
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QFileDialog,
-    QWidget, QMenuBar, QStatusBar, QTabWidget # QTabWidget eklendi
+    QWidget, QMenuBar, QStatusBar, QTabWidget,QDialog
 )
 from PySide6.QtGui import QAction
 from PySide6.QtGui import QIcon
@@ -50,11 +50,12 @@ _config_path = os.path.join(_data_dir, 'config.json')
 
 def load_config():
     """Uygulama yapılandırmasını yükler."""
-    from config import API_BASE_URL as DEFAULT_API_URL_FROM_MODULE 
+    from config import API_BASE_URL as DEFAULT_API_URL_FROM_MODULE
+    from PySide6.QtWidgets import QMessageBox
 
     config_data = {
-        "api_base_url": DEFAULT_API_URL_FROM_MODULE, 
-        "last_username": "" 
+        "api_base_url": DEFAULT_API_URL_FROM_MODULE,
+        "last_username": ""
     }
     if os.path.exists(_config_path):
         try:
@@ -62,6 +63,9 @@ def load_config():
                 loaded_config = json.load(f)
                 config_data.update(loaded_config)
         except json.JSONDecodeError:
+            # Kullanıcıya bir QMessageBox ile uyarı ver
+            QMessageBox.critical(None, "Yapılandırma Hatası", 
+                                 f"Hatalı config.json dosyası: {_config_path}. Uygulama varsayılan ayarları kullanacaktır.")
             logger.error(f"Hatalı config.json dosyası: {_config_path}. Varsayılan yapılandırma kullanılıyor.")
     return config_data
 
@@ -220,12 +224,9 @@ class App(QMainWindow):
         self.db_manager = None
         self._initialize_db_manager()
 
-        # Ana sekmeler için QTabWidget oluştur
         self.tab_widget = QTabWidget(self)
-        self.setCentralWidget(self.tab_widget) # QTabWidget'ı merkezi widget olarak ayarla
+        self.setCentralWidget(self.tab_widget)
 
-        # Her bir yönetim sayfasını oluştur ve QTabWidget'a ekle
-        # app_ref olarak kendisi (self) ve db_manager parametreleri doğru şekilde geçiliyor.
         self.ana_sayfa_widget = AnaSayfa(self, self.db_manager, self)
         self.tab_widget.addTab(self.ana_sayfa_widget, "Ana Sayfa")
 
@@ -235,7 +236,7 @@ class App(QMainWindow):
         self.musteri_yonetimi_sayfasi = MusteriYonetimiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.musteri_yonetimi_sayfasi, "Müşteri Yönetimi")
 
-        self.tedarikci_yonetimi_sayfasi = TedarikciYonetimiSayfasi(self, self.db_manager, self) # TedarikciYonetimiSayfasi mevcut ve eklendi
+        self.tedarikci_yonetimi_sayfasi = TedarikciYonetimiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.tedarikci_yonetimi_sayfasi, "Tedarikçi Yönetimi")
 
         self.fatura_listesi_sayfasi = FaturaListesiSayfasi(self, self.db_manager, self)
@@ -256,31 +257,54 @@ class App(QMainWindow):
         self.raporlama_merkezi_sayfasi = RaporlamaMerkeziSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.raporlama_merkezi_sayfasi, "Raporlama Merkezi")
         
-        self.urun_nitelik_yonetimi_sekmesi = UrunNitelikYonetimiSekmesi(self, self.db_manager, self) # Doğru sınıf adı
+        self.urun_nitelik_yonetimi_sekmesi = UrunNitelikYonetimiSekmesi(self, self.db_manager, self)
         self.tab_widget.addTab(self.urun_nitelik_yonetimi_sekmesi, "Nitelik Yönetimi")
 
-        # Servis sınıflarını başlat
         self.fatura_service = FaturaService(self.db_manager)
         self.toplu_islem_service = TopluIslemService(self.db_manager)
         self.raporlama = Raporlama(self.db_manager)
 
-        # UI bağlantıları ve ilk yüklemeler
         self._setup_ui_connections() 
         self._initial_load_data()
 
-        # Menü eylemleri bağlantıları
-        self.actionStok_Kart.triggered.connect(self._stok_karti_penceresi_ac)
-        self.actionM_teri_Kart.triggered.connect(self._musteri_karti_penceresi_ac)
-        self.actionTedarik_i_Kart.triggered.connect(self._tedarikci_karti_penceresi_ac)
-        self.actionKasa_Banka_Kart.triggered.connect(self._kasa_banka_karti_penceresi_ac)
-        self.actionGelir_Gider_Kart.triggered.connect(self._gelir_gider_karti_penceresi_ac)
-        self.actionFatura_Kart.triggered.connect(self._fatura_karti_penceresi_ac)
-        self.action_rsiparis.triggered.connect(self._siparis_karti_penceresi_ac)
+        # Yeni Menü eylemleri bağlantıları
+        self.actionStok_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.StokKartiPenceresi',
+            self.stok_yonetimi_sayfasi.stok_listesini_yenile
+        ))
+        self.actionM_teri_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.YeniMusteriEklePenceresi',
+            self.musteri_yonetimi_sayfasi.musteri_listesini_yenile
+        ))
+        self.actionTedarik_i_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.YeniTedarikciEklePenceresi',
+            self.tedarikci_yonetimi_sayfasi.tedarikci_listesini_yenile
+        ))
+        self.actionKasa_Banka_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.YeniKasaBankaEklePenceresi',
+            self.kasa_banka_yonetimi_sayfasi.hesap_listesini_yenile
+        ))
+        self.actionGelir_Gider_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.YeniGelirGiderEklePenceresi',
+            self.gelir_gider_sayfasi.gelir_listesi_frame.gg_listesini_yukle # Hem gelir hem gider listesini yenilemeli
+        ))
+        self.actionFatura_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.FaturaPenceresi',
+            self.fatura_listesi_sayfasi.fatura_listesini_yukle
+        ))
+        self.action_rsiparis.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.SiparisPenceresi',
+            self.siparis_listesi_sayfasi.siparis_listesini_yukle
+        ))
         self.actionCari_Hareketler.triggered.connect(self._cari_hareketler_penceresi_ac)
-        self.actionNitelik_Y_netimi.triggered.connect(lambda: self.show_tab("Nitelik Yönetimi"))
-        self.actionToplu_Veri_Aktar_m.triggered.connect(self._toplu_veri_aktarim_penceresi_ac)
-        
-        # Raporlar menüsü bağlantıları (raporlama merkezi sekmesini açacak şekilde güncellendi)
+        self.actionNitelik_Y_netimi.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.UrunNitelikYonetimiPenceresi',
+            lambda: (self.stok_yonetimi_sayfasi._yukle_filtre_comboboxlari_stok_yonetimi(), self.stok_yonetimi_sayfasi.stok_listesini_yenile())
+        ))
+        self.actionToplu_Veri_Aktar_m.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.TopluVeriEklePenceresi'
+        ))
+
         self.actionM_teri_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
         self.actionTedarik_i_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
         self.actionStok_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
@@ -291,13 +315,46 @@ class App(QMainWindow):
         self.actionSiparis_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
         self.actionNitelik_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
 
-        # Veritabanı işlemleri
         self.actionYedekle.triggered.connect(self._yedekle)
         self.actionGeri_Y_kle.triggered.connect(self._geri_yukle)
         self.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
 
-        # Durum çubuğunu güncelle
         self._update_status_bar()
+
+    def _open_dialog_with_callback(self, dialog_class_path: str, refresh_callback=None, **kwargs):
+        """
+        Diyalog pencerelerini dinamik olarak açmak için genel bir metot.
+        
+        Args:
+            dialog_class_path (str): Açılacak diyalog sınıfının 'modül.sınıf_adı' formatında yolu.
+            refresh_callback (callable, optional): Diyalog kabul edildiğinde çağrılacak fonksiyon.
+            **kwargs: Diyalog sınıfının __init__ metoduna gönderilecek ekstra anahtar argümanlar.
+        """
+        try:
+            # Modülü ve sınıfı dinamik olarak içe aktar
+            module_name, class_name = dialog_class_path.rsplit('.', 1)
+            module = __import__(module_name, fromlist=[class_name])
+            DialogClass = getattr(module, class_name)
+            
+            # Diyalog nesnesini oluştur
+            dialog_instance = DialogClass(
+                parent=self,
+                db_manager=self.db_manager,
+                app_ref=self,
+                yenile_callback=refresh_callback,
+                **kwargs
+            )
+            
+            # Diyaloğu göster ve sonuç başarılıysa callback'i çağır
+            if dialog_instance.exec() == QDialog.Accepted and refresh_callback:
+                refresh_callback()
+                
+        except (ImportError, AttributeError) as e:
+            QMessageBox.critical(self, "Hata", f"Pencere sınıfı bulunamadı: {e}")
+            logger.error(f"Pencere sınıfı içe aktarma hatası: {e}", exc_info=True)
+        except Exception as e:
+            QMessageBox.critical(self, "Hata", f"Pencere açılırken bir hata oluştu:\n{e}")
+            logger.error(f"Pencere açma hatası: {e}", exc_info=True)
 
     def show_tab(self, tab_name: str):
         """
@@ -356,6 +413,21 @@ class App(QMainWindow):
         self.statusBar().showMessage(message)
         logger.info(f"Durum Mesajı ({color}): {message}")
 
+    def _stok_karti_penceresi_ac(self, urun_data):
+        """
+        Stok Kartı penceresini açar.
+        Bu metod, StokYonetimiSayfasi tarafından düzenleme modunda çağrılır.
+        """
+        from pencereler import StokKartiPenceresi
+        dialog = StokKartiPenceresi(
+            self.tab_widget, 
+            self.db,
+            self.stok_yonetimi_sayfasi.stok_listesini_yenile,
+            urun_duzenle=urun_data,
+            app_ref=self
+        )
+        dialog.exec()
+        
     def show_order_form(self, siparis_tipi, siparis_id_duzenle=None, initial_data=None):
         """Sipariş oluşturma/düzenleme penceresini açar."""
         from pencereler import SiparisPenceresi # Bu import burada yapılmalı
@@ -394,24 +466,45 @@ class App(QMainWindow):
         pass
 
     def _initial_load_data(self):
-        """Uygulama başlangıcında veya veri güncellendiğinde ana ekrandaki verileri yükler."""
+        """Uygulama başlangıcında veya veri güncellendiğinde tüm sekmelerdeki verileri yükler."""
         if not self.db_manager:
             return
-        self.ana_sayfa_widget.guncelle_ozet_bilgiler() # AnaSayfa'daki özet bilgileri güncelle
-        logger.info("Ana ekran verileri API'den başarıyla yüklendi (AnaSayfa'nın metodları aracılığıyla).")
 
+        self.ana_sayfa_widget.guncelle_ozet_bilgiler()
+
+        if hasattr(self.stok_yonetimi_sayfasi, 'stok_listesini_yenile'):
+            self.stok_yonetimi_sayfasi.stok_listesini_yenile()
+
+        if hasattr(self.musteri_yonetimi_sayfasi, 'musteri_listesini_yenile'):
+            self.musteri_yonetimi_sayfasi.musteri_listesini_yenile()
+
+        if hasattr(self.tedarikci_yonetimi_sayfasi, 'tedarikci_listesini_yenile'):
+            self.tedarikci_yonetimi_sayfasi.tedarikci_listesini_yenile()
+
+        if hasattr(self.fatura_listesi_sayfasi, 'fatura_listesini_yukle'):
+            self.fatura_listesi_sayfasi.fatura_listesini_yukle()
+
+        if hasattr(self.siparis_listesi_sayfasi, 'siparis_listesini_yukle'):
+            self.siparis_listesi_sayfasi.siparis_listesini_yukle()
+
+        if hasattr(self.kasa_banka_yonetimi_sayfasi, 'hesap_listesini_yenile'):
+            self.kasa_banka_yonetimi_sayfasi.hesap_listesini_yenile()
+
+        if hasattr(self.gelir_gider_sayfasi, 'gelir_listesi_frame') and hasattr(self.gelir_gider_sayfasi.gelir_listesi_frame, 'gg_listesini_yukle'):
+            self.gelir_gider_sayfasi.gelir_listesi_frame.gg_listesini_yukle()
+
+        if hasattr(self.gelir_gider_sayfasi, 'gider_listesi_frame') and hasattr(self.gelir_gider_sayfasi.gider_listesi_frame, 'gg_listesini_yukle'):
+            self.gelir_gider_sayfasi.gider_listesi_frame.gg_listesini_yukle()
+
+        # Raporlama Merkezi sayfasını da yükle
+        if hasattr(self.raporlama_merkezi_sayfasi, 'raporu_olustur_ve_yenile'):
+            self.raporlama_merkezi_sayfasi.raporu_olustur_ve_yenile()
+
+        logger.info("Ana ekran verileri API'den başarıyla yüklendi (AnaSayfa'nın metodları aracılığıyla).")
+        
     def _set_default_dates(self):
         # Bu metod ilgili sayfalara taşınacak.
         pass
-
-    # Pencereleri açma metodları (Menü Action'ları için)
-    def _stok_karti_penceresi_ac(self):
-        from pencereler import StokKartiPenceresi
-        self.stok_karti_penceresi = StokKartiPenceresi(self, self.db_manager, app_ref=self)
-        self.stok_karti_penceresi.show()
-        # Stok kartı penceresi kapatıldığında ilgili stok listesini yenileme mekanizması kurulmalı
-        if hasattr(self.stok_yonetimi_sayfasi, 'stok_listesini_yenile'):
-            self.stok_karti_penceresi.data_updated.connect(self.stok_yonetimi_sayfasi.stok_listesini_yenile)
 
     def _musteri_karti_penceresi_ac(self):
         from pencereler import YeniMusteriEklePenceresi
@@ -448,7 +541,7 @@ class App(QMainWindow):
         cari_tip_enum = "MUSTERI" if cari_turu_str == "Müşteri" else "TEDARIKCI"
         dialog = CariHesapEkstresiPenceresi(
             self,
-            self.db_manager, # db yerine db_manager
+            self.db_manager,
             cari_id, 
             cari_tip_enum, 
             cari_turu_str 
@@ -540,7 +633,6 @@ class App(QMainWindow):
                                  f"Yeni API adresine bağlanılamadı: {e}\n"
                                  "Lütfen API sunucusunun çalıştığından ve doğru adreste olduğundan emin olun.")
             logger.critical(f"API URL güncellemesi sonrası bağlantı hatası: {e}")
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
