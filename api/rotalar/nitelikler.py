@@ -15,14 +15,12 @@ def create_kategori(kategori: modeller.UrunKategoriCreate, db: Session = Depends
     db.refresh(db_kategori)
     return db_kategori
 
-@router.get("/kategoriler", response_model=List[modeller.UrunKategoriRead])
+@router.get("/kategoriler", response_model=modeller.NitelikListResponse)
 def read_kategoriler(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
     query = db.query(semalar.UrunKategori)
     kategoriler = query.offset(skip).limit(limit).all()
-    # return kategoriler
-    # "items" ve "total" içeren bir sözlük döndür
-    return [modeller.UrunKategoriRead.model_validate(k, from_attributes=True) for k in kategoriler]
-
+    total_count = query.count()
+    return {"items": [modeller.UrunKategoriRead.model_validate(k, from_attributes=True) for k in kategoriler], "total": total_count}
 
 @router.get("/kategoriler/{kategori_id}", response_model=modeller.UrunKategoriRead)
 def read_kategori(kategori_id: int, db: Session = Depends(get_db)):
@@ -65,13 +63,12 @@ def create_marka(marka: modeller.UrunMarkaCreate, db: Session = Depends(get_db))
     db.refresh(db_marka)
     return db_marka
 
-@router.get("/markalar", response_model=List[modeller.UrunMarkaRead])
+@router.get("/markalar", response_model=modeller.NitelikListResponse)
 def read_markalar(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
     query = db.query(semalar.UrunMarka)
     markalar = query.offset(skip).limit(limit).all()
-    # return markalar
-    # "items" ve "total" içeren bir sözlük döndür
-    return [modeller.UrunMarkaRead.model_validate(m, from_attributes=True) for m in markalar]
+    total_count = query.count()
+    return {"items": [modeller.UrunMarkaRead.model_validate(m, from_attributes=True) for m in markalar], "total": total_count}
 
 @router.get("/markalar/{marka_id}", response_model=modeller.UrunMarkaRead)
 def read_marka(marka_id: int, db: Session = Depends(get_db)):
@@ -114,13 +111,12 @@ def create_urun_grubu(urun_grubu: modeller.UrunGrubuCreate, db: Session = Depend
     db.refresh(db_urun_grubu)
     return db_urun_grubu
 
-@router.get("/urun_gruplari", response_model=List[modeller.UrunGrubuRead])
+@router.get("/urun_gruplari", response_model=modeller.NitelikListResponse)
 def read_urun_gruplari(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
     query = db.query(semalar.UrunGrubu)
     urun_gruplari = query.offset(skip).limit(limit).all()
-    # return urun_gruplari
-    # "items" ve "total" içeren bir sözlük döndür
-    return [modeller.UrunGrubuRead.model_validate(ug, from_attributes=True) for ug in urun_gruplari]
+    total_count = query.count()
+    return {"items": [modeller.UrunGrubuRead.model_validate(ug, from_attributes=True) for ug in urun_gruplari], "total": total_count}
 
 @router.get("/urun_gruplari/{urun_grubu_id}", response_model=modeller.UrunGrubuRead)
 def read_urun_grubu(urun_grubu_id: int, db: Session = Depends(get_db)):
@@ -163,13 +159,12 @@ def create_urun_birimi(urun_birimi: modeller.UrunBirimiCreate, db: Session = Dep
     db.refresh(db_urun_birimi)
     return db_urun_birimi
 
-@router.get("/urun_birimleri", response_model=List[modeller.UrunBirimiRead])
+@router.get("/urun_birimleri", response_model=modeller.NitelikListResponse)
 def read_urun_birimleri(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
     query = db.query(semalar.UrunBirimi)
     urun_birimleri = query.offset(skip).limit(limit).all()
-    # return urun_birimleri
-    # "items" ve "total" içeren bir sözlük döndür
-    return [modeller.UrunBirimiRead.model_validate(ub, from_attributes=True) for ub in urun_birimleri]
+    total_count = query.count()
+    return {"items": [modeller.UrunBirimiRead.model_validate(ub, from_attributes=True) for ub in urun_birimleri], "total": total_count}
 
 @router.get("/urun_birimleri/{urun_birimi_id}", response_model=modeller.UrunBirimiRead)
 def read_urun_birimi(urun_birimi_id: int, db: Session = Depends(get_db)):
@@ -212,13 +207,12 @@ def create_ulke(ulke: modeller.UlkeCreate, db: Session = Depends(get_db)):
     db.refresh(db_ulke)
     return db_ulke
 
-@router.get("/ulkeler", response_model=List[modeller.UlkeRead])
+@router.get("/ulkeler", response_model=modeller.NitelikListResponse)
 def read_ulkeler(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
     query = db.query(semalar.Ulke)
     ulkeler = query.offset(skip).limit(limit).all()
-    # return ulkeler
-    # "items" ve "total" içeren bir sözlük döndür
-    return [modeller.UlkeRead.model_validate(u, from_attributes=True) for u in ulkeler]
+    total_count = query.count()
+    return {"items": [modeller.UlkeRead.model_validate(u, from_attributes=True) for u in ulkeler], "total": total_count}
 
 @router.get("/ulkeler/{ulke_id}", response_model=modeller.UlkeRead)
 def read_ulke(ulke_id: int, db: Session = Depends(get_db)):
@@ -261,11 +255,12 @@ def create_gelir_siniflandirma(siniflandirma: modeller.GelirSiniflandirmaCreate,
     db.refresh(db_siniflandirma)
     return db_siniflandirma
 
-@router.get("/gelir_siniflandirmalari", response_model=List[modeller.GelirSiniflandirmaRead])
+@router.get("/gelir_siniflandirmalari", response_model=modeller.NitelikListResponse)
 def read_gelir_siniflandirmalari(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
     query = db.query(semalar.GelirSiniflandirma)
     siniflandirmalar = query.offset(skip).limit(limit).all()
-    return [modeller.GelirSiniflandirmaRead.model_validate(s, from_attributes=True) for s in siniflandirmalar]
+    total_count = query.count()
+    return {"items": [modeller.GelirSiniflandirmaRead.model_validate(s, from_attributes=True) for s in siniflandirmalar], "total": total_count}
 
 @router.get("/gelir_siniflandirmalari/{siniflandirma_id}", response_model=modeller.GelirSiniflandirmaRead)
 def read_gelir_siniflandirma(siniflandirma_id: int, db: Session = Depends(get_db)):
@@ -308,11 +303,12 @@ def create_gider_siniflandirma(siniflandirma: modeller.GiderSiniflandirmaCreate,
     db.refresh(db_siniflandirma)
     return db_siniflandirma
 
-@router.get("/gider_siniflandirmalari", response_model=List[modeller.GiderSiniflandirmaRead])
+@router.get("/gider_siniflandirmalari", response_model=modeller.NitelikListResponse)
 def read_gider_siniflandirmalari(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
     query = db.query(semalar.GiderSiniflandirma)
     siniflandirmalar = query.offset(skip).limit(limit).all()
-    return [modeller.GiderSiniflandirmaRead.model_validate(s, from_attributes=True) for s in siniflandirmalar]
+    total_count = query.count()
+    return {"items": [modeller.GiderSiniflandirmaRead.model_validate(s, from_attributes=True) for s in siniflandirmalar], "total": total_count}
 
 @router.get("/gider_siniflandirmalari/{siniflandirma_id}", response_model=modeller.GiderSiniflandirmaRead)
 def read_gider_siniflandirma(siniflandirma_id: int, db: Session = Depends(get_db)):

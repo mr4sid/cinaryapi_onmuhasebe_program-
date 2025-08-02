@@ -18,7 +18,7 @@ from .semalar import Musteri, KasaBanka, Tedarikci # EKLENDİ: Tedarikci modeli 
 from .rotalar import (
     dogrulama, musteriler, tedarikciler, stoklar,
     kasalar_bankalar, faturalar, siparisler, cari_hareketler,
-    gelir_gider, nitelikler, sistem, raporlar, yedekleme
+    gelir_gider, nitelikler, sistem, raporlar, yedekleme, kullanicilar
 )
 
 # Loglama ayarları
@@ -137,6 +137,7 @@ async def startup_event():
 
 # Router'ları ekle - İLGİLİ ROUTER DOSYALARI ZATEN PREFIX TANIMLADIĞI İÇİN BURADA PREFIX KULLANILMIYOR
 app.include_router(dogrulama.router, tags=["Doğrulama"])
+app.include_router(kullanicilar.router, tags=["Kullanıcılar"])
 app.include_router(musteriler.router, tags=["Müşteriler"])
 app.include_router(tedarikciler.router, tags=["Tedarikçiler"])
 app.include_router(stoklar.router, tags=["Stoklar"])

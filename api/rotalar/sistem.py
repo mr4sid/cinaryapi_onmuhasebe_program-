@@ -36,26 +36,26 @@ def get_genel_tedarikci_id_endpoint(db: Session = Depends(get_db)):
 
 @router.get("/varsayilan_kasa_banka/{odeme_turu}", response_model=modeller.KasaBankaRead)
 def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, db: Session = Depends(get_db)):
-    # Raporunuzda bu endpoint için henüz bir implementasyon yoktu.
-    # Varsayılan olarak, "Nakit" için kodu "VARSAYILAN_NAKIT" olanı, "Banka" için "VARSAYILAN_BANKA" olanı ararız.
-    # Bulunamazsa ilgili türdeki ilk hesabı döneriz.
-
+    # Ödeme türüne göre varsayılan hesap tipini belirle
+    hesap_tipi = None
     if odeme_turu.upper() == "NAKİT":
-        hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.kod == "VARSAYILAN_NAKİT").first()
-        if not hesap: 
-            # DEĞİŞİKLİK BURADA: 'hesap_turu' yerine 'tip' kullanıldı
-            hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.tip == "KASA").first()
-    elif odeme_turu.upper() == "BANKA":
-        hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.kod == "VARSAYILAN_BANKA").first()
-        if not hesap: 
-            # DEĞİŞİKLİK BURADA: 'hesap_turu' yerine 'tip' kullanıldı
-            hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.tip == "BANKA").first()
+        hesap_tipi = semalar.KasaBankaTipiEnum.KASA
+    elif odeme_turu.upper() in ["KART", "EFT/HAVALE", "ÇEK", "SENET"]:
+        hesap_tipi = semalar.KasaBankaTipiEnum.BANKA
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Desteklenmeyen ödeme türü: {odeme_turu}. 'Nakit' veya 'Banka' olmalıdır."
         )
-    
+
+    # Varsayılan hesap koduna göre ara
+    varsayilan_kod = f"VARSAYILAN_{hesap_tipi.value}"
+    hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.kod == varsayilan_kod).first()
+
+    # Eğer varsayılan kodla bir hesap bulunamazsa, ilgili türdeki ilk hesabı al
+    if not hesap:
+        hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.tip == hesap_tipi).first()
+
     if not hesap:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

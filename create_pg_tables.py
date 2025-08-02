@@ -74,17 +74,11 @@ def create_tables():
             logger.info("Varsayılan nitelik verileri ekleniyor...")
 
             # Nitelikler
-            kategoriler = ["Elektronik", "Giyim", "Gıda", "Ev Eşyası", "Kitap"]
-            markalar = ["ABC", "XYZ", "TechGen", "ModaEvim", "GourmetFoods"]
-            urun_gruplari = ["Akıllı Telefon", "Laptop", "Ayakkabı", "Gömlek", "Süt Ürünleri"]
             urun_birimleri = ["Adet", "Metre", "Kilogram", "Litre", "Kutu"]
             ulkeler = ["Türkiye", "ABD", "Almanya", "Çin", "Fransa"]
             gelir_siniflandirmalari = ["Satış Geliri", "Faiz Geliri", "Diğer Gelirler"]
             gider_siniflandirmalari = ["Kira Gideri", "Personel Gideri", "Fatura Gideri", "Pazarlama Gideri"]
 
-            for ad in kategoriler: db.add(UrunKategori(ad=ad))
-            for ad in markalar: db.add(UrunMarka(ad=ad))
-            for ad in urun_gruplari: db.add(UrunGrubu(ad=ad))
             for ad in urun_birimleri: db.add(UrunBirimi(ad=ad))
             for ad in ulkeler: db.add(Ulke(ad=ad))
             for ad in gelir_siniflandirmalari: db.add(GelirSiniflandirma(ad=ad))

@@ -1,21 +1,20 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, extract, case, String
-from datetime import date, datetime, timedelta # datetime eklendi
+from datetime import date, datetime, timedelta
 from typing import Optional
 from fastapi.responses import FileResponse
 from .. import modeller, semalar
 from ..veritabani import get_db
 from .musteriler import calculate_cari_net_bakiye
 from .tedarikciler import calculate_cari_net_bakiye as calculate_tedarikci_net_bakiye
-import openpyxl # openpyxl import edildi
-import os # os modülü import edildi
+import openpyxl
+import os
 
 router = APIRouter(prefix="/raporlar", tags=["Raporlar"])
 
-# Raporların saklanacağı dizin (uygulamanın kök dizininde 'server_reports' klasörü)
 REPORTS_DIR = "server_reports"
-os.makedirs(REPORTS_DIR, exist_ok=True) # Dizin yoksa oluştur
+os.makedirs(REPORTS_DIR, exist_ok=True)
 
 @router.get("/dashboard_ozet", response_model=modeller.PanoOzetiYanit)
 def get_dashboard_ozet_endpoint(
@@ -72,14 +71,14 @@ def get_dashboard_ozet_endpoint(
     today = date.today()
     vadesi_yaklasan_alacaklar_toplami = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
         semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
-        semalar.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value, # Filtre güncellendi
+        semalar.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value,
         semalar.Fatura.vade_tarihi >= today,
         semalar.Fatura.vade_tarihi <= (today + timedelta(days=30))
     ).scalar() or 0.0
 
     vadesi_gecmis_borclar_toplami = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
         semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS,
-        semalar.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value, # Filtre güncellendi
+        semalar.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value,
         semalar.Fatura.vade_tarihi < today
     ).scalar() or 0.0
 
@@ -112,19 +111,18 @@ def get_satislar_detayli_rapor_endpoint(
         query = query.filter(semalar.Fatura.cari_id == cari_id)
     
     total_count = query.count()
-    faturalar = query.all() # Tümünü çek, pagination rapor için uygun olmayabilir
+    faturalar = query.all()
 
     return {"items": [modeller.FaturaRead.model_validate(fatura, from_attributes=True) for fatura in faturalar], "total": total_count}
 
 @router.post("/generate_satis_raporu_excel", status_code=status.HTTP_200_OK)
 def generate_tarihsel_satis_raporu_excel_endpoint(
     baslangic_tarihi: date = Query(..., description="Başlangıç tarihi (YYYY-MM-DD)"),
-    bitis_tarihi: date = Query(..., description="Bitiş tarihi (YYYY-MM-DD)"),
+    bitis_tarihi: date = Query(..., description="YYYY-MM-DD formatında bitiş tarihi"),
     cari_id: Optional[int] = Query(None, description="Opsiyonel Cari ID"),
     db: Session = Depends(get_db)
 ):
     try:
-        # Step 1: Get data (similar to get_satislar_detayli_rapor_endpoint)
         query = db.query(semalar.Fatura).filter(
             semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
             semalar.Fatura.tarih >= baslangic_tarihi,
@@ -136,28 +134,19 @@ def generate_tarihsel_satis_raporu_excel_endpoint(
         
         faturalar = query.all()
         
-        # We also need FaturaKalemleri data for detailed sales report
-        # This requires joining or iterating to get kalemler for each fatura.
-        # For simplicity in this step, let's assume `get_satislar_detayli_rapor_endpoint`
-        # returns data in a way that can be directly used, or we fetch kalemler here.
-        # Let's adjust to fetch kalemler here as per the original `tarihsel_satis_raporu_excel_olustur`'s expectation of detailed items.
-        
-        # Reusing the logic from `get_satislar_detayli_rapor_endpoint` but getting actual data
         detailed_sales_data_response = modeller.FaturaListResponse(
             items=[modeller.FaturaRead.model_validate(fatura, from_attributes=True) for fatura in faturalar],
             total=len(faturalar)
         )
-        detailed_sales_data = detailed_sales_data_response.items # This is a list of FaturaRead objects
+        detailed_sales_data = detailed_sales_data_response.items
 
         if not detailed_sales_data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Belirtilen tarih aralığında satış faturası bulunamadı.")
 
-        # Step 2: Create Excel file using openpyxl
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Satış Raporu"
 
-        # Headers
         headers = [
             "Fatura No", "Tarih", "Cari Adı", "Ürün Kodu", "Ürün Adı", "Miktar", 
             "Birim Fiyat", "KDV (%)", "İskonto 1 (%)", "İskonto 2 (%)", "Uygulanan İskonto Tutarı", 
@@ -165,25 +154,20 @@ def generate_tarihsel_satis_raporu_excel_endpoint(
         ]
         ws.append(headers)
 
-        # Data rows
         for fatura_item in detailed_sales_data:
-            # Fetch kalemler for each fatura
             kalemler = db.query(semalar.FaturaKalemi).filter(semalar.FaturaKalemi.fatura_id == fatura_item.id).all()
             
-            # Populate basic fatura info
             fatura_no = fatura_item.fatura_no
             tarih = fatura_item.tarih.strftime("%Y-%m-%d") if isinstance(fatura_item.tarih, date) else str(fatura_item.tarih)
             cari_adi = fatura_item.cari_adi if fatura_item.cari_adi else "N/A"
             genel_toplam_fatura = fatura_item.genel_toplam
-            odeme_turu = fatura_item.odeme_turu.value if hasattr(fatura_item.odeme_turu, 'value') else str(fatura_item.odeme_turu) # Enum'sa .value al
+            odeme_turu = fatura_item.odeme_turu.value if hasattr(fatura_item.odeme_turu, 'value') else str(fatura_item.odeme_turu)
 
             for kalem in kalemler:
-                # Get product info from Stok table for code and name
                 urun = db.query(semalar.Stok).filter(semalar.Stok.id == kalem.urun_id).first()
                 urun_kodu = urun.kod if urun else "N/A"
                 urun_adi = urun.ad if urun else "N/A"
 
-                # Calculate item totals (re-calculate to be safe)
                 birim_fiyat_kdv_dahil_kalem_orig = kalem.birim_fiyat * (1 + kalem.kdv_orani / 100)
                 iskontolu_birim_fiyat_kdv_dahil = birim_fiyat_kdv_dahil_kalem_orig * (1 - kalem.iskonto_yuzde_1 / 100) * (1 - kalem.iskonto_yuzde_2 / 100)
                 uygulanan_iskonto_tutari = (birim_fiyat_kdv_dahil_kalem_orig - iskontolu_birim_fiyat_kdv_dahil) * kalem.miktar
@@ -197,7 +181,6 @@ def generate_tarihsel_satis_raporu_excel_endpoint(
                 ]
                 ws.append(row_data)
 
-        # Step 3: Save the Excel file
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"satis_raporu_{timestamp}.xlsx"
         filepath = os.path.join(REPORTS_DIR, filename)
@@ -216,17 +199,14 @@ def get_kar_zarar_verileri_endpoint(
     bitis_tarihi: date = Query(..., description="YYYY-MM-DD formatında bitiş tarihi"),
     db: Session = Depends(get_db)
 ):
-    # Toplam Satış Geliri
-    toplam_satis_geliri = db.query(func.sum(semalar.Fatura.genel_toplam)).filter( # genel_toplam yerine toplam_kdv_dahil kullanıldı
+    toplam_satis_geliri = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
         semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
         semalar.Fatura.tarih >= baslangic_tarihi,
         semalar.Fatura.tarih <= bitis_tarihi
     ).scalar() or 0.0
 
-    # Toplam Satış Maliyeti (satılan ürünlerin alış maliyeti)
-    # Her fatura kalemindeki ürünün alış fiyatı ile miktarını çarpıp topluyoruz
     toplam_satis_maliyeti = db.query(
-        func.sum(semalar.FaturaKalemi.miktar * semalar.FaturaKalemi.alis_fiyati_fatura_aninda) # semalar.Stok.alis_fiyati_kdv_dahil yerine FaturaKalemi.alis_fiyati_fatura_aninda
+        func.sum(semalar.FaturaKalemi.miktar * semalar.FaturaKalemi.alis_fiyati_fatura_aninda)
     ).join(semalar.Fatura, semalar.FaturaKalemi.fatura_id == semalar.Fatura.id) \
      .filter(
          semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
@@ -234,29 +214,26 @@ def get_kar_zarar_verileri_endpoint(
          semalar.Fatura.tarih <= bitis_tarihi
      ).scalar() or 0.0
 
-    # Toplam Alış Gideri
-    toplam_alis_gideri = db.query(func.sum(semalar.Fatura.genel_toplam)).filter( # genel_toplam yerine toplam_kdv_dahil kullanıldı
+    toplam_alis_gideri = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
         semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS,
         semalar.Fatura.tarih >= baslangic_tarihi,
         semalar.Fatura.tarih <= bitis_tarihi
     ).scalar() or 0.0
 
-    # Diğer Gelirler
     diger_gelirler = db.query(func.sum(semalar.GelirGider.tutar)).filter(
-        semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR, # islem_turu yerine tip kullanıldı
+        semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR,
         semalar.GelirGider.tarih >= baslangic_tarihi,
         semalar.GelirGider.tarih <= bitis_tarihi
     ).scalar() or 0.0
 
-    # Diğer Giderler
     diger_giderler = db.query(func.sum(semalar.GelirGider.tutar)).filter(
-        semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER, # islem_turu yerine tip kullanıldı
+        semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER,
         semalar.GelirGider.tarih >= baslangic_tarihi,
         semalar.GelirGider.tarih <= bitis_tarihi
     ).scalar() or 0.0
 
     brut_kar = toplam_satis_geliri - toplam_satis_maliyeti
-    net_kar = brut_kar + diger_gelirler - diger_giderler - toplam_alis_gideri # Basit bir kar/zarar hesabı
+    net_kar = brut_kar + diger_gelirler - diger_giderler - toplam_alis_gideri
 
     return {
         "toplam_satis_geliri": toplam_satis_geliri,
@@ -274,16 +251,14 @@ def get_nakit_akisi_raporu_endpoint(
     bitis_tarihi: date = Query(..., description="YYYY-MM-DD formatında bitiş tarihi"),
     db: Session = Depends(get_db)
 ):
-    # Bu ayki girişler (tahsilatlar, satış faturalarından gelen nakit/banka)
     nakit_girisleri = db.query(func.sum(semalar.KasaBankaHareket.tutar)).filter(
-        semalar.KasaBankaHareket.islem_yone == semalar.IslemYoneEnum.GIRIS, # Enum kullanıldı
+        semalar.KasaBankaHareket.islem_yone == semalar.IslemYoneEnum.GIRIS,
         semalar.KasaBankaHareket.tarih >= baslangic_tarihi,
         semalar.KasaBankaHareket.tarih <= bitis_tarihi
     ).scalar() or 0.0
 
-    # Bu ayki çıkışlar (ödemeler, alış faturalarından giden nakit/banka)
     nakit_cikislar = db.query(func.sum(semalar.KasaBankaHareket.tutar)).filter(
-        semalar.KasaBankaHareket.islem_yone == semalar.IslemYoneEnum.CIKIS, # Enum kullanıldı
+        semalar.KasaBankaHareket.islem_yone == semalar.IslemYoneEnum.CIKIS,
         semalar.KasaBankaHareket.tarih >= baslangic_tarihi,
         semalar.KasaBankaHareket.tarih <= bitis_tarihi
     ).scalar() or 0.0
@@ -303,34 +278,28 @@ def get_cari_yaslandirma_verileri_endpoint(db: Session = Depends(get_db)):
     musteri_alacaklar = []
     tedarikci_borclar = []
 
-    # Tüm aktif müşterileri al
     musteriler = db.query(semalar.Musteri).filter(semalar.Musteri.aktif == True).all()
     for musteri in musteriler:
-        net_bakiye = calculate_cari_net_bakiye(db, musteri.id, semalar.CariTipiEnum.MUSTERI) # Enum kullanıldı
-        if net_bakiye > 0: # Müşteriden alacaklıysak
+        net_bakiye = calculate_cari_net_bakiye(db, musteri.id, semalar.CariTipiEnum.MUSTERI)
+        if net_bakiye > 0:
             musteri_alacaklar.append({
                 "cari_id": musteri.id,
                 "cari_ad": musteri.ad,
                 "bakiye": net_bakiye,
-                "vade_tarihi": None # Bu rapor için faturaların vade tarihi çekilmeli
+                "vade_tarihi": None
             })
     
-    # Tüm aktif tedarikçileri al
     tedarikciler = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.aktif == True).all()
     for tedarikci in tedarikciler:
-        net_bakiye = calculate_tedarikci_net_bakiye(db, tedarikci.id, semalar.CariTipiEnum.TEDARIKCI) # Enum kullanıldı
-        if net_bakiye < 0: # Tedarikçiye borçluysak (bakiye eksi)
+        net_bakiye = calculate_tedarikci_net_bakiye(db, tedarikci.id, semalar.CariTipiEnum.TEDARIKCI)
+        if net_bakiye < 0:
             tedarikci_borclar.append({
                 "cari_id": tedarikci.id,
                 "cari_ad": tedarikci.ad,
-                "bakiye": abs(net_bakiye), # Borç pozitif gösterilsin
-                "vade_tarihi": None # Bu rapor için faturaların vade tarihi çekilmeli
+                "bakiye": abs(net_bakiye),
+                "vade_tarihi": None
             })
     
-    # Daha detaylı yaşlandırma için faturaların vade tarihleri ve ödenen miktarları takip edilmelidir.
-    # Bu implementasyon, sadece net bakiyeyi kullanarak basit bir özet sunar.
-    # Gerçek yaşlandırma raporları için `CariHareket` ve `Fatura` tablolarının detaylı analizi gereklidir.
-
     return {
         "musteri_alacaklar": musteri_alacaklar,
         "tedarikci_borclar": tedarikci_borclar
@@ -338,9 +307,8 @@ def get_cari_yaslandirma_verileri_endpoint(db: Session = Depends(get_db)):
 
 @router.get("/stok_deger_raporu", response_model=modeller.StokDegerResponse)
 def get_stok_envanter_ozet_endpoint(db: Session = Depends(get_db)):
-    # Stok.alis_fiyati_kdv_dahil alanı kaldırıldı, alis_fiyati üzerinden devam edilecek
     toplam_stok_maliyeti = db.query(
-        func.sum(semalar.Stok.miktar * semalar.Stok.alis_fiyati) # alis_fiyati_kdv_dahil yerine alis_fiyati
+        func.sum(semalar.Stok.miktar * semalar.Stok.alis_fiyati)
     ).filter(semalar.Stok.aktif == True).scalar() or 0.0
 
     return {
@@ -353,7 +321,6 @@ async def download_report_excel_endpoint(filename: str, db: Session = Depends(ge
     if not os.path.exists(filepath):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rapor dosyası bulunamadı.")
     
-    # Return the file directly
     return FileResponse(path=filepath, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 @router.get("/gelir_gider_aylik_ozet", response_model=modeller.GelirGiderAylikOzetResponse)
@@ -363,22 +330,20 @@ def get_gelir_gider_aylik_ozet_endpoint(
 ):
     gelir_gider_ozet = db.query(
         extract('month', semalar.GelirGider.tarih).label('ay'),
-        func.sum(case((semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR, semalar.GelirGider.tutar), else_=0)).label('toplam_gelir'), # islem_turu yerine tip kullanıldı
-        func.sum(case((semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER, semalar.GelirGider.tutar), else_=0)).label('toplam_gider') # islem_turu yerine tip kullanıldı
+        func.sum(case((semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR, semalar.GelirGider.tutar), else_=0)).label('toplam_gelir'),
+        func.sum(case((semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER, semalar.GelirGider.tutar), else_=0)).label('toplam_gider')
     ).filter(extract('year', semalar.GelirGider.tarih) == yil) \
      .group_by(extract('month', semalar.GelirGider.tarih)) \
      .order_by(extract('month', semalar.GelirGider.tarih)) \
      .all()
 
     aylik_data = []
-    for i in range(1, 13): # 1'den 12'ye kadar her ay için veri oluştur
-        # Ay adını alırken Türkçe locale sorunları olabileceği için manuel bir liste tercih edilebilir
-        # Şimdilik strftime kullanmaya devam edelim
+    for i in range(1, 13):
         ay_adlari_dict = {
             1: "Ocak", 2: "Şubat", 3: "Mart", 4: "Nisan", 5: "Mayıs", 6: "Haziran",
             7: "Temmuz", 8: "Ağustos", 9: "Eylül", 10: "Ekim", 11: "Kasım", 12: "Aralık"
         }
-        ay_adi = ay_adlari_dict.get(i, f"{i}. Ay") # Türkçe ay adları için güncellendi
+        ay_adi = ay_adlari_dict.get(i, f"{i}. Ay")
         
         gelir = next((item.toplam_gelir for item in gelir_gider_ozet if item.ay == i), 0.0)
         gider = next((item.toplam_gider for item in gelir_gider_ozet if item.ay == i), 0.0)
@@ -390,3 +355,24 @@ def get_gelir_gider_aylik_ozet_endpoint(
         })
     
     return {"aylik_ozet": aylik_data}
+
+@router.get("/urun_faturalari", response_model=modeller.FaturaListResponse)
+def get_urun_faturalari_endpoint(
+    urun_id: int,
+    fatura_turu: str = Query(None),
+    db: Session = Depends(get_db)
+):
+    query = db.query(semalar.Fatura).join(semalar.FaturaKalemi).filter(semalar.FaturaKalemi.urun_id == urun_id)
+
+    if fatura_turu:
+        query = query.filter(semalar.Fatura.fatura_turu == fatura_turu.upper())
+    
+    faturalar = query.distinct(semalar.Fatura.id).order_by(semalar.Fatura.id, semalar.Fatura.tarih.desc()).all()
+
+    if not faturalar:
+        return {"items": [], "total": 0}
+    
+    return {"items": [
+        modeller.FaturaRead.model_validate(fatura, from_attributes=True)
+        for fatura in faturalar
+    ], "total": len(faturalar)}

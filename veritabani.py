@@ -181,16 +181,17 @@ class OnMuhasebe:
             logger.error(f"Kullanıcı doğrulama başarısız: {e}")
             return None, None
             
+
+
     def kullanici_listele(self):
+        """API'den kullanıcı listesini çeker. Yanıtı 'items' listesi olarak döndürür."""
         try:
-            # API'deki kullanıcı listeleme endpoint'i modeller.UserListResponse döndürdüğü için
-            # doğrudan 'items' anahtarını döndürüyoruz.
             response = self._make_api_request("GET", "/kullanicilar/")
-            return response.get("items", []) 
+            return response.get("items", [])
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Kullanıcı listesi API'den alınamadı: {e}")
             return []
-
+                
     def kullanici_ekle(self, username, password, yetki):
         try:
             self._make_api_request("POST", "/dogrulama/register_temp", json={"kullanici_adi": username, "sifre": password, "yetki": yetki})
@@ -442,6 +443,56 @@ class OnMuhasebe:
             logger.error(f"Stok listesi alınırken hata: {e}", exc_info=True)
             raise # Hatayı yukarı fırlat
 
+    def stok_hareketleri_listele(self, stok_id: int, islem_tipi: str = None, baslangic_tarih: str = None, bitis_tarihi: str = None):
+        """
+        Belirli bir ürüne ait stok hareketlerini API'den çeker.
+        Args:
+            stok_id (int): Hareketi listelenecek ürünün ID'si.
+            islem_tipi (str, optional): Filtrelemek için işlem tipi. Varsayılan None.
+            baslangic_tarih (str, optional): Filtreleme için başlangıç tarihi. Varsayılan None.
+            bitis_tarihi (str, optional): Filtreleme için bitiş tarihi. Varsayılan None.
+        Returns:
+            list: Stok hareketleri listesi.
+        """
+        endpoint = f"/stoklar/{stok_id}/hareketler"
+        params = {
+            "islem_tipi": islem_tipi,
+            "baslangic_tarih": baslangic_tarih,
+            "bitis_tarihi": bitis_tarihi
+        }
+        # None olan parametreleri temizle (API'ye sadece geçerli filtreleri gönder)
+        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
+
+        try:
+            return self._make_api_request("GET", endpoint, params=cleaned_params)
+        except Exception as e:
+            logger.error(f"Stok hareketleri listelenirken API hatası: {e}", exc_info=True)
+            return []
+
+    def urun_faturalari_al(self, urun_id: int):
+        """
+        Belirli bir ürüne ait ilgili faturaları API'den çeker.
+        Args:
+            urun_id (int): İlgili faturaları listelenecek ürünün ID'si.
+        Returns:
+            list: İlgili faturalar listesi.
+        """
+        endpoint = "/raporlar/urun_faturalari"
+        params = {"urun_id": urun_id}
+        
+        try:
+            response = self._make_api_request("GET", endpoint, params=params)
+            if isinstance(response, dict) and "items" in response:
+                return response.get("items", [])
+            elif isinstance(response, list):
+                return response
+            else:
+                logger.warning(f"Ürün faturaları için API'den beklenmeyen yanıt formatı: {response}")
+                return []
+        except Exception as e:
+            logger.error(f"Ürün faturaları API'den alınamadı: {e}", exc_info=True)
+            return []        
+
     def stok_getir_by_id(self, stok_id: int):
         try:
             return self._make_api_request("GET", f"/stoklar/{stok_id}")
@@ -528,6 +579,7 @@ class OnMuhasebe:
             raise
 
     def fatura_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, fatura_turu: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, cari_id: int = None, odeme_turu: str = None, kasa_banka_id: int = None):
+        """Filtrelere göre fatura listesini API'den çeker."""
         params = {
             "skip": skip,
             "limit": limit,
@@ -565,12 +617,13 @@ class OnMuhasebe:
             return False, f"Fatura silinirken hata: {e}"
 
     def fatura_kalemleri_al(self, fatura_id: int):
+        """Belirli bir faturaya ait kalemleri API'den çeker."""
         try:
             return self._make_api_request("GET", f"/faturalar/{fatura_id}/kalemler")
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Fatura ID {fatura_id} kalemleri çekilirken hata: {e}")
             return []
-
+        
     def son_fatura_no_getir(self, fatura_turu: str):
         path = f"/sistem/next_fatura_number/{fatura_turu.upper()}"
         try:
@@ -1057,18 +1110,18 @@ class OnMuhasebe:
     def _format_currency(self, value):
         """Sayısal değeri Türkçe para birimi formatına dönüştürür."""
         try:
-            locale.setlocale(locale.LC_ALL, 'tr_TR.UTF-8') # Linux/macOS için
+            locale.setlocale(locale.LC_ALL, 'tr_TR.UTF-8')
         except locale.Error:
             try:
-                locale.setlocale(locale.LC_ALL, 'Turkish_Turkey.1254') # Windows için
+                locale.setlocale(locale.LC_ALL, 'Turkish_Turkey.1254')
             except locale.Error:
                 logger.warning("Sistemde Türkçe locale bulunamadı, varsayılan formatlama kullanılacak.")
         
         try:
             return locale.format_string("%.2f", self.safe_float(value), grouping=True) + " TL"
-        except Exception: # Diğer hatalar için (örn. locale hatası)
+        except Exception:
             return f"{self.safe_float(value):.2f} TL".replace('.', ',')
-
+        
     def _format_numeric(self, value, decimals):
         """Sayısal değeri Türkçe formatına dönüştürür. `_format_currency`'nin para birimi olmayan versiyonu."""
         try:
@@ -1089,11 +1142,10 @@ class OnMuhasebe:
         try:
             if isinstance(value, (int, float)):
                 return float(value)
-            # Virgülü noktaya çevirerek float'a dönüştür
             return float(str(value).replace(',', '.'))
         except (ValueError, TypeError):
             return 0.0
-
+        
     def create_tables(self, cursor=None):
         logger.info("create_tables çağrıldı ancak artık veritabanı doğrudan yönetilmiyor. Tabloların API veya create_pg_tables.py aracılığıyla oluşturulduğu varsayılıyor.")
         pass

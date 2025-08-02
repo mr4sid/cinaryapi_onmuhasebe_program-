@@ -465,7 +465,7 @@ class App(QMainWindow):
         # Eğer AnaSayfa üzerindeki butonlar show_tab'i çağırıyorsa, burada doğrudan bir bağlantıya gerek yok
         pass
 
-    def _initial_load_data(self):
+    def _initial_load_data(self): 
         """Uygulama başlangıcında veya veri güncellendiğinde tüm sekmelerdeki verileri yükler."""
         if not self.db_manager:
             return

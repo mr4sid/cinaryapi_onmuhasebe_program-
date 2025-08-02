@@ -259,10 +259,10 @@ class StokHareketCreate(StokHareketBase):
 
 class StokHareketRead(StokHareketBase):
     id: int
-    olusturma_tarihi_saat: datetime
-    onceki_stok: float = Field(default=0.0) # Eklendi ve varsayılan değer verildi
-    sonraki_stok: float = Field(default=0.0) # Eklendi ve varsayılan değer verildi
-    stok: Optional[StokRead] = None # İlişkili stok bilgisi
+    olusturma_tarihi_saat: Optional[datetime] = None
+    onceki_stok: Optional[float] = None
+    sonraki_stok: Optional[float] = None
+    stok: Optional[StokRead] = None
 
 class StokHareketListResponse(BaseModel): # Liste yanıtı
     items: List[StokHareketRead]
