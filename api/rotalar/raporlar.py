@@ -305,6 +305,75 @@ def get_cari_yaslandirma_verileri_endpoint(db: Session = Depends(get_db)):
         "tedarikci_borclar": tedarikci_borclar
     }
 
+@router.get("/cari_hesap_ekstresi", response_model=modeller.CariHareketListResponse)
+def get_cari_hesap_ekstresi_endpoint(
+    cari_id: int = Query(..., description="Cari ID"),
+    cari_turu: semalar.CariTipiEnum = Query(..., description="Cari Türü (MUSTERI veya TEDARIKCI)"),
+    baslangic_tarihi: date = Query(..., description="Başlangıç tarihi (YYYY-MM-DD)"),
+    bitis_tarihi: date = Query(..., description="Bitiş tarihi (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Belirtilen cari için hesap ekstresini getirir.
+    """
+    # Cari'nin varlığını kontrol et
+    if cari_turu == semalar.CariTipiEnum.MUSTERI:
+        cari_obj = db.query(semalar.Musteri).filter(semalar.Musteri.id == cari_id).first()
+    else:
+        cari_obj = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == cari_id).first()
+
+    if not cari_obj:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cari bulunamadı")
+
+    # Başlangıç tarihi öncesindeki devreden bakiyeyi hesapla
+    devreden_bakiye_alacak = db.query(func.sum(semalar.CariHareket.tutar)).filter(
+        semalar.CariHareket.cari_id == cari_id,
+        semalar.CariHareket.cari_turu == cari_turu,
+        semalar.CariHareket.islem_yone == semalar.IslemYoneEnum.ALACAK,
+        semalar.CariHareket.tarih < baslangic_tarihi
+    ).scalar() or 0.0
+
+    devreden_bakiye_borc = db.query(func.sum(semalar.CariHareket.tutar)).filter(
+        semalar.CariHareket.cari_id == cari_id,
+        semalar.CariHareket.cari_turu == cari_turu,
+        semalar.CariHareket.islem_yone == semalar.IslemYoneEnum.BORC,
+        semalar.CariHareket.tarih < baslangic_tarihi
+    ).scalar() or 0.0
+
+    devreden_bakiye = devreden_bakiye_borc - devreden_bakiye_alacak
+
+    # Belirtilen tarih aralığındaki hareketleri çek
+    hareketler_query = db.query(semalar.CariHareket).filter(
+        semalar.CariHareket.cari_id == cari_id,
+        semalar.CariHareket.cari_turu == cari_turu,
+        semalar.CariHareket.tarih >= baslangic_tarihi,
+        semalar.CariHareket.tarih <= bitis_tarihi
+    ).order_by(semalar.CariHareket.tarih.asc(), semalar.CariHareket.id.asc())
+
+    hareketler = hareketler_query.all()
+    
+    # Pydantic modellerine dönüştürme ve ilişkili verileri ekleme
+    hareket_read_models = []
+    for hareket in hareketler:
+        hareket_model_dict = modeller.CariHareketRead.model_validate(hareket, from_attributes=True).model_dump()
+        
+        # Fatura bilgisi ekle
+        if hareket.kaynak == semalar.KaynakTipEnum.FATURA and hareket.kaynak_id:
+            fatura_obj = db.query(semalar.Fatura).filter(semalar.Fatura.id == hareket.kaynak_id).first()
+            if fatura_obj:
+                hareket_model_dict['fatura_no'] = fatura_obj.fatura_no
+                hareket_model_dict['fatura_turu'] = fatura_obj.fatura_turu
+        
+        # Kasa/Banka adı ekle
+        if hareket.kasa_banka_id:
+            kasa_banka_obj = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == hareket.kasa_banka_id).first()
+            if kasa_banka_obj:
+                hareket_model_dict['kasa_banka_adi'] = kasa_banka_obj.hesap_adi
+
+        hareket_read_models.append(hareket_model_dict)
+
+    return {"items": hareket_read_models, "total": len(hareketler), "devreden_bakiye": devreden_bakiye}
+
 @router.get("/stok_deger_raporu", response_model=modeller.StokDegerResponse)
 def get_stok_envanter_ozet_endpoint(db: Session = Depends(get_db)):
     toplam_stok_maliyeti = db.query(

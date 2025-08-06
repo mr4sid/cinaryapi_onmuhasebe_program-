@@ -764,12 +764,13 @@ class OnMuhasebe:
             "bitis_tarihi": bitis_tarihi
         }
         try:
+            # API endpoint'ini doğru adrese yönlendirin
             response = self._make_api_request("GET", "/raporlar/cari_hesap_ekstresi", params=params)
             return response.get("items", []), response.get("devreden_bakiye", 0.0), True, "Başarılı"
         except Exception as e:
             logger.error(f"Cari hesap ekstresi API'den alınamadı: {e}")
             return [], 0.0, False, f"Ekstre alınırken hata: {e}"
-
+        
     def cari_hareketleri_listele(self, cari_id: int = None, baslangic_tarihi: Optional[str] = None, bitis_tarihi: Optional[str] = None, limit: int = 20, skip: int = 0):
         """
         API'den cari hareketleri listeler.

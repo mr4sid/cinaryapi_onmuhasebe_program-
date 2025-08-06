@@ -1,14 +1,14 @@
 # pencereler.py Dosyasının. Tamamım.
 
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QMessageBox, QFileDialog,
-    QWidget, QMenuBar, QStatusBar, QDialog, QPushButton, QVBoxLayout,
+    QApplication, QMessageBox, QFileDialog,
+    QWidget, QDialog, QPushButton, QVBoxLayout,
     QHBoxLayout, QGridLayout, QLabel, QLineEdit, QComboBox,
     QTreeWidget, QTreeWidgetItem, QAbstractItemView, QHeaderView, QTextEdit,
-    QCheckBox, QFrame, QTableWidget, QTableWidgetItem, QGroupBox,
-    QMenu, QTabWidget,QSizePolicy, QProgressBar, QListWidget, QListWidgetItem )
-from PySide6.QtGui import QFont, QPixmap, QImage, QDoubleValidator, QIntValidator, QBrush, QColor
-from PySide6.QtCore import Qt, QDate, QTimer, Signal, Slot
+    QCheckBox, QFrame, QGroupBox,
+    QMenu, QTabWidget,QSizePolicy, QProgressBar)
+from PySide6.QtGui import QFont, QPixmap, QDoubleValidator, QBrush, QColor
+from PySide6.QtCore import Qt, QTimer, Signal, QLocale
 import requests # Bu import, bazı eski direct request'ler için kalmış olabilir, ama kullanılmamalı.
 from datetime import datetime, date, timedelta
 import os
@@ -20,6 +20,7 @@ import multiprocessing
 import logging
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill 
+import locale 
 from veritabani import OnMuhasebe
 # AŞAMA 1 - Adım 1.2 için eklendi: CariService
 # AŞAMA 1 - Adım 1.1 için güncellendi: format_and_validate_numeric_input
@@ -35,30 +36,42 @@ if not logger.handlers:
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
-def setup_numeric_entry(parent_app, entry_widget, allow_negative=False, decimal_places=2, max_value=None): # parent_app parametresi eklendi
+def setup_numeric_entry(parent_app, entry_widget, allow_negative=False, decimal_places=2, max_value=None):
     validator = QDoubleValidator()
+
+    # Yerel ayarı QLocale nesnesiyle ayarla
+    current_locale = QLocale(locale.getlocale()[0])
+    validator.setLocale(current_locale)
+
     validator.setBottom(0.0 if not allow_negative else -999999999.0)
-    validator.setTop(999999999.0 if max_value is None else float(max_value))
+    validator.setTop(999999999999.0 if max_value is None else float(max_value))
     validator.setDecimals(decimal_places)
     validator.setNotation(QDoubleValidator.StandardNotation)
     entry_widget.setValidator(validator)
-    # textChanged sinyaline bağlanırken lambda içinde line_edit ve decimals argümanlarını geçirin
-    # decimal_places parametresi artık format_and_validate_numeric_input içinde kullanılmayacak.
-    # Formatlama locale ayarına göre 2 ondalık basamakla yapılacak.
-    entry_widget.textChanged.connect(lambda: format_and_validate_numeric_input(entry_widget, parent_app))
-    entry_widget.editingFinished.connect(lambda: format_and_validate_numeric_input(entry_widget, parent_app))    
+
+    # SADECE ODAK KAYBINDA VEYA ENTER TUŞUNA BASILDIĞINDA FORMATLAMA YAP
+    # Bu, kullanıcının serbestçe karakterleri silmesine olanak tanır.
+    entry_widget.editingFinished.connect(lambda: format_and_validate_numeric_input(entry_widget, parent_app))
+
+    # Başlangıçta 0'dan farklı bir değer varsa, onu formatla
+    if entry_widget.text() and entry_widget.text().strip() != "0,00":
+        format_and_validate_numeric_input(entry_widget, parent_app)
+        
+
 def setup_date_entry(parent_app, entry_widget):
     pass
 
 class SiparisPenceresi(QDialog):
+    # SiparisOlusturmaSayfasi'ndan dönen sinyalleri yakalamak için sinyaller tanımlanıyor
+    saved_successfully = Signal()
+    cancelled_successfully = Signal()
+
     def __init__(self, parent, db_manager, app_ref, siparis_tipi, siparis_id_duzenle=None, yenile_callback=None, initial_cari_id=None, initial_urunler=None, initial_data=None):
         super().__init__(parent)
         self.app = app_ref
         self.db = db_manager
-        
-        self.siparis_tipi = siparis_tipi
-        self.siparis_id_duzenle = siparis_id_duzenle
         self.yenile_callback = yenile_callback
+        self.siparis_id_duzenle = siparis_id_duzenle
         self.initial_cari_id = initial_cari_id
         self.initial_urunler = initial_urunler
         self.initial_data = initial_data
@@ -74,12 +87,12 @@ class SiparisPenceresi(QDialog):
                 QMessageBox.critical(self, "Hata", "Sipariş bilgisi yüklenirken hata oluştu.")
                 title = "Sipariş Güncelleme: Hata"
         else:
-            title = "Yeni Müşteri Siparişi" if siparis_tipi == "SATIŞ_SIPARIS" else "Yeni Tedarikçi Siparişi"
+            title = "Yeni Müşteri Siparişi" if siparis_tipi == self.db.SIPARIS_TIP_SATIS else "Yeni Tedarikçi Siparişi"
 
         self.setWindowTitle(title)
         self.setWindowState(Qt.WindowMaximized)
         self.setModal(True)
-
+        
         dialog_layout = QVBoxLayout(self)
 
         from arayuz import SiparisOlusturmaSayfasi
@@ -87,28 +100,23 @@ class SiparisPenceresi(QDialog):
             self,
             self.db,
             self.app,
-            self.siparis_tipi,
-            duzenleme_id=self.siparis_id_duzenle,
-            yenile_callback=self.yenile_callback,
-            initial_cari_id=self.initial_cari_id,
-            initial_urunler=self.initial_urunler,
-            initial_data=self.initial_data
+            siparis_tipi=siparis_tipi,
+            duzenleme_id=siparis_id_duzenle,
+            yenile_callback=self._siparis_kaydedildi,
+            initial_cari_id=initial_cari_id,
+            initial_urunler=initial_urunler,
+            initial_data=initial_data
         )
         dialog_layout.addWidget(self.siparis_form)
 
         self.siparis_form.saved_successfully.connect(self.accept)
         self.siparis_form.cancelled_successfully.connect(self.reject)
-
-        self.finished.connect(self.on_dialog_finished)
-
-    def on_dialog_finished(self, result):
-        if result == QDialog.Rejected and self.siparis_id_duzenle is None:
-            self.siparis_form._save_current_form_data_to_temp()
-        
+    
+    def _siparis_kaydedildi(self):
+        """Sipariş kaydedildiğinde çağrılan iç metot."""
+        self.saved_successfully.emit()
         if self.yenile_callback:
             self.yenile_callback()
-
-# pencereler.py dosyasındaki CariHesapEkstresiPenceresi sınıfının TAMAMI
 
 class CariHesapEkstresiPenceresi(QDialog):
     def __init__(self, parent_app, db_manager, cari_id, cari_tip, pencere_basligi, parent_list_refresh_func=None):
@@ -120,6 +128,7 @@ class CariHesapEkstresiPenceresi(QDialog):
         self.cari_ad_gosterim = pencere_basligi
         self.parent_list_refresh_func = parent_list_refresh_func
         self.hareket_detay_map = {}
+        self.kasa_banka_map = {}
 
         self.setWindowTitle(f"Cari Hesap Ekstresi: {self.cari_ad_gosterim}")
         self.setWindowState(Qt.WindowMaximized)
@@ -134,7 +143,10 @@ class CariHesapEkstresiPenceresi(QDialog):
 
         self.notebook = QTabWidget(self)
         self.layout().addWidget(self.notebook)
-        self.notebook.currentChanged.connect(self._on_tab_change)
+        
+        # NOTE: self.notebook.currentChanged.connect() satırını buradan kaldırıyoruz.
+        # En sona, tüm widget'lar oluşturulduktan sonra taşıyoruz.
+        # Bu, ilk sekme açıldığında self.ekstre_tree henüz oluşturulmadan sinyal yayılmasını engeller.
 
         self.hesap_hareketleri_tab = QWidget(self.notebook)
         self.notebook.addTab(self.hesap_hareketleri_tab, "Hesap Hareketleri")
@@ -143,19 +155,23 @@ class CariHesapEkstresiPenceresi(QDialog):
         self.siparisler_tab = QWidget(self.notebook)
         self.notebook.addTab(self.siparisler_tab, "Siparişler")
         self._create_siparisler_tab()
-
+        
         self.hizli_islemler_ana_frame = QFrame(self)
         self.layout().addWidget(self.hizli_islemler_ana_frame)
         self._create_hizli_islem_alanlari()
-
+        
         today = date.today()
         start_date = today - timedelta(days=3 * 365) if self.cari_tip == "TEDARIKCI" else today - timedelta(days=6 * 30)
         self.bas_tarih_entry.setText(start_date.strftime('%Y-%m-%d'))
         self.bit_tarih_entry.setText(today.strftime('%Y-%m-%d'))
-
+        
         self._yukle_ozet_bilgileri()
-        self.ekstreyi_yukle()
+        
+        # Yeni bağlantı satırı buraya taşındı. Artık `ekstre_tree` oluşturulduktan sonra bağlanacak.
+        self.notebook.currentChanged.connect(self._on_tab_change)
 
+        self.ekstreyi_yukle() # <-- İlk yüklemeyi burada yapıyoruz.
+        
         self.finished.connect(self.on_dialog_finished)
         self.app.register_cari_ekstre_window(self)
 
@@ -176,13 +192,15 @@ class CariHesapEkstresiPenceresi(QDialog):
             cari_adi = "Bilinmiyor"
             cari_telefon = ""
             
-            if self.cari_tip == "MUSTERI":
+            if self.cari_tip == self.db.CARI_TIP_MUSTERI:
+                # Düzeltildi: requests yerine db_manager metodu kullanıldı
                 cari_data = self.db.musteri_getir_by_id(self.cari_id)
                 if cari_data:
                     cari_adi = cari_data.get("ad", "Bilinmeyen Müşteri")
                     cari_telefon = cari_data.get("telefon", "")
                 
-            elif self.cari_tip == "TEDARIKCI":
+            elif self.cari_tip == self.db.CARI_TIP_TEDARIKCI:
+                # Düzeltildi: requests yerine db_manager metodu kullanıldı
                 cari_data = self.db.tedarikci_getir_by_id(self.cari_id)
                 if cari_data:
                     cari_adi = cari_data.get("ad", "Bilinmeyen Tedarikçi")
@@ -204,7 +222,7 @@ class CariHesapEkstresiPenceresi(QDialog):
         tree_frame = QFrame(parent_frame)
         parent_frame.layout().addWidget(tree_frame)
         self._create_treeview_alani(tree_frame)
-
+        
     def _create_siparisler_tab(self):
         parent_frame = self.siparisler_tab
         parent_frame.setLayout(QVBoxLayout(parent_frame))
@@ -217,7 +235,7 @@ class CariHesapEkstresiPenceresi(QDialog):
 
         col_defs = [
             ("ID", 40, Qt.AlignCenter), ("Sipariş No", 150, Qt.AlignCenter), ("Tarih", 100, Qt.AlignCenter),
-            ("Teslimat Tarihi", 100, Qt.AlignCenter), ("Toplam Tutar", 120, Qt.AlignRight), ("Durum", 120, Qt.AlignCenter),
+            ("Teslimat Tarihi", 100, Qt.AlignCenter), ("Toplam Tutar", 120, Qt.AlignCenter), ("Durum", 120, Qt.AlignCenter),
             ("Fatura No", 150, Qt.AlignCenter)
         ]
         for i, (col_id, w, a) in enumerate(col_defs):
@@ -234,11 +252,12 @@ class CariHesapEkstresiPenceresi(QDialog):
     def _siparisleri_yukle(self):
         self.siparisler_tree.clear()
         
+        siparisler_data = [] # Hata almamak için başlangıçta boş bir liste olarak tanımlandı
         try:
             params = {
-                'cari_id': self.cari_id,
-                'cari_turu': self.cari_tip
+                'cari_id': self.cari_id
             }
+            # 'cari_turu' parametresi OnMuhasebe.siparis_listesi_al() metodunda olmadığı için kaldırıldı
             siparisler_data_response = self.db.siparis_listesi_al(**params) 
             siparisler_data = siparisler_data_response.get("items", []) 
 
@@ -387,7 +406,8 @@ class CariHesapEkstresiPenceresi(QDialog):
         
         btn_date_start = QPushButton("🗓️")
         btn_date_start.setFixedWidth(30)
-        btn_date_start.clicked.connect(lambda: DatePickerDialog(self.app, self.bas_tarih_entry))
+        # Düzeltme: DatePickerDialog'u doğru şekilde çağırıp exec() ile gösteriyoruz.
+        btn_date_start.clicked.connect(lambda: self._open_date_picker_for_entry(self.bas_tarih_entry))
         filter_frame.layout().addWidget(btn_date_start)
 
         filter_frame.layout().addWidget(QLabel("Bitiş Tarihi:"))
@@ -396,13 +416,29 @@ class CariHesapEkstresiPenceresi(QDialog):
         
         btn_date_end = QPushButton("🗓️")
         btn_date_end.setFixedWidth(30)
-        btn_date_end.clicked.connect(lambda: DatePickerDialog(self.app, self.bit_tarih_entry))
+        # Düzeltme: DatePickerDialog'u doğru şekilde çağırıp exec() ile gösteriyoruz.
+        btn_date_end.clicked.connect(lambda: self._open_date_picker_for_entry(self.bit_tarih_entry))
         filter_frame.layout().addWidget(btn_date_end)
 
         btn_filter = QPushButton("Filtrele")
         btn_filter.clicked.connect(self.ekstreyi_yukle)
         filter_frame.layout().addWidget(btn_filter)
+
+    def _open_date_picker_for_entry(self, target_entry_qlineedit):
+        """
+        PySide6 DatePickerDialog'u açar ve seçilen tarihi target_entry_qlineedit'e yazar.
+        """
+        from yardimcilar import DatePickerDialog
+        initial_date_str = target_entry_qlineedit.text() if target_entry_qlineedit.text() else None
         
+        dialog = DatePickerDialog(self.app, initial_date=initial_date_str)
+        
+        # Sinyal bağlantısı
+        dialog.date_selected.connect(target_entry_qlineedit.setText)
+        
+        # Diyaloğu göster
+        dialog.exec()
+
     def _create_treeview_alani(self, tree_frame):
         tree_frame.setLayout(QVBoxLayout(tree_frame))
         
@@ -416,10 +452,10 @@ class CariHesapEkstresiPenceresi(QDialog):
             ("ID", 40, Qt.AlignCenter), ("Tarih", 80, Qt.AlignCenter),
             ("Saat", 60, Qt.AlignCenter), ("İşlem Tipi", 120, Qt.AlignCenter),
             ("Referans", 120, Qt.AlignCenter), ("Ödeme Türü", 100, Qt.AlignCenter),
-            ("Açıklama/Detay", 300, Qt.AlignLeft),
-            ("Borç", 100, Qt.AlignRight),
-            ("Alacak", 100, Qt.AlignRight),
-            ("Bakiye", 120, Qt.AlignRight),
+            ("Açıklama/Detay", 300, Qt.AlignCenter),
+            ("Borç", 100, Qt.AlignCenter),
+            ("Alacak", 100, Qt.AlignCenter),
+            ("Bakiye", 120, Qt.AlignCenter),
             ("Vade Tarihi", 90, Qt.AlignCenter)
         ]
         for i, (col_name, width, alignment) in enumerate(col_defs):
@@ -455,12 +491,12 @@ class CariHesapEkstresiPenceresi(QDialog):
 
         odeme_tahsilat_frame.layout().addWidget(QLabel("Tutar:"), 1, 0)
         self.ot_tutar_entry = QLineEdit("0,00")
-        setup_numeric_entry(self.app, self.ot_tutar_entry, decimal_places=2)
+        setup_numeric_entry(self.app, self.ot_tutar_entry)
         odeme_tahsilat_frame.layout().addWidget(self.ot_tutar_entry, 1, 1)
 
         odeme_tahsilat_frame.layout().addWidget(QLabel("Kasa/Banka:"), 2, 0)
         self.ot_kasa_banka_combo = QComboBox()
-        self.ot_kasa_banka_combo.setEnabled(False)
+        self.ot_kasa_banka_combo.setEnabled(True)  # Varsayılan olarak aktif yapıldı
         odeme_tahsilat_frame.layout().addWidget(self.ot_kasa_banka_combo, 2, 1)
 
         odeme_tahsilat_frame.layout().addWidget(QLabel("Not:"), 3, 0)
@@ -482,7 +518,7 @@ class CariHesapEkstresiPenceresi(QDialog):
 
         borc_frame.layout().addWidget(QLabel("Tutar:"), 1, 0)
         self.borc_tutar_entry = QLineEdit("0,00")
-        setup_numeric_entry(self.app, self.borc_tutar_entry, decimal_places=2)
+        setup_numeric_entry(self.app, self.borc_tutar_entry)
         borc_frame.layout().addWidget(self.borc_tutar_entry, 1, 1)
 
         borc_frame.layout().addWidget(QLabel("Not:"), 2, 0)
@@ -504,7 +540,7 @@ class CariHesapEkstresiPenceresi(QDialog):
 
         alacak_frame.layout().addWidget(QLabel("Tutar:"), 1, 0)
         self.alacak_tutar_entry = QLineEdit("0,00")
-        setup_numeric_entry(self.app, self.alacak_tutar_entry, decimal_places=2)
+        setup_numeric_entry(self.app, self.alacak_tutar_entry)
         alacak_frame.layout().addWidget(self.alacak_tutar_entry, 1, 1)
 
         alacak_frame.layout().addWidget(QLabel("Not:"), 2, 0)
@@ -514,6 +550,10 @@ class CariHesapEkstresiPenceresi(QDialog):
         btn_alacak_save = QPushButton("Alacak Kaydet")
         btn_alacak_save.clicked.connect(self._hizli_alacak_kaydet)
         alacak_frame.layout().addWidget(btn_alacak_save, 3, 0, 1, 2)
+        
+        self._yukle_kasa_banka_hesaplarini_hizli_islem_formu()
+        # Yeni eklenen satır: Form oluşturulduktan sonra varsayılan seçimi yapmak için çağırıyoruz.
+        self._ot_odeme_tipi_degisince()
 
     def _yukle_kasa_banka_hesaplarini_hizli_islem_formu(self):
         self.ot_kasa_banka_combo.clear()
@@ -557,41 +597,55 @@ class CariHesapEkstresiPenceresi(QDialog):
             self.ot_kasa_banka_combo.setEnabled(False)
 
     def _ot_odeme_tipi_degisince(self):
+        """Hızlı işlem formunda ödeme tipi değiştiğinde kasa/banka seçimini ayarlar."""
         selected_odeme_sekli = self.ot_odeme_tipi_combo.currentText()
         
         self.ot_kasa_banka_combo.blockSignals(True)
         
-        default_account_id = None
+        varsayilan_hesap_id = None
         try:
-            default_account_data = self.db.get_varsayilan_kasa_banka(selected_odeme_sekli)
-            if default_account_data:
-                default_account_id = default_account_data.get('id')
+            varsayilan_hesap_data = self.db.get_kasa_banka_by_odeme_turu(selected_odeme_sekli)
+            # get_kasa_banka_by_odeme_turu'nun (id, ad) tuple döndürdüğü varsayılıyor
+            if varsayilan_hesap_data and isinstance(varsayilan_hesap_data, tuple):
+                varsayilan_hesap_id = varsayilan_hesap_data[0]
         except Exception as e:
-            logging.warning(f"Default kasa/banka for {selected_odeme_sekli} could not be fetched: {e}")
+            logging.warning(f"Varsayılan kasa/banka ({selected_odeme_sekli}) çekilirken hata: {e}")
 
-        if default_account_id:
+        # Kasa/Banka combobox'ını yeniden doldurmak yerine, var olanlar arasından seçmeye çalışıyoruz.
+        # Bu, performansı artırır ve sinyal hatalarını önler.
+        if varsayilan_hesap_id:
+            index_to_set = -1
             for i in range(self.ot_kasa_banka_combo.count()):
-                if self.ot_kasa_banka_combo.itemData(i) == default_account_id:
-                    self.ot_kasa_banka_combo.setCurrentIndex(i)
+                if self.ot_kasa_banka_combo.itemData(i) == varsayilan_hesap_id:
+                    index_to_set = i
                     break
+            
+            if index_to_set != -1:
+                self.ot_kasa_banka_combo.setCurrentIndex(index_to_set)
             else:
+                # Varsayılan hesap listede yoksa, ilk geçerli hesabı seç
                 if self.ot_kasa_banka_combo.count() > 0 and self.ot_kasa_banka_combo.itemData(0) is not None:
                     self.ot_kasa_banka_combo.setCurrentIndex(0)
                 else:
                     self.ot_kasa_banka_combo.setCurrentText("")
-        elif self.ot_kasa_banka_combo.count() > 0 and self.ot_kasa_banka_combo.itemData(0) is not None:
-            self.ot_kasa_banka_combo.setCurrentIndex(0)
         else:
-            self.ot_kasa_banka_combo.setCurrentText("")
+            # Varsayılan hesap tanımlı değilse, ilk geçerli hesabı seç
+            if self.ot_kasa_banka_combo.count() > 0 and self.ot_kasa_banka_combo.itemData(0) is not None:
+                self.ot_kasa_banka_combo.setCurrentIndex(0)
+            else:
+                self.ot_kasa_banka_combo.setCurrentText("")
+                self.ot_kasa_banka_combo.setEnabled(False)
 
         self.ot_kasa_banka_combo.blockSignals(False)
-
+                
     def _yukle_ozet_bilgileri(self):
         try:
             cari_detail = None
-            if self.cari_tip == "MUSTERI":
+            if self.cari_tip == self.db.CARI_TIP_MUSTERI:
+                # Düzeltildi: requests yerine db_manager metodu kullanıldı
                 cari_detail = self.db.musteri_getir_by_id(self.cari_id)
             else:
+                # Düzeltildi: requests yerine db_manager metodu kullanıldı
                 cari_detail = self.db.tedarikci_getir_by_id(self.cari_id)
 
             if not cari_detail:
@@ -604,17 +658,20 @@ class CariHesapEkstresiPenceresi(QDialog):
             vergi_info = f"{cari_detail.get('vergi_dairesi', '-')} / {cari_detail.get('vergi_no', '-')}"
             self.lbl_cari_detay_vergi.setText(vergi_info)
 
-            net_bakiye = cari_detail.get("net_bakiye", 0.0)
+            # Düzeltildi: Bakiye, API'den değil, hesaplama metodu ile alınıyor
+            net_bakiye = self.db.get_musteri_net_bakiye(self.cari_id) if self.cari_tip == self.db.CARI_TIP_MUSTERI else self.db.get_tedarikci_net_bakiye(self.cari_id)
 
             bakiye_metni = self.db._format_currency(net_bakiye)
             if net_bakiye > 0:
-                bakiye_metni = f"<b style='color: green;'>{bakiye_metni} ALACAKLI</b>"
+                bakiye_metni = f"<b style='color: red;'>{bakiye_metni} ALACAKLI</b>" if self.cari_tip == self.db.CARI_TIP_MUSTERI else f"<b style='color: green;'>{bakiye_metni} BORÇLU</b>"
             elif net_bakiye < 0:
-                bakiye_metni = f"<b style='color: red;'>{bakiye_metni} BORÇLU</b>"
+                bakiye_metni = f"<b style='color: green;'>{bakiye_metni} BORÇLU</b>" if self.cari_tip == self.db.CARI_TIP_MUSTERI else f"<b style='color: red;'>{bakiye_metni} ALACAKLI</b>"
             else:
                 bakiye_metni = f"<b style='color: blue;'>{bakiye_metni}</b>"
             self.lbl_ozet_net_bakiye.setText(bakiye_metni)
 
+            # TODO: Dönemlik hareket özetleri ve vade bilgileri API'den çekilecek
+            # Şimdilik placeholder değerler
             self.lbl_donem_basi_bakiye.setText(self.db._format_currency(0.0))
             self.lbl_toplam_borc_hareketi.setText(self.db._format_currency(0.0))
             self.lbl_toplam_alacak_hareketi.setText(self.db._format_currency(0.0))
@@ -1108,33 +1165,37 @@ class CariHesapEkstresiPenceresi(QDialog):
         else:
             QMessageBox.information(self, "Detay", "Bu işlem tipi için detay görüntüleme mevcut değil.")
             
+# pencereler.py dosyasında FaturaGuncellemePenceresi'nin yeni içeriği
 class FaturaGuncellemePenceresi(QDialog):
+    # FaturaOlusturmaSayfasi'ndan dönen sinyalleri yakalamak için sinyaller tanımlanıyor
+    saved_successfully = Signal()
+
     def __init__(self, parent, db_manager, fatura_id_duzenle, yenile_callback_liste=None):
         super().__init__(parent)
         self.app = parent.app if hasattr(parent, 'app') else parent
         self.db = db_manager
         self.yenile_callback_liste = yenile_callback_liste
         self.fatura_id_duzenle = fatura_id_duzenle
-
+        
         try:
             fatura_ana_bilgileri = self.db.fatura_getir_by_id(self.fatura_id_duzenle)
             if not fatura_ana_bilgileri:
                 QMessageBox.critical(self, "Hata", f"ID {self.fatura_id_duzenle} olan fatura bulunamadı.")
                 self.reject()
                 return
-
         except Exception as e:
             QMessageBox.critical(self, "Hata", f"Fatura bilgileri çekilirken bir hata oluştu: {e}")
             logger.error(f"Fatura bilgileri yüklenirken hata oluştu: {e}", exc_info=True)
             self.reject()
             return
+        
+        fatura_turu = fatura_ana_bilgileri.get('fatura_turu')
+        fatura_no = fatura_ana_bilgileri.get('fatura_no', 'Bilinmiyor')
 
-        faturanın_gercek_islem_tipi = fatura_ana_bilgileri.get('fatura_turu')
-
-        self.setWindowTitle(f"Fatura Güncelleme: {fatura_ana_bilgileri.get('fatura_no', 'Bilinmiyor')}")
+        self.setWindowTitle(f"Fatura Güncelleme: {fatura_no}")
         self.setWindowState(Qt.WindowMaximized)
         self.setModal(True)
-
+        
         dialog_layout = QVBoxLayout(self)
 
         from arayuz import FaturaOlusturmaSayfasi
@@ -1142,1711 +1203,25 @@ class FaturaGuncellemePenceresi(QDialog):
             self,
             self.db,
             self.app,
-            faturanın_gercek_islem_tipi,
+            fatura_tipi=fatura_turu,
             duzenleme_id=self.fatura_id_duzenle,
-            yenile_callback=self._fatura_guncellendi_callback
+            yenile_callback=self._fatura_kaydedildi
         )
         dialog_layout.addWidget(self.fatura_olusturma_form)
 
+        # FaturaOlusturmaSayfasi'ndaki sinyallere bağlanıyoruz.
         self.fatura_olusturma_form.saved_successfully.connect(self.accept)
         self.fatura_olusturma_form.cancelled_successfully.connect(self.reject)
 
         self.finished.connect(self.on_dialog_finished)
 
-    def _fatura_guncellendi_callback(self):
-        pass
-
     def on_dialog_finished(self, result):
         if self.yenile_callback_liste:
             self.yenile_callback_liste()
-
-class FaturaPenceresi(QDialog):
-    FATURA_TIP_ALIS = "ALIŞ"
-    FATURA_TIP_SATIS = "SATIŞ"
-    FATURA_TIP_DEVIR_GIRIS = "DEVİR GİRİŞ"
-    FATURA_TIP_SATIS_IADE = "SATIŞ İADE"
-    FATURA_TIP_ALIS_IADE = "ALIŞ İADE"
-
-    ODEME_TURU_NAKIT = "NAKİT"
-    ODEME_TURU_KART = "KART"
-    ODEME_TURU_EFT_HAVALE = "EFT/HAVALE"
-    ODEME_TURU_CEK = "ÇEK"
-    ODEME_TURU_SENET = "SENET"
-    ODEME_TURU_ACIK_HESAP = "AÇIK HESAP"
-    ODEME_TURU_ETKISIZ_FATURA = "ETKİSİZ FATURA"
-
-    pesin_odeme_turleri = ["NAKİT", "KART", "EFT/HAVALE", "ÇEK", "SENET"]
-
-    CARI_TIP_MUSTERI = "MUSTERI"
-    CARI_TIP_TEDARIKCI = "TEDARIKCI"
-
-    def __init__(self, parent=None, db_manager=None, app_ref=None, fatura_tipi=None, duzenleme_id=None, yenile_callback=None, initial_data=None):
-        super().__init__(parent)
-        
-        self.app = app_ref
-        self.db = db_manager
-        self.yenile_callback = yenile_callback
-        self.duzenleme_id = duzenleme_id
-        self.initial_data = initial_data or {}
-        self.islem_tipi = fatura_tipi
-
-        self.iade_modu_aktif = self.initial_data.get('iade_modu', False)
-        self.original_fatura_id_for_iade = self.initial_data.get('orijinal_fatura_id')
-
-        if self.iade_modu_aktif:
-            if self.islem_tipi == self.FATURA_TIP_SATIS: self.islem_tipi = self.FATURA_TIP_SATIS_IADE
-            elif self.islem_tipi == self.FATURA_TIP_ALIS: self.islem_tipi = self.FATURA_TIP_ALIS_IADE
-
-        self.fatura_kalemleri_ui = []
-        self.tum_urunler_cache = []
-        self.urun_map_filtrelenmis = {}
-        self.kasa_banka_map = {}
-        self.cari_map_display_to_id = {}
-        self.cari_id_to_display_map = {}
-
-        self.secili_cari_id = None
-        self.secili_cari_adi = ""
-        self.perakende_musteri_id = None
-
-        self.setWindowTitle(self._get_baslik())
-        self.setWindowState(Qt.WindowMaximized)
-        self.setModal(True)
-
-        self.main_layout = QVBoxLayout(self)
-        
-        self._create_ui()
-        self._load_initial_data()
-        self._connect_signals()
-
-        QTimer.singleShot(0, self._on_iade_modu_changed)
-
-    def _connect_signals(self):
-        self.btn_cari_sec.clicked.connect(self._cari_secim_penceresi_ac)
-        self.odeme_turu_cb.currentIndexChanged.connect(self._odeme_turu_degisince_event_handler)
-        self.genel_iskonto_tipi_cb.currentIndexChanged.connect(self._on_genel_iskonto_tipi_changed)
-        self.genel_iskonto_degeri_e.textChanged.connect(self.toplamlari_hesapla_ui)
-
-        self.urun_arama_entry.textChanged.connect(self._delayed_stok_yenile)
-        # BURADA DEĞİŞİKLİK YAPILDI: Çift tıklama direkt sepete ekleyecek
-        self.urun_arama_sonuclari_tree.itemDoubleClicked.connect(self._double_click_add_to_cart)
-        self.urun_arama_sonuclari_tree.itemSelectionChanged.connect(self._secili_urun_bilgilerini_goster_arama_listesinden)
-
-        self.mik_e.textChanged.connect(lambda: format_and_validate_numeric_input(self.mik_e, 2))
-        self.birim_fiyat_e.textChanged.connect(lambda: format_and_validate_numeric_input(self.birim_fiyat_e, 2))
-        self.iskonto_yuzde_1_e.textChanged.connect(lambda: format_and_validate_numeric_input(self.iskonto_yuzde_1_e, 2))
-        self.iskonto_yuzde_2_e.textChanged.connect(lambda: format_and_validate_numeric_input(self.iskonto_yuzde_2_e, 2))
-        self.genel_iskonto_degeri_e.textChanged.connect(lambda: format_and_validate_numeric_input(self.genel_iskonto_degeri_e, 2))
-
-        self.btn_sepete_ekle.clicked.connect(self._kalem_ekle_arama_listesinden)
-        self.btn_secili_kalemi_sil.clicked.connect(self._secili_kalemi_sil)
-        self.btn_sepeti_temizle.clicked.connect(self._sepeti_temizle)
-        self.btn_kaydet.clicked.connect(self._kaydet_fatura)
-
-        self.sep_tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.sep_tree.customContextMenuRequested.connect(self._open_sepet_context_menu)
-
-    def _load_initial_data(self):
-        try:
-            self.perakende_musteri_id = self.db.get_perakende_musteri_id()
-            self._yukle_carileri()
-            self._yukle_kasa_banka_hesaplarini()
-            self._urunleri_yukle_ve_cachele_ve_goster()
-        except Exception as e:
-            self.app.set_status_message(f"Hata: Başlangıç verileri yüklenemedi. Detay: {e}", "red")
-            logging.error(f"FaturaPenceresi initial data yükleme hatası: {e}", exc_info=True)
-            return
-
-        if self.duzenleme_id:
-            self._mevcut_faturayi_yukle()
-        elif self.initial_data:
-            self._load_data_from_initial_data()
-        else:
-            self._reset_form_for_new_invoice()
-            
-    def _get_baslik(self):
-        if self.iade_modu_aktif:
-            return "İade Faturası Oluştur"
-        if self.duzenleme_id:
-            return "Fatura Güncelleme"
-        if self.islem_tipi == self.FATURA_TIP_SATIS:
-            return "Yeni Satış Faturası"
-        elif self.islem_tipi == self.FATURA_TIP_ALIS:
-            return "Yeni Alış Faturası"
-        return "Fatura"
-
-    def _varsayilan_degerleri_yukle(self):
-        # Varsayılan Perakende Müşteri'yi otomatik seç
-        if self.fatura_tipi == self.db.FATURA_TIP_SATIS:
-            perakende_musteri_id = self.db.get_perakende_musteri_id()
-            if perakende_musteri_id:
-                self._cari_sec_ui(perakende_musteri_id)
-        # Varsayılan Genel Tedarikçi'yi otomatik seç (alış faturası için)
-        elif self.fatura_tipi == self.db.FATURA_TIP_ALIS:
-            genel_tedarikci_id = self.db.get_genel_tedarikci_id()
-            if genel_tedarikci_id:
-                self._cari_sec_ui(genel_tedarikci_id)
-
-        # Varsayılan kasa/banka hesabını seç (Nakit ödeme türü için)
-        # Hata düzeltildi: get_varsayilan_kasa_banka yerine get_kasa_banka_by_odeme_turu kullanıldı
-        varsayilan_kb_info = self.db.get_kasa_banka_by_odeme_turu(self.db.ODEME_TURU_NAKIT)
-        if varsayilan_kb_info and varsayilan_kb_info[0]: # (id, ad) tuple döndüğü varsayımıyla
-            varsayilan_kb_id = varsayilan_kb_info[0]
-            # Kasa/Banka combobox'ında bu ID'yi seç
-            for i in range(self.kasa_banka_cb.count()):
-                if self.kasa_banka_cb.itemData(i) == varsayilan_kb_id:
-                    self.kasa_banka_cb.setCurrentIndex(i)
-                    break
-        else:
-            logging.warning("Varsayılan KB çekme hatası: get_kasa_banka_by_odeme_turu metodu boş veya yanlış formatta döndü.")
-
-        # Fatura numarası otomatik doldurma
-        if self.fatura_tipi == self.db.FATURA_TIP_SATIS:
-            self.fatura_no_input.setText(self.db.son_fatura_no_getir(self.db.FATURA_TIP_SATIS))
-        elif self.fatura_tipi == self.db.FATURA_TIP_ALIS:
-            self.fatura_no_input.setText(self.db.son_fatura_no_getir(self.db.FATURA_TIP_ALIS))
-
-    def _create_ui(self):
-            self.main_layout.setContentsMargins(10, 10, 10, 10)
-            self.main_layout.setSpacing(15)
-
-            # Üst ana yatay layout: Fatura Bilgileri ve Ürün Ekleme kısımlarını yan yana tutar
-            top_main_h_layout = QHBoxLayout()
-            top_main_h_layout.setSpacing(15)
-            self.main_layout.addLayout(top_main_h_layout)
-            # Ana layout'un üst kısmına daha az dikey esneme vererek alt kısımdaki sepetin büyümesini sağlar
-            self.main_layout.setStretchFactor(top_main_h_layout, 1)
-
-            # SOL KISIM: Fatura Bilgileri GroupBox
-            fatura_detay_groupbox = QGroupBox("Fatura Bilgileri", self)
-            fatura_detay_groupbox.setFont(QFont("Segoe UI", 10, QFont.Bold))
-            fatura_detay_groupbox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred) # Expanding yatayda
-            fatura_detay_layout = QGridLayout(fatura_detay_groupbox)
-            fatura_detay_layout.setContentsMargins(10, 20, 10, 10)
-            fatura_detay_layout.setSpacing(8)
-            fatura_detay_layout.setHorizontalSpacing(10) # Yatay boşluğu azaltıldı
-
-            top_main_h_layout.addWidget(fatura_detay_groupbox, 2) # Sol kısım, sağdan daha dar (streç faktör 2)
-
-            # Sütun gerilmeleri ve hizalamaları - Sol panelin daha kompakt olması için
-            fatura_detay_layout.setColumnStretch(0, 0) # İlk sütun (Label) minimum genişlik
-            fatura_detay_layout.setColumnStretch(1, 1) # İkinci sütun (Input) esnesin
-            fatura_detay_layout.setColumnStretch(2, 0) # Üçüncü sütun (Label) minimum genişlik
-            fatura_detay_layout.setColumnStretch(3, 1) # Dördüncü sütun (Input) esnesin
-            fatura_detay_layout.setColumnStretch(4, 0) # Beşinci sütun (Button) minimum genişlik
-            fatura_detay_layout.setColumnStretch(5, 1) # En sağdaki boşluğu itmek için yeni bir streç sütun
-
-            # Fatura No ve Tarih
-            fatura_detay_layout.addWidget(QLabel("Fatura No:", fatura_detay_groupbox), 0, 0)
-            self.f_no_e = QLineEdit(fatura_detay_groupbox)
-            self.f_no_e.setFixedWidth(150)
-            fatura_detay_layout.addWidget(self.f_no_e, 0, 1)
-
-            fatura_detay_layout.addWidget(QLabel("Tarih:", fatura_detay_groupbox), 0, 2)
-            self.fatura_tarihi_entry = QLineEdit(datetime.now().strftime('%Y-%m-%d'), fatura_detay_groupbox)
-            self.fatura_tarihi_entry.setReadOnly(True)
-            self.fatura_tarihi_entry.setFixedWidth(120)
-            fatura_detay_layout.addWidget(self.fatura_tarihi_entry, 0, 3)
-            self.btn_fatura_tarihi = QPushButton("🗓️", fatura_detay_groupbox)
-            self.btn_fatura_tarihi.setFixedWidth(30)
-            self.btn_fatura_tarihi.clicked.connect(lambda: DatePickerDialog(self.app, self.fatura_tarihi_entry))
-            fatura_detay_layout.addWidget(self.btn_fatura_tarihi, 0, 4)
-
-            # Cari Seçim
-            cari_btn_label_text = "Cari Seç:"
-            fatura_detay_layout.addWidget(QLabel(cari_btn_label_text, fatura_detay_groupbox), 1, 0)
-            self.btn_cari_sec = QPushButton("Cari Seç...", fatura_detay_groupbox)
-            self.btn_cari_sec.clicked.connect(self._cari_secim_penceresi_ac)
-            fatura_detay_layout.addWidget(self.btn_cari_sec, 1, 1, 1, 2) # colspan 2
-
-            self.lbl_secili_cari_adi = QLabel("Seçilen Cari: Yok", fatura_detay_groupbox)
-            self.lbl_secili_cari_adi.setWordWrap(True)
-            self.lbl_secili_cari_adi.setMinimumWidth(150)
-            fatura_detay_layout.addWidget(self.lbl_secili_cari_adi, 1, 3, 1, 2, Qt.AlignLeft | Qt.AlignVCenter) # colspan 2
-
-            self.lbl_cari_bakiye = QLabel("Bakiye: ---", fatura_detay_groupbox)
-            self.lbl_cari_bakiye.setFont(QFont("Segoe UI", 9, QFont.Bold))
-            fatura_detay_layout.addWidget(self.lbl_cari_bakiye, 2, 3, 1, 2, Qt.AlignLeft | Qt.AlignVCenter) # colspan 2
-
-            # Misafir Adı (Gizli Başlangıçta)
-            self.misafir_adi_container_frame = QFrame(fatura_detay_groupbox)
-            misafir_layout = QHBoxLayout(self.misafir_adi_container_frame)
-            misafir_layout.setContentsMargins(0, 0, 0, 0)
-            misafir_layout.setSpacing(5)
-            misafir_layout.addWidget(QLabel("Misafir Adı:", self.misafir_adi_container_frame))
-            self.entry_misafir_adi = QLineEdit(self.misafir_adi_container_frame)
-            misafir_layout.addWidget(self.entry_misafir_adi)
-            fatura_detay_layout.addWidget(self.misafir_adi_container_frame, 2, 0, 1, 2) # span 2
-            self.misafir_adi_container_frame.setVisible(False)
-
-            # Ödeme Türü - Kasa/Banka - Vade Tarihi - Fatura Notları - Genel İskonto
-            current_detail_row = 3 # Ödeme Türü'nün başladığı satır
-
-            fatura_detay_layout.addWidget(QLabel("Ödeme Türü:", fatura_detay_groupbox), current_detail_row, 0)
-            self.odeme_turu_cb = QComboBox(fatura_detay_groupbox)
-            self.odeme_turu_cb.addItems([self.ODEME_TURU_NAKIT, self.ODEME_TURU_KART, self.ODEME_TURU_EFT_HAVALE, self.ODEME_TURU_CEK, self.ODEME_TURU_SENET, self.ODEME_TURU_ACIK_HESAP, self.ODEME_TURU_ETKISIZ_FATURA])
-            self.odeme_turu_cb.setFixedWidth(180)
-            fatura_detay_layout.addWidget(self.odeme_turu_cb, current_detail_row, 1)
-
-            fatura_detay_layout.addWidget(QLabel("Kasa/Banka:", fatura_detay_groupbox), current_detail_row + 1, 0)
-            self.islem_hesap_cb = QComboBox(fatura_detay_groupbox)
-            self.islem_hesap_cb.setEnabled(False)
-            self.islem_hesap_cb.setFixedWidth(220)
-            fatura_detay_layout.addWidget(self.islem_hesap_cb, current_detail_row + 1, 1, 1, 3) # colspan 3
-
-            self.lbl_vade_tarihi = QLabel("Vade Tarihi:", fatura_detay_groupbox)
-            fatura_detay_layout.addWidget(self.lbl_vade_tarihi, current_detail_row + 2, 0)
-            self.entry_vade_tarihi = QLineEdit(fatura_detay_groupbox)
-            self.entry_vade_tarihi.setReadOnly(True)
-            self.entry_vade_tarihi.setEnabled(False)
-            self.entry_vade_tarihi.setFixedWidth(120)
-            fatura_detay_layout.addWidget(self.entry_vade_tarihi, current_detail_row + 2, 1)
-            self.btn_vade_tarihi = QPushButton("🗓️", fatura_detay_groupbox)
-            self.btn_vade_tarihi.setFixedWidth(30)
-            self.btn_vade_tarihi.clicked.connect(lambda: DatePickerDialog(self.app, self.entry_vade_tarihi))
-            self.btn_vade_tarihi.setEnabled(False)
-            fatura_detay_layout.addWidget(self.btn_vade_tarihi, current_detail_row + 2, 2)
-            
-            self.lbl_vade_tarihi.hide()
-            self.entry_vade_tarihi.hide()
-            self.btn_vade_tarihi.hide()
-
-            fatura_detay_layout.addWidget(QLabel("Fatura Notları:", fatura_detay_groupbox), current_detail_row + 3, 0, Qt.AlignTop)
-            self.fatura_notlari_text = QTextEdit(fatura_detay_groupbox)
-            self.fatura_notlari_text.setFixedHeight(60)
-            self.fatura_notlari_text.setMinimumWidth(250)
-            fatura_detay_layout.addWidget(self.fatura_notlari_text, current_detail_row + 3, 1, 1, 4) # colspan 4
-
-            # Genel İskonto - Bu kısım fatura_detay_groupbox'ında kalmalı
-            fatura_detay_layout.addWidget(QLabel("Genel İskonto Tipi:", fatura_detay_groupbox), current_detail_row + 4, 0)
-            self.genel_iskonto_tipi_cb = QComboBox(fatura_detay_groupbox)
-            self.genel_iskonto_tipi_cb.addItems(["YOK", "YUZDE", "TUTAR"])
-            self.genel_iskonto_tipi_cb.setFixedWidth(120)
-            fatura_detay_layout.addWidget(self.genel_iskonto_tipi_cb, current_detail_row + 4, 1, Qt.AlignLeft)
-
-            fatura_detay_layout.addWidget(QLabel("Genel İskonto Değeri:", fatura_detay_groupbox), current_detail_row + 4, 2)
-            self.genel_iskonto_degeri_e = QLineEdit("0,00", fatura_detay_groupbox)
-            setup_numeric_entry(self.app, self.genel_iskonto_degeri_e, decimal_places=2)
-            self.genel_iskonto_degeri_e.setEnabled(False)
-            self.genel_iskonto_degeri_e.setFixedWidth(100)
-            fatura_detay_layout.addWidget(self.genel_iskonto_degeri_e, current_detail_row + 4, 3)
-
-            # Boş satırları streç ile iterek yukarıya doğru sıkıştır
-            fatura_detay_layout.setRowStretch(current_detail_row + 5, 1)
-
-
-            # SAĞ KISIM: Ürün Ekleme GroupBox
-            urun_ekle_groupbox = QGroupBox("Ürün Ekleme", self)
-            urun_ekle_groupbox.setFont(QFont("Segoe UI", 10, QFont.Bold))
-            urun_ekle_groupbox.setMinimumWidth(350) # Minimum genişlik eklendi
-            urun_ekle_groupbox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred) # Genişlemesi için
-            urun_ekle_layout = QGridLayout(urun_ekle_groupbox)
-            urun_ekle_layout.setContentsMargins(10, 20, 10, 10)
-            urun_ekle_layout.setSpacing(8)
-            urun_ekle_layout.setHorizontalSpacing(15)
-
-            top_main_h_layout.addWidget(urun_ekle_groupbox, 3) # Streç faktör 3 (sağ panel daha geniş olsun)
-
-            urun_ekle_layout.addWidget(QLabel("Ürün Ara (Kod/Ad):", urun_ekle_groupbox), 0, 0, Qt.AlignRight)
-            self.urun_arama_entry = QLineEdit(urun_ekle_groupbox)
-            self.urun_arama_entry.setPlaceholderText("Ürün kodu veya adı ile ara...")
-            urun_ekle_layout.addWidget(self.urun_arama_entry, 0, 1)
-            urun_ekle_layout.setColumnStretch(0, 0) # Etiket için sabit genişlik
-            urun_ekle_layout.setColumnStretch(1, 1) # Giriş kutusu için esnek genişlik
-
-            self.urun_arama_sonuclari_tree = QTreeWidget(urun_ekle_groupbox)
-            self.urun_arama_sonuclari_tree.setHeaderLabels(["Ürün Adı", "Kod", "Fiyat", "Stok"])
-            self.urun_arama_sonuclari_tree.setSelectionBehavior(QAbstractItemView.SelectRows)
-            self.urun_arama_sonuclari_tree.setSelectionMode(QAbstractItemView.SingleSelection)
-            self.urun_arama_sonuclari_tree.setRootIsDecorated(False)
-            self.urun_arama_sonuclari_tree.setAlternatingRowColors(True)
-            
-            header = self.urun_arama_sonuclari_tree.header()
-            header.setSectionResizeMode(0, QHeaderView.Stretch)
-            header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-
-            # Ürün Arama Sonuçları başlık hizalaması
-            for i in range(self.urun_arama_sonuclari_tree.columnCount()):
-                self.urun_arama_sonuclari_tree.headerItem().setTextAlignment(i, Qt.AlignCenter)
-
-
-            urun_ekle_layout.addWidget(self.urun_arama_sonuclari_tree, 1, 0, 1, 2)
-            urun_ekle_layout.setRowStretch(1, 5) 
-
-            # Miktar, Birim Fiyat, Stok, İskonto 1, İskonto 2 - Tümü Yanyana düzenleme
-            urun_input_line_layout = QHBoxLayout()
-            urun_input_line_layout.setSpacing(5) # Elemanlar arası küçük boşluk
-
-            urun_input_line_layout.addWidget(QLabel("Mik.:", urun_ekle_groupbox))
-            self.mik_e = QLineEdit("1", urun_ekle_groupbox)
-            setup_numeric_entry(self.app, self.mik_e, decimal_places=2)
-            self.mik_e.setFixedWidth(60) # Daha küçük ve sabit genişlik
-            urun_input_line_layout.addWidget(self.mik_e)
-
-            urun_input_line_layout.addWidget(QLabel("B.Fiyat:", urun_ekle_groupbox))
-            self.birim_fiyat_e = QLineEdit("0,00", urun_ekle_groupbox)
-            setup_numeric_entry(self.app, self.birim_fiyat_e, decimal_places=2)
-            self.birim_fiyat_e.setFixedWidth(80) # Daha küçük ve sabit genişlik
-            urun_input_line_layout.addWidget(self.birim_fiyat_e)
-            
-            urun_input_line_layout.addWidget(QLabel("Stok:", urun_ekle_groupbox))
-            self.stk_l = QLabel("-", urun_ekle_groupbox)
-            self.stk_l.setFont(QFont("Segoe UI", 9, QFont.Bold))
-            urun_input_line_layout.addWidget(self.stk_l)
-
-            # İskonto alanları
-            urun_input_line_layout.addWidget(QLabel("İsk.1(%):", urun_ekle_groupbox))
-            self.iskonto_yuzde_1_e = QLineEdit("0,00", urun_ekle_groupbox)
-            setup_numeric_entry(self.app, self.iskonto_yuzde_1_e, decimal_places=2, max_value=100)
-            self.iskonto_yuzde_1_e.setFixedWidth(60)
-            urun_input_line_layout.addWidget(self.iskonto_yuzde_1_e)
-
-            urun_input_line_layout.addWidget(QLabel("İsk.2(%):", urun_ekle_groupbox))
-            self.iskonto_yuzde_2_e = QLineEdit("0,00", urun_ekle_groupbox)
-            setup_numeric_entry(self.app, self.iskonto_yuzde_2_e, decimal_places=2, max_value=100)
-            self.iskonto_yuzde_2_e.setFixedWidth(60)
-            urun_input_line_layout.addWidget(self.iskonto_yuzde_2_e)
-            
-            urun_input_line_layout.addStretch() # En sağdaki boşluğu itmek için
-
-            urun_ekle_layout.addLayout(urun_input_line_layout, 2, 0, 1, 2) # Yeni row'a ekle, span 2
-            urun_ekle_layout.setRowStretch(2, 0)
-
-            self.btn_sepete_ekle = QPushButton("Sepete Ekle", urun_ekle_groupbox)
-            self.btn_sepete_ekle.setFont(QFont("Segoe UI", 10, QFont.Bold))
-            self.btn_sepete_ekle.setStyleSheet("padding: 8px;")
-            urun_ekle_layout.addWidget(self.btn_sepete_ekle, 3, 0, 1, 2)
-            urun_ekle_layout.setRowStretch(3, 0)
-
-            urun_ekle_layout.setRowStretch(4, 1) 
-
-            # ALT KISIM: Fatura Kalemleri (Sepet) GroupBox
-            sepet_groupbox = QGroupBox("Fatura Kalemleri", self)
-            sepet_groupbox.setFont(QFont("Segoe UI", 10, QFont.Bold))
-            sepet_layout = QVBoxLayout(sepet_groupbox)
-            sepet_layout.setContentsMargins(10, 20, 10, 10)
-            sepet_layout.setSpacing(10)
-            self.main_layout.addWidget(sepet_groupbox)
-            self.main_layout.setStretchFactor(sepet_groupbox, 10) 
-
-            self.sep_tree = QTreeWidget(sepet_groupbox)
-            self.sep_tree.setHeaderLabels(["#", "Ürün Adı", "Mik.", "B.Fiyat", "KDV%", "İskonto 1 (%)", "İskonto 2 (%)", "Uyg. İsk. Tutarı", "Tutar(Dah.)", "Fiyat Geçmişi", "Ürün ID"])
-            self.sep_tree.setSelectionBehavior(QAbstractItemView.SelectRows)
-            self.sep_tree.setSelectionMode(QAbstractItemView.SingleSelection)
-            self.sep_tree.setRootIsDecorated(False)
-            self.sep_tree.setAlternatingRowColors(True)
-            
-            header = self.sep_tree.header()
-            header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(1, QHeaderView.Stretch)
-            header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(8, QHeaderView.ResizeToContents)
-            header.setSectionResizeMode(9, QHeaderView.Fixed)
-            header.setSectionResizeMode(10, QHeaderView.Fixed)
-            self.sep_tree.setColumnWidth(9, 90)
-            self.sep_tree.setColumnHidden(10, True)
-
-            # Fatura Kalemleri başlık hizalaması
-            for i in range(self.sep_tree.columnCount()):
-                self.sep_tree.headerItem().setTextAlignment(i, Qt.AlignCenter)
-
-
-            sepet_layout.addWidget(self.sep_tree)
-
-            # Sepet işlemleri butonları
-            btn_sepet_islemleri_frame = QFrame(sepet_groupbox)
-            btn_sepet_islemleri_layout = QHBoxLayout(btn_sepet_islemleri_frame)
-            btn_sepet_islemleri_layout.setContentsMargins(0, 5, 0, 0)
-            btn_sepet_islemleri_layout.addStretch()
-            self.btn_secili_kalemi_sil = QPushButton("Seçili Kalemi Sil", btn_sepet_islemleri_frame)
-            btn_sepet_islemleri_layout.addWidget(self.btn_secili_kalemi_sil)
-
-            self.btn_sepeti_temizle = QPushButton("Tüm Kalemleri Sil", btn_sepet_islemleri_frame)
-            btn_sepet_islemleri_layout.addWidget(self.btn_sepeti_temizle)
-            sepet_layout.addWidget(btn_sepet_islemleri_frame)
-
-
-            # EN ALT KISIM: Genel Toplamlar GroupBox ve Kaydet Butonu
-            footer_groupbox = QGroupBox("Genel Toplamlar", self)
-            footer_groupbox.setFont(QFont("Segoe UI", 10, QFont.Bold))
-            
-            # FOOTER'IN ANA LAYOUT'U QHBoxLayout olacak
-            footer_main_h_layout = QHBoxLayout(footer_groupbox)
-            footer_main_h_layout.setContentsMargins(10, 20, 10, 10)
-            footer_main_h_layout.setSpacing(15) # Elemanlar arası boşluk
-            self.main_layout.addWidget(footer_groupbox) # Dikeyde son element
-            self.main_layout.setStretchFactor(footer_groupbox, 0) # Footer'a minimum dikey esneme ver
-
-
-            # 1. Uygulanan Genel İskonto
-            uygulanan_iskonto_frame = QFrame(footer_groupbox)
-            uygulanan_iskonto_layout = QVBoxLayout(uygulanan_iskonto_frame)
-            uygulanan_iskonto_layout.setContentsMargins(0,0,0,0)
-            # NEW: Label for the descriptive text
-            uygulanan_iskonto_layout.addWidget(QLabel("Uygulanan Genel İskonto:", uygulanan_iskonto_frame), alignment=Qt.AlignLeft)
-            self.lbl_uygulanan_genel_iskonto = QLabel("0,00 TL", uygulanan_iskonto_frame)
-            self.lbl_uygulanan_genel_iskonto.setFont(QFont("Segoe UI", 15, italic=True))
-            uygulanan_iskonto_layout.addWidget(self.lbl_uygulanan_genel_iskonto, alignment=Qt.AlignLeft)
-            footer_main_h_layout.addWidget(uygulanan_iskonto_frame)
-            footer_main_h_layout.setStretchFactor(uygulanan_iskonto_frame, 1) # Esnesin
-
-
-            # 2. KDV Hariç Toplam
-            tkh_frame = QFrame(footer_groupbox)
-            tkh_layout = QVBoxLayout(tkh_frame)
-            tkh_layout.setContentsMargins(0,0,0,0)
-            # NEW: Label for the descriptive text
-            tkh_layout.addWidget(QLabel("KDV Hariç Toplam:", tkh_frame), alignment=Qt.AlignRight)
-            self.tkh_l = QLabel("0,00 TL", tkh_frame)
-            self.tkh_l.setFont(QFont("Segoe UI", 15, QFont.Bold))
-            tkh_layout.addWidget(self.tkh_l, alignment=Qt.AlignRight)
-            footer_main_h_layout.addWidget(tkh_frame)
-            footer_main_h_layout.setStretchFactor(tkh_frame, 1) # Esnesin
-
-
-            # 3. Toplam KDV
-            tkdv_frame = QFrame(footer_groupbox)
-            tkdv_layout = QVBoxLayout(tkdv_frame)
-            tkdv_layout.setContentsMargins(0,0,0,0)
-            # NEW: Label for the descriptive text
-            tkdv_layout.addWidget(QLabel("Toplam KDV:", tkdv_frame), alignment=Qt.AlignRight)
-            self.tkdv_l = QLabel("0,00 TL", tkdv_frame)
-            self.tkdv_l.setFont(QFont("Segoe UI", 15, QFont.Bold))
-            tkdv_layout.addWidget(self.tkdv_l, alignment=Qt.AlignRight)
-            footer_main_h_layout.addWidget(tkdv_frame)
-            footer_main_h_layout.setStretchFactor(tkdv_frame, 1) # Esnesin
-
-
-            # 4. Genel Toplam
-            gt_frame = QFrame(footer_groupbox)
-            gt_layout = QVBoxLayout(gt_frame)
-            gt_layout.setContentsMargins(0,0,0,0)
-            # NEW: Label for the descriptive text
-            gt_layout.addWidget(QLabel("Genel Toplam:", gt_frame), alignment=Qt.AlignRight)
-            self.gt_l = QLabel("0,00 TL", gt_frame)
-            self.gt_l.setFont(QFont("Segoe UI", 15, QFont.Bold))
-            self.gt_l.setStyleSheet("color: navy;")
-            gt_layout.addWidget(self.gt_l, alignment=Qt.AlignRight)
-            footer_main_h_layout.addWidget(gt_frame)
-            footer_main_h_layout.setStretchFactor(gt_frame, 1) # Esnesin
-            
-            # Kaydet Butonu çerçevesini ve içeriğini burada oluştur
-            btn_kaydet_frame_wrapper = QFrame(footer_groupbox) # Yeni bir wrapper frame
-            btn_kaydet_wrapper_layout = QVBoxLayout(btn_kaydet_frame_wrapper)
-            btn_kaydet_wrapper_layout.setContentsMargins(0,0,0,0)
-
-            # self.btn_kaydet tanımı burada yapılmalı
-            self.btn_kaydet = QPushButton("Kaydet", btn_kaydet_frame_wrapper) 
-            self.btn_kaydet.setFont(QFont("Segoe UI", 15, QFont.Bold))
-            self.btn_kaydet.setStyleSheet("background-color: #4CAF50; color: white; padding: 10px; border-radius: 5px;")
-            btn_kaydet_wrapper_layout.addWidget(self.btn_kaydet, alignment=Qt.AlignRight | Qt.AlignVCenter)
-            
-            footer_main_h_layout.addWidget(btn_kaydet_frame_wrapper) # Wrapper frame'i ekle
-            footer_main_h_layout.setStretchFactor(btn_kaydet_frame_wrapper, 0) # Sabit genişlik
-
-            # Diğer alt butonlar için ayrı bir layout
-            button_layout = QHBoxLayout()
-            self.main_layout.addLayout(button_layout) # Ana layout'a ekle
-
-            self.btn_iptal = QPushButton("İptal")
-            self.btn_iptal.clicked.connect(self.reject) # QDialog'u kapatır
-            button_layout.addWidget(self.btn_iptal)
-
-    def _mevcut_faturayi_yukle(self):
-        """
-        Düzenleme modunda mevcut faturanın bilgilerini API'den çeker ve forma yükler.
-        """
-        try:
-            fatura_ana = self.db.fatura_getir_by_id(self.duzenleme_id)
-            if not fatura_ana:
-                self.app.set_status_message(f"Hata: Fatura ID {self.duzenleme_id} bulunamadı.", "red")
-                return
-
-            fatura_kalemleri_api = self.db.fatura_kalemleri_al(self.duzenleme_id)
-            
-            self.f_no_e.setText(fatura_ana.get('fatura_no', ''))
-            self.fatura_tarihi_entry.setText(fatura_ana.get('tarih', ''))
-
-            self.secili_cari_id = fatura_ana.get('cari_id')
-            self.lbl_secili_cari_adi.setText(f"Seçilen Cari: {fatura_ana.get('cari_adi', 'Yok')}")
-            self._on_cari_selected()
-
-            self.odeme_turu_cb.setCurrentText(fatura_ana.get('odeme_turu', self.ODEME_TURU_NAKIT))
-            
-            if fatura_ana.get('kasa_banka_id'):
-                for i in range(self.islem_hesap_cb.count()):
-                    if self.islem_hesap_cb.itemData(i) == fatura_ana.get('kasa_banka_id'):
-                        self.islem_hesap_cb.setCurrentIndex(i)
-                        break
-
-            self.entry_vade_tarihi.setText(fatura_ana.get('vade_tarihi', ''))
-            self.fatura_notlari_text.setPlainText(fatura_ana.get('fatura_notlari', ''))
-            self.genel_iskonto_tipi_cb.setCurrentText(fatura_ana.get('genel_iskonto_tipi', "YOK"))
-            self.genel_iskonto_degeri_e.setText(f"{fatura_ana.get('genel_iskonto_degeri', 0.0):.2f}".replace('.', ','))
-            self._on_genel_iskonto_tipi_changed()
-
-            self.fatura_kalemleri_ui.clear()
-            for k_api in fatura_kalemleri_api:
-                urun_adi = self._get_urun_adi_by_id(k_api.get('urun_id'))
-
-                self.fatura_kalemleri_ui.append((
-                    k_api.get('urun_id'),
-                    urun_adi,
-                    k_api.get('miktar'),
-                    k_api.get('birim_fiyat'),
-                    k_api.get('kdv_orani'),
-                    k_api.get('kdv_tutari', 0.0),
-                    k_api.get('kalem_toplam_kdv_haric', 0.0),
-                    k_api.get('kalem_toplam_kdv_dahil', 0.0),
-                    k_api.get('alis_fiyati_fatura_aninda', 0.0),
-                    k_api.get('kdv_orani_fatura_aninda', k_api.get('kdv_orani')),
-                    k_api.get('iskonto_yuzde_1', 0.0),
-                    k_api.get('iskonto_yuzde_2', 0.0),
-                    k_api.get('iskonto_tipi', "YOK"),
-                    k_api.get('iskonto_degeri', 0.0),
-                    (k_api.get('kalem_toplam_kdv_dahil') / k_api.get('miktar')) if k_api.get('miktar') else 0.0
-                ))
-            
-            self._sepeti_guncelle_ui()
-            self.toplamlari_hesapla_ui()
-            self.f_no_e.setEnabled(False)
-            self.btn_cari_sec.setEnabled(False)
-
-            if self.iade_modu_aktif:
-                self.f_no_e.setEnabled(False)
-                self.btn_cari_sec.setEnabled(False)
-        
-        except Exception as e:
-            self.app.set_status_message(f"Hata: Fatura bilgileri yüklenemedi. Detay: {e}", "red")
-            logging.error(f"Fatura yükleme hatası: {e}", exc_info=True)
-
-    def _load_data_from_initial_data(self):
-        self.f_no_e.setText(self.initial_data.get('fatura_no', self.db.son_fatura_no_getir(self.islem_tipi)))
-        self.fatura_tarihi_entry.setText(self.initial_data.get('tarih', datetime.now().strftime('%Y-%m-%d')))
-        
-        self.odeme_turu_cb.setCurrentText(self.initial_data.get('odeme_turu', self.ODEME_TURU_NAKIT))
-        self._odeme_turu_degisince_event_handler()
-
-        self.secili_cari_id = self.initial_data.get('cari_id')
-        self.lbl_secili_cari_adi.setText(f"Seçilen Cari: {self.initial_data.get('cari_adi', 'Yok')}")
-        self._on_cari_selected()
-
-        self.entry_vade_tarihi.setText(self.initial_data.get('vade_tarihi', ''))
-        self.fatura_notlari_text.setPlainText(self.initial_data.get('fatura_notlari', ''))
-        self.genel_iskonto_tipi_cb.setCurrentText(self.initial_data.get('genel_iskonto_tipi', "YOK"))
-        self.genel_iskonto_degeri_e.setText(f"{self.initial_data.get('genel_iskonto_degeri', 0.0):.2f}".replace('.',','))
-        self._on_genel_iskonto_tipi_changed()
-
-        self.fatura_kalemleri_ui.clear()
-        for k_init in self.initial_data.get('kalemler', []):
-            urun_adi = self._get_urun_adi_by_id(k_init.get('urun_id'))
-
-            kdv_orani_init = k_init.get('kdv_orani', 0.0)
-            original_bf_haric_init = k_init.get('birim_fiyat')
-            
-            iskonto_yuzde_1_init = k_init.get('iskonto_yuzde_1', 0.0)
-            iskonto_yuzde_2_init = k_init.get('iskonto_yuzde_2', 0.0)
-            
-            fiyat_iskonto_1_sonrasi_dahil_calc = original_bf_haric_init * (1 + kdv_orani_init / 100) * (1 - iskonto_yuzde_1_init / 100)
-            iskontolu_birim_fiyat_kdv_dahil_calc = fiyat_iskonto_1_sonrasi_dahil_calc * (1 - iskonto_yuzde_2_init / 100)
-
-            alis_fiyati_fatura_aninda_init = k_init.get('alis_fiyati_fatura_aninda', 0.0)
-
-            self.fatura_kalemleri_ui.append((
-                k_init.get('urun_id'), urun_adi, k_init.get('miktar'), 
-                original_bf_haric_init,
-                kdv_orani_init,
-                0.0, 0.0, 0.0,
-                alis_fiyati_fatura_aninda_init,
-                kdv_orani_init,
-                iskonto_yuzde_1_init,
-                iskonto_yuzde_2_init,
-                k_init.get('iskonto_tipi', "YOK"),
-                k_init.get('iskonto_degeri', 0.0),
-                iskontolu_birim_fiyat_kdv_dahil_calc
-            ))
-        
-        self._sepeti_guncelle_ui()
-        self.toplamlari_hesapla_ui()
-
-    def _reset_form_for_new_invoice(self):
-        self.duzenleme_id = None
-        self.fatura_kalemleri_ui.clear()
-        self._sepeti_guncelle_ui()
-        self.toplamlari_hesapla_ui()
-
-        # Fatura No'yu ayarla
-        self.f_no_e.setText(self.db.son_fatura_no_getir(self.islem_tipi))
-        self.fatura_tarihi_entry.setText(datetime.now().strftime('%Y-%m-%d'))
-        self.odeme_turu_cb.setCurrentText(self.ODEME_TURU_NAKIT)
-        self.entry_vade_tarihi.clear()
-        self.fatura_notlari_text.clear()
-        self.genel_iskonto_tipi_cb.setCurrentText("YOK")
-        self.genel_iskonto_degeri_e.setText("0,00")
-        self.btn_cari_sec.setEnabled(True)
-        self._on_genel_iskonto_tipi_changed()
-
-        # Cari seçimini temizle
-        self._temizle_cari_secimi() 
-
-        # Fatura tipine göre varsayılan cariyi ayarla
-        if self.islem_tipi == self.FATURA_TIP_SATIS:
-            if self.perakende_musteri_id:
-                perakende_display_text = self.cari_id_to_display_map.get(str(self.perakende_musteri_id))
-                if perakende_display_text:
-                    self.secili_cari_id = self.perakende_musteri_id
-                    self.secili_cari_adi = perakende_display_text
-                    self.lbl_secili_cari_adi.setText(f"Seçilen Cari: {self.secili_cari_adi}")
-                    self._on_cari_selected() # Seçilen cariye göre UI öğelerini güncelle (bakiye vb.)
-                else:
-                    logging.warning(f"Perakende müşteri ID {self.perakende_musteri_id} için gösterim metni bulunamadı.")
-            else:
-                logging.warning("Perakende müşteri ID veritabanından alınamadı.")
-        elif self.islem_tipi == self.FATURA_TIP_ALIS: # Genel Tedarikçi varsayılan olarak seçilecek
-            genel_tedarikci_id = self.db.get_genel_tedarikci_id()
-            if genel_tedarikci_id:
-                genel_tedarikci_display_text = self.cari_id_to_display_map.get(str(genel_tedarikci_id))
-                if genel_tedarikci_display_text:
-                    self.secili_cari_id = genel_tedarikci_id
-                    self.secili_cari_adi = genel_tedarikci_display_text
-                    self.lbl_secili_cari_adi.setText(f"Seçilen Cari: {self.secili_cari_adi}")
-                    self._on_cari_selected()
-                else:
-                    logging.warning(f"Genel Tedarikçi ID {genel_tedarikci_id} için gösterim metni bulunamadı.")
-            else:
-                logging.warning("Genel Tedarikçi ID veritabanından alınamadı.")
-
-
-        self.urun_arama_entry.clear()
-        self.mik_e.setText("1")
-        self.birim_fiyat_e.setText("0,00")
-        self.stk_l.setText("-")
-        self.iskonto_yuzde_1_e.setText("0,00")
-        self.iskonto_yuzde_2_e.setText("0,00")
-
-        QTimer.singleShot(0, self._urunleri_yukle_ve_cachele_ve_goster)
-        self.f_no_e.setFocus()
-
-    def _temizle_cari_secimi(self):
-        self.secili_cari_id = None
-        self.secili_cari_adi = ""
-        self.lbl_secili_cari_adi.setText("Seçilen Cari: Yok")
-        if hasattr(self, 'misafir_adi_container_frame'):
-            self.misafir_adi_container_frame.setVisible(False)
-            if hasattr(self, 'entry_misafir_adi'):
-                self.entry_misafir_adi.clear()
-
-    def _on_iade_modu_changed(self):
-        self.setWindowTitle(self._get_baslik())
-
-        if self.iade_modu_aktif:
-            self.f_no_e.setEnabled(False)
-            self.btn_cari_sec.setEnabled(False)
-            
-            self.odeme_turu_cb.setEnabled(True)
-            self.islem_hesap_cb.setEnabled(True)
-            self.entry_vade_tarihi.setEnabled(True)
-            self.btn_vade_tarihi.setEnabled(True)
-
-            self.fatura_notlari_text.setPlainText(f"Orijinal Fatura ID: {self.original_fatura_id_for_iade} için iade faturasıdır.")
-            
-            if hasattr(self, 'misafir_adi_container_frame'):
-                self.misafir_adi_container_frame.setVisible(False)
-
-            self._odeme_turu_degisince_event_handler()
-            QMessageBox.information(self, "Bilgi", "İade Faturası modu aktif. Fatura No ve Cari kilitlenmiştir.")
-        else:
-            self.f_no_e.setEnabled(True)
-            self.btn_cari_sec.setEnabled(True)
-            self.fatura_notlari_text.clear()
-            self._odeme_turu_degisince_event_handler()
     
-    def _on_genel_iskonto_tipi_changed(self):
-        selected_type = self.genel_iskonto_tipi_cb.currentText()
-        if selected_type == "YOK":
-            self.genel_iskonto_degeri_e.setEnabled(False)
-            self.genel_iskonto_degeri_e.setText("0,00")
-        else:
-            self.genel_iskonto_degeri_e.setEnabled(True)
-        self.toplamlari_hesapla_ui()
-
-    def _odeme_turu_degisince_event_handler(self):
-        selected_odeme_turu = self.odeme_turu_cb.currentText()
-        
-        is_acik_hesap = (selected_odeme_turu == self.ODEME_TURU_ACIK_HESAP)
-        self.lbl_vade_tarihi.setVisible(is_acik_hesap)
-        self.entry_vade_tarihi.setVisible(is_acik_hesap)
-        self.btn_vade_tarihi.setVisible(is_acik_hesap)
-        self.entry_vade_tarihi.setEnabled(is_acik_hesap)
-        self.btn_vade_tarihi.setEnabled(is_acik_hesap)
-
-        if is_acik_hesap and not self.entry_vade_tarihi.text():
-            self.entry_vade_tarihi.setText((datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'))
-        elif not is_acik_hesap:
-            self.entry_vade_tarihi.clear()
-
-        is_pesin_odeme = (selected_odeme_turu in self.pesin_odeme_turleri)
-        self.islem_hesap_cb.setEnabled(is_pesin_odeme)
-
-        if is_pesin_odeme:
-            try:
-                varsayilan_kb_info = self.db.get_kasa_banka_by_odeme_turu(selected_odeme_turu)
-                if varsayilan_kb_info and varsayilan_kb_info[0]:
-                    varsayilan_kb_id = varsayilan_kb_info[0]
-                    for i in range(self.islem_hesap_cb.count()):
-                        if self.islem_hesap_cb.itemData(i) == varsayilan_kb_id:
-                            self.islem_hesap_cb.setCurrentIndex(i)
-                            break
-                elif self.islem_hesap_cb.count() > 0:
-                    self.islem_hesap_cb.setCurrentIndex(0)
-            except Exception as e:
-                QMessageBox.warning(self, "Hata", f"Varsayılan kasa/banka çekilirken hata: {e}")
-                logging.warning(f"Varsayılan KB çekme hatası: {e}")
-                if self.islem_hesap_cb.count() > 0: self.islem_hesap_cb.setCurrentIndex(0)
-                else: self.islem_hesap_cb.clear(); self.islem_hesap_cb.addItem("Hesap Yok", None); self.islem_hesap_cb.setEnabled(False)
-        else:
-            self.islem_hesap_cb.clear()
-            self.islem_hesap_cb.addItem("Hesap Yok", None)
-            self.islem_hesap_cb.setEnabled(False)
-
-        is_perakende_satis_current = (self.islem_tipi == self.FATURA_TIP_SATIS and
-                                      self.secili_cari_id == self.perakende_musteri_id)
-        
-        if hasattr(self, 'misafir_adi_container_frame'):
-            self.misafir_adi_container_frame.setVisible(is_perakende_satis_current and not self.iade_modu_aktif)
-            if hasattr(self, 'entry_misafir_adi'):
-                self.entry_misafir_adi.setEnabled(is_perakende_satis_current and not self.iade_modu_aktif)
-                if not (is_perakende_satis_current and not self.iade_modu_aktif):
-                    self.entry_misafir_adi.clear()
-
-    def _yukle_carileri(self):
-        self.tum_cariler_cache_data = []
-        self.cari_map_display_to_id = {}
-        self.cari_id_to_display_map = {}
-        
-        api_url = ""
-        
-        if self.islem_tipi in [self.db.FATURA_TIP_SATIS, self.db.FATURA_TIP_SATIS_IADE]:
-            api_url = "/musteriler/"
-        elif self.islem_tipi in [self.db.FATURA_TIP_ALIS, self.db.FATURA_TIP_ALIS_IADE, self.db.FATURA_TIP_DEVIR_GIRIS]:
-            api_url = "/tedarikciler/"
-        
-        if api_url:
-            try:
-                # `cariler_data`'nın `dict` mi yoksa `list` mi olduğunu kontrol ederek robust hale getirildi
-                cariler_response = self.db.musteri_listesi_al() if self.islem_tipi in [self.db.FATURA_TIP_SATIS, self.db.FATURA_TIP_SATIS_IADE] else self.db.tedarikci_listesi_al()
-                
-                cariler = []
-                if isinstance(cariler_response, dict) and "items" in cariler_response:
-                    cariler = cariler_response["items"]
-                elif isinstance(cariler_response, list): # Eğer API doğrudan liste dönüyorsa
-                    cariler = cariler_response
-                else:
-                    logging.warning("Cari listesi API yanıtı beklenen formatta değil.")
-                    self.app.set_status_message("Uyarı: Cari listesi API yanıtı beklenen formatta değil.", "orange")
-                    return # Veri formatı uyumsuzsa işlemi durdur
-
-                for c in cariler:
-                    cari_id = c.get('id')
-                    cari_ad = c.get('ad')
-                    cari_kodu_gosterim = c.get('kod', "") if self.islem_tipi in [self.db.FATURA_TIP_SATIS, self.db.FATURA_TIP_SATIS_IADE] else c.get('tedarikci_kodu', "")
-                    
-                    display_text = f"{cari_ad} (Kod: {cari_kodu_gosterim})"
-                    self.cari_map_display_to_id[display_text] = str(cari_id)
-                    self.cari_id_to_display_map[str(cari_id)] = display_text
-                    self.tum_cariler_cache_data.append(c)
-                
-                self.app.set_status_message(f"{len(cariler)} cari API'den yüklendi.")
-
-            except Exception as e:
-                QMessageBox.critical(self.app, "Hata", f"Cari listesi çekilirken hata: {e}")
-                logging.error(f"FaturaPenceresi cari listesi yükleme hatası: {e}", exc_info=True)
-        else:
-            self.app.set_status_message("Cari listesi yüklenemedi (geçersiz fatura tipi).")
-
-    def _cari_secim_penceresi_ac(self):
-        try:
-            cari_tip_for_dialog = None
-            if self.islem_tipi in [self.db.FATURA_TIP_SATIS, self.db.FATURA_TIP_SATIS_IADE]:
-                cari_tip_for_dialog = self.CARI_TIP_MUSTERI
-            elif self.islem_tipi in [self.db.FATURA_TIP_ALIS, self.db.FATURA_TIP_ALIS_IADE, self.db.FATURA_TIP_DEVIR_GIRIS]:
-                cari_tip_for_dialog = self.CARI_TIP_TEDARIKCI
-
-            from pencereler import CariSecimPenceresi
-            dialog = CariSecimPenceresi(self, self.db, cari_tip_for_dialog, self._on_cari_secildi_callback)
-            dialog.exec()
-        except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Cari seçim penceresi açılırken hata: {e}")
-            logging.error(f"Cari seçim penceresi açma hatası: {e}")
-
-    def _on_cari_secildi_callback(self, selected_cari_id, selected_cari_display_text):
-        self.secili_cari_id = selected_cari_id
-        self.secili_cari_adi = selected_cari_display_text
-        self.lbl_secili_cari_adi.setText(f"Seçilen Cari: {self.secili_cari_adi}")
-        self._on_cari_selected()
-
-    def _on_cari_selected(self):
-        if not self.secili_cari_id:
-            self.lbl_cari_bakiye.setText("Bakiye: ---")
-            self._odeme_turu_degisince_event_handler()
-            return
-        
-        cari_tip_for_bakiye = None
-        if self.islem_tipi in [self.FATURA_TIP_SATIS, self.FATURA_TIP_SATIS_IADE]:
-            cari_tip_for_bakiye = self.CARI_TIP_MUSTERI
-        elif self.islem_tipi in [self.FATURA_TIP_ALIS, self.FATURA_TIP_ALIS_IADE, self.FATURA_TIP_DEVIR_GIRIS]:
-            cari_tip_for_bakiye = self.CARI_TIP_TEDARIKCI
-        
-        if cari_tip_for_bakiye:
-            bakiye_bilgisi = None
-            try:
-                bakiye_bilgisi = self.db.get_musteri_net_bakiye(self.secili_cari_id) if cari_tip_for_bakiye == self.CARI_TIP_MUSTERI else self.db.get_tedarikci_net_bakiye(self.secili_cari_id)
-                
-                if bakiye_bilgisi is not None:
-                    bakiye_str = self.db._format_currency(bakiye_bilgisi)
-                    if bakiye_bilgisi > 0:
-                        self.lbl_cari_bakiye.setText(f"Borç: {bakiye_str}")
-                        self.lbl_cari_bakiye.setStyleSheet("color: red;")
-                    elif bakiye_bilgisi < 0:
-                        self.lbl_cari_bakiye.setText(f"Alacak: {bakiye_str}")
-                        self.lbl_cari_bakiye.setStyleSheet("color: green;")
-                    else:
-                        self.lbl_cari_bakiye.setText("Bakiye: 0,00 TL")
-                        self.lbl_cari_bakiye.setStyleSheet("color: black;")
-                else:
-                    self.lbl_cari_bakiye.setText("Bakiye: ---")
-                    self.lbl_cari_bakiye.setStyleSheet("color: black;")
-            except Exception as e:
-                self.lbl_cari_bakiye.setText("Bakiye: Hata")
-                self.lbl_cari_bakiye.setStyleSheet("color: red;")
-                logging.error(f"Cari bakiye çekilirken hata: {e}")
-
-        self._odeme_turu_degisince_event_handler()
-
-    def _urunleri_yukle_ve_cachele_ve_goster(self):
-        try:
-            filters = {"limit": 10000, "aktif_durum": True}
-            stok_listeleme_sonucu = self.db.stok_listesi_al(**filters) # API çağrısı
-
-            urunler = []
-            if isinstance(stok_listeleme_sonucu, dict) and "items" in stok_listeleme_sonucu:
-                urunler = stok_listeleme_sonucu["items"]
-            elif isinstance(stok_listeleme_sonucu, list):
-                urunler = stok_listeleme_sonucu
-                self.app.set_status_message("Uyarı: Stok listesi API yanıtı beklenen formatta değil. Doğrudan liste olarak işleniyor.", "orange")
-            else:
-                urunler = []
-                self.app.set_status_message("Hata: Stok listesi API'den alınamadı veya formatı geçersiz.", "red")
-                logging.error(f"Stok listesi API'den beklenen formatta gelmedi: {type(stok_listeleme_sonucu)} - {stok_listeleme_sonucu}")
-                return
-
-            self.tum_urunler_cache = urunler
-            self.urun_map_filtrelenmis.clear()
-            self.urun_arama_sonuclari_tree.clear()
-
-            for urun in urunler: # urunler listesindeki her öğe için döngü
-                if urun is not None: # EKLENEN KONTROL: urun'un None olup olmadığını kontrol et
-                    birim_obj = urun.get('birim')
-                    birim_ad_to_display = birim_obj.get('ad', '') if birim_obj else ''
-
-                    item_text = f"{urun.get('kod', '')} - {urun.get('ad', '')} ({urun.get('miktar', 0):.2f} {birim_ad_to_display})"
-                    item = QTreeWidgetItem(self.urun_arama_sonuclari_tree)
-                    item.setText(0, urun.get('ad', '')) # Ürün Adı
-                    item.setText(1, urun.get('kod', '')) # Kod
-
-                    fiyat_gosterim = 0.0
-                    # Fatura tipine göre fiyatı belirle
-                    if self.islem_tipi == self.FATURA_TIP_SATIS:
-                        fiyat_gosterim = urun.get('satis_fiyati', 0.0)
-                    elif self.islem_tipi == self.FATURA_TIP_ALIS or self.islem_tipi == self.FATURA_TIP_DEVIR_GIRIS:
-                        fiyat_gosterim = urun.get('alis_fiyati', 0.0)
-                    elif self.islem_tipi == self.FATURA_TIP_SATIS_IADE:
-                        fiyat_gosterim = urun.get('alis_fiyati', 0.0)
-                    elif self.islem_tipi == self.FATURA_TIP_ALIS_IADE:
-                        fiyat_gosterim = urun.get('satis_fiyati', 0.0)
-                    # else durumu için fiyat_gosterim 0.0 olarak kalır
-
-                    item.setText(2, self.db._format_currency(fiyat_gosterim)) # Fiyat
-                    item.setText(3, f"{urun.get('miktar', 0):.2f}".rstrip('0').rstrip('.')) # Stok
-
-                    item.setData(0, Qt.UserRole, urun['id'])
-                    item.setData(2, Qt.UserRole, fiyat_gosterim)
-                    item.setData(3, Qt.UserRole, urun.get('miktar', 0.0))
-
-                    # Ürün Arama metinlerini hizalama
-                    for col_idx in range(item.columnCount()):
-                        if col_idx == 0: # Ürün Adı sütunu
-                            item.setTextAlignment(col_idx, Qt.AlignLeft)
-                        else:
-                            item.setTextAlignment(col_idx, Qt.AlignCenter)
-
-                    self.urun_map_filtrelenmis[urun['id']] = {
-                        "id": urun['id'],
-                        "kod": urun['kod'],
-                        "ad": urun['ad'],
-                        "alis_fiyati": urun.get('alis_fiyati'),
-                        "satis_fiyati": urun.get('satis_fiyati'),
-                        "kdv_orani": urun.get('kdv_orani'),
-                        "miktar": urun.get('miktar'),
-                        "birim": birim_obj # Birim objesini de saklayalım
-                    }
-
-            if len(self.urun_map_filtrelenmis) == 1:
-                self.urun_arama_sonuclari_tree.setCurrentItem(self.urun_arama_sonuclari_tree.topLevelItem(0))
-                self.urun_arama_sonuclari_tree.setFocus()
-            
-            self.urun_arama_sonuclari_tree.setVisible(bool(self.urun_map_filtrelenmis))
-
-            self.app.set_status_message(f"{len(self.tum_urunler_cache)} ürün API'den önbelleğe alındı.")
-
-        except Exception as e:
-            logger.error(f"Ürün listesi yüklenirken hata oluştu: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Ürünler yüklenemedi. Detay: {e}", "red")     
-
-    def _delayed_stok_yenile(self):
-        if hasattr(self, '_delayed_timer') and self._delayed_timer.isActive():
-            self._delayed_timer.stop()
-        self._delayed_timer = QTimer(self)
-        self._delayed_timer.setSingleShot(True)
-        self._delayed_timer.timeout.connect(self._urun_listesini_filtrele_anlik)
-        self._delayed_timer.start(300)
-
-    def _urun_listesini_filtrele_anlik(self):
-        arama_terimi = self.urun_arama_entry.text().lower().strip()
-        self.urun_arama_sonuclari_tree.clear()
-        self.urun_map_filtrelenmis.clear()
-
-        for urun_item in self.tum_urunler_cache:
-            urun_kodu = urun_item['kod']
-            urun_adi = urun_item['ad']
-            fiyat_to_display = urun_item['satis_fiyati'] if self.islem_tipi == 'SATIŞ' else urun_item['alis_fiyati']
-            stok_db = urun_item['miktar']
-
-            if (not arama_terimi or
-                (urun_adi and arama_terimi in urun_adi.lower()) or
-                (urun_kodu and arama_terimi in urun_kodu.lower())):
-
-                item_iid = f"search_{urun_item['id']}"
-
-                item_qt = QTreeWidgetItem(self.urun_arama_sonuclari_tree)
-                item_qt.setText(0, urun_adi)
-                item_qt.setText(1, urun_kodu)
-                item_qt.setText(2, self.db._format_currency(fiyat_to_display))
-                item_qt.setText(3, f"{stok_db:.2f}".rstrip('0').rstrip('.'))
-
-                # Tüm sütunlardaki veriyi ortala ve fontu büyüt
-                for col_idx in range(item_qt.columnCount()):
-                    item_qt.setTextAlignment(col_idx, Qt.AlignCenter)
-                    item_qt.setFont(col_idx, QFont("Segoe UI", 18))
-
-                self.urun_map_filtrelenmis[item_iid] = {"id": urun_item['id'], "kod": urun_kodu, "ad": urun_adi, "fiyat": fiyat_to_display, "kdv": urun_item['kdv_orani'], "stok": stok_db}
-        
-        if len(self.urun_map_filtrelenmis) == 1:
-            self.urun_arama_sonuclari_tree.setCurrentItem(self.urun_arama_sonuclari_tree.topLevelItem(0))
-            self.urun_arama_sonuclari_tree.setFocus()
-        self.urun_arama_sonuclari_tree.setVisible(bool(self.urun_map_filtrelenmis))
-        self.secili_urun_bilgilerini_goster_arama_listesinden()
-        
-    def _select_product_from_search_list_and_focus_quantity(self, item):
-        self._secili_urun_bilgilerini_goster_arama_listesinden(item)
-        self.mik_e.setFocus()
-        self.mik_e.selectAll()
-
-    def _secili_urun_bilgilerini_goster_arama_listesinden(self): # 'item' parametresi kaldırıldı
-        selected_items = self.urun_arama_sonuclari_tree.selectedItems()
-        if selected_items:
-            urun_id = selected_items[0].data(0, Qt.UserRole)
-            if urun_id in self.urun_map_filtrelenmis:
-                urun_detaylari = self.urun_map_filtrelenmis[urun_id]
-                
-                if self.islem_tipi == self.FATURA_TIP_SATIS:
-                    birim_fiyat_to_fill = urun_detaylari.get('satis_fiyati', 0.0)
-                elif self.islem_tipi == self.FATURA_TIP_ALIS:
-                    birim_fiyat_to_fill = urun_detaylari.get('alis_fiyati', 0.0)
-                elif self.islem_tipi == self.FATURA_TIP_SATIS_IADE:
-                    birim_fiyat_to_fill = urun_detaylari.get('alis_fiyati', 0.0)
-                elif self.islem_tipi == self.FATURA_TIP_ALIS_IADE:
-                    birim_fiyat_to_fill = urun_detaylari.get('satis_fiyati', 0.0)
-                else:
-                    birim_fiyat_to_fill = 0.0
-
-                self.birim_fiyat_e.setText(f"{birim_fiyat_to_fill:.2f}".replace('.',','))
-                self.stk_l.setText(f"{urun_detaylari['miktar']:.2f}".rstrip('0').rstrip('.'))
-                self.stk_l.setStyleSheet("color: black;")
-            else:
-                self.birim_fiyat_e.setText("0,00")
-                self.stk_l.setText("-")
-                self.stk_l.setStyleSheet("color: black;")
-        else:
-            self.birim_fiyat_e.setText("0,00")
-            self.stk_l.setText("-")
-            self.stk_l.setStyleSheet("color: black;")
-            
-    def _kalem_ekle_arama_listesinden(self):
-        selected_items = self.urun_arama_sonuclari_tree.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(self.app, "Geçersiz Ürün", "Lütfen arama listesinden bir ürün seçin.")
-            return
-        
-        urun_id = selected_items[0].data(0, Qt.UserRole)
-        if urun_id not in self.urun_map_filtrelenmis:
-            QMessageBox.warning(self.app, "Geçersiz Ürün", "Seçili ürün detayları bulunamadı.")
-            return
-        
-        urun_detaylari = self.urun_map_filtrelenmis[urun_id]
-        
-        try:
-            miktar_str = self.mik_e.text().replace(',', '.')
-            eklenecek_miktar = float(miktar_str) if miktar_str else 0.0
-            if eklenecek_miktar <= 0:
-                QMessageBox.critical(self.app, "Geçersiz Miktar", "Miktar pozitif bir sayı olmalıdır.")
-                return
-
-            birim_fiyat_str = self.birim_fiyat_e.text().replace(',', '.')
-            birim_fiyat_kdv_dahil_input = float(birim_fiyat_str) if birim_fiyat_str else 0.0
-
-            iskonto_1_str = self.iskonto_yuzde_1_e.text().replace(',', '.')
-            iskonto_yuzde_1 = float(iskonto_1_str) if iskonto_1_str else 0.0
-            
-            iskonto_2_str = self.iskonto_yuzde_2_e.text().replace(',', '.')
-            iskonto_yuzde_2 = float(iskonto_2_str) if iskonto_2_str else 0.0
-
-        except ValueError:
-            QMessageBox.critical(self.app, "Giriş Hatası", "Miktar veya fiyat alanlarına geçerli sayısal değerler girin.")
-            return
-
-        if self.islem_tipi in [self.FATURA_TIP_SATIS, self.FATURA_TIP_ALIS_IADE]:
-            mevcut_stok = urun_detaylari.get('miktar', 0.0)
-            
-            sepetteki_urun_miktari = sum(k[2] for k in self.fatura_kalemleri_ui if k[0] == urun_id)
-            
-            if self.duzenleme_id:
-                original_fatura_kalemleri = self._get_original_invoice_items_from_db(self.duzenleme_id)
-                for orig_kalem in original_fatura_kalemleri:
-                    if orig_kalem['urun_id'] == urun_id:
-                        mevcut_stok += orig_kalem['miktar']
-                        break
-            
-            if (sepetteki_urun_miktari + eklenecek_miktar) > mevcut_stok:
-                reply = QMessageBox.question(self.app, "Stok Uyarısı",
-                                             f"'{urun_detaylari['ad']}' için stok yetersiz!\n"
-                                             f"Mevcut stok: {mevcut_stok:.2f} adet\n"
-                                             f"Sepete eklenecek toplam: {sepetteki_urun_miktari + eklenecek_miktar:.2f} adet\n\n"
-                                             "Devam etmek negatif stok oluşturacaktır. Emin misiniz?",
-                                             QMessageBox.Yes | QMessageBox.No)
-                if reply == QMessageBox.No: return
-
-        existing_kalem_index = -1
-        for i, kalem in enumerate(self.fatura_kalemleri_ui):
-            if kalem[0] == urun_id:
-                existing_kalem_index = i
-                break
-
-        urun_tam_detay_db = self.db.stok_getir_by_id(urun_id)
-        if not urun_tam_detay_db:
-            QMessageBox.critical(self.app, "Hata", "Ürün detayları veritabanında bulunamadı. Kalem eklenemiyor.")
-            return
-
-        original_birim_fiyat_kdv_haric = urun_tam_detay_db.get('alis_fiyati_kdv_haric') if self.islem_tipi == self.FATURA_TIP_ALIS else urun_tam_detay_db.get('satis_fiyati_kdv_haric')
-        kdv_orani = urun_tam_detay_db.get('kdv_orani')
-        alis_fiyati_fatura_aninda = urun_tam_detay_db.get('alis_fiyati')
-
-        self.kalem_guncelle(
-            kalem_index=existing_kalem_index, 
-            yeni_miktar=eklenecek_miktar, 
-            yeni_fiyat_kdv_dahil_orijinal=birim_fiyat_kdv_dahil_input,
-            yeni_iskonto_yuzde_1=iskonto_yuzde_1, 
-            yeni_iskonto_yuzde_2=iskonto_yuzde_2, 
-            yeni_alis_fiyati_fatura_aninda=alis_fiyati_fatura_aninda,
-            u_id=urun_id, 
-            urun_adi=urun_detaylari['ad'],
-            kdv_orani=kdv_orani
-        )
-        self.mik_e.setText("1")
-        self.birim_fiyat_e.setText("0,00")
-        self.iskonto_yuzde_1_e.setText("0,00")
-        self.iskonto_yuzde_2_e.setText("0,00")
-        self.urun_arama_entry.clear()
-        self.urun_arama_entry.setFocus()
-        
-    def _double_click_add_to_cart(self, item):
-        selected_items = self.urun_arama_sonuclari_tree.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(self.app, "Geçersiz Ürün", "Lütfen sepete eklemek için arama listesinden bir ürün seçin.")
-            return
-
-        urun_id = selected_items[0].data(0, Qt.UserRole)
-        if urun_id not in self.urun_map_filtrelenmis:
-            QMessageBox.warning(self.app, "Geçersiz Ürün", "Seçili ürün detayları bulunamadı.")
-            return
-        
-        urun_detaylari = self.urun_map_filtrelenmis[urun_id]
-        
-        # Fatura tipine göre varsayılan birim fiyatı belirle
-        birim_fiyat_kdv_dahil_input = 0.0
-        if self.islem_tipi == self.FATURA_TIP_SATIS or self.islem_tipi == self.FATURA_TIP_DEVIR_GIRIS:
-            birim_fiyat_kdv_dahil_input = urun_detaylari.get('satis_fiyati', 0.0)
-        elif self.islem_tipi == self.FATURA_TIP_ALIS:
-            birim_fiyat_kdv_dahil_input = urun_detaylari.get('alis_fiyati', 0.0)
-        elif self.islem_tipi == self.FATURA_TIP_SATIS_IADE:
-            birim_fiyat_kdv_dahil_input = urun_detaylari.get('alis_fiyati', 0.0)
-        elif self.islem_tipi == self.FATURA_TIP_ALIS_IADE:
-            birim_fiyat_kdv_dahil_input = urun_detaylari.get('satis_fiyati', 0.0)
-
-        # Varsayılan miktar 1 ve iskonto 0 olacak
-        eklenecek_miktar = 1.0
-        iskonto_yuzde_1 = 0.0
-        iskonto_yuzde_2 = 0.0
-
-        # Satış ve Satış İade faturalarında stok kontrolü yap
-        if self.islem_tipi in [self.FATURA_TIP_SATIS, self.FATURA_TIP_ALIS_IADE]:
-            mevcut_stok = urun_detaylari.get('miktar', 0.0)
-            sepetteki_urun_miktari = sum(k[2] for k in self.fatura_kalemleri_ui if k[0] == urun_id)
-            
-            # Eğer mevcut bir fatura düzenleniyorsa, orijinal fatura kalemindeki miktarı mevcut stoka geri ekle
-            if self.duzenleme_id:
-                original_fatura_kalemleri = self._get_original_invoice_items_from_db(self.duzenleme_id)
-                for orig_kalem in original_fatura_kalemleri:
-                    if orig_kalem['urun_id'] == urun_id:
-                        if self.islem_tipi == self.FATURA_TIP_SATIS:
-                            mevcut_stok += orig_kalem['miktar']
-                        elif self.islem_tipi == self.FATURA_TIP_ALIS_IADE:
-                            mevcut_stok += orig_kalem['miktar']
-                        break
-            
-            if (sepetteki_urun_miktari + eklenecek_miktar) > mevcut_stok:
-                reply = QMessageBox.question(self.app, "Stok Uyarısı",
-                                            f"'{urun_detaylari['ad']}' için stok yetersiz!\n"
-                                            f"Mevcut stok: {mevcut_stok:.2f} adet\n"
-                                            f"Sepete eklenecek toplam: {sepetteki_urun_miktari + eklenecek_miktar:.2f} adet\n\n"
-                                            "Devam etmek negatif stok oluşturacaktır. Emin misiniz?",
-                                            QMessageBox.Yes | QMessageBox.No)
-                if reply == QMessageBox.No: return
-
-        # Ürün sepette zaten varsa, sadece miktarını artır
-        existing_kalem_index = -1
-        for i, kalem in enumerate(self.fatura_kalemleri_ui):
-            if kalem[0] == urun_id:
-                existing_kalem_index = i
-                # Çift tıklamada miktarını 1 artır
-                eklenecek_miktar = kalem[2] + 1.0 # Mevcut miktara 1 ekle
-                # Birim fiyat ve iskonto oranları aynı kalsın (ilk eklendiği gibi)
-                birim_fiyat_kdv_dahil_input = kalem[14] # Güncel iskontolu birim fiyatı al
-                iskonto_yuzde_1 = kalem[10]
-                iskonto_yuzde_2 = kalem[11]
-                break
-
-        # Ürünün orijinal alış fiyatı, eğer satış faturasıysa. Kalem detayına kaydedilecek.
-        alis_fiyati_fatura_aninda = urun_detaylari.get('alis_fiyati', 0.0)
-
-        # kalem_guncelle metodunu kullanarak kalemi sepete ekle veya güncelle
-        self.kalem_guncelle(
-            kalem_index=existing_kalem_index,
-            yeni_miktar=eklenecek_miktar,
-            yeni_fiyat_kdv_dahil_orijinal=birim_fiyat_kdv_dahil_input,
-            yeni_iskonto_yuzde_1=iskonto_yuzde_1,
-            yeni_iskonto_yuzde_2=iskonto_yuzde_2,
-            yeni_alis_fiyati_fatura_aninda=alis_fiyati_fatura_aninda,
-            u_id=urun_id,
-            urun_adi=urun_detaylari['ad'],
-            kdv_orani=urun_detaylari.get('kdv_orani', 0.0)
-        )
-
-        # Alanları temizle ve arama kutusuna odaklan
-        self.urun_arama_entry.clear()
-        self.mik_e.setText("1")
-        self.birim_fiyat_e.setText("0,00")
-        self.iskonto_yuzde_1_e.setText("0,00")
-        self.iskonto_yuzde_2_e.setText("0,00")
-        self.stk_l.setText("-") # Stok etiketini temizle
-        self.urun_arama_entry.setFocus()
-
-    def kalem_guncelle(self, kalem_index, yeni_miktar, yeni_fiyat_kdv_dahil_orijinal, yeni_iskonto_yuzde_1, yeni_iskonto_yuzde_2, yeni_alis_fiyati_fatura_aninda, u_id=None, urun_adi=None, kdv_orani=None):
-        if kalem_index != -1: # Mevcut kalem, GÜNCELLE
-            item_to_update = list(self.fatura_kalemleri_ui[kalem_index])
-            urun_id_current = item_to_update[0]
-            kdv_orani_current = item_to_update[4]
-        else: # Yeni kalem, OLUŞTUR
-            if u_id is None or urun_adi is None or kdv_orani is None:
-                QMessageBox.critical(self.app, "Hata", "Yeni kalem eklenirken ürün bilgileri eksik.")
-                return
-            urun_id_current = u_id
-            kdv_orani_current = kdv_orani
-            
-            item_to_update = [
-                u_id, urun_adi, 0.0, # miktar daha sonra güncellenecek
-                0.0, kdv_orani_current, # birim_fiyat daha sonra güncellenecek
-                0.0, 0.0, 0.0, # kdv_tutari, kalem_toplam_kdv_haric, kalem_toplam_kdv_dahil
-                0.0, kdv_orani_current, # alis_fiyati_fatura_aninda, kdv_orani_fatura_aninda
-                0.0, 0.0, # iskonto_yuzde_1, iskonto_yuzde_2
-                "YOK", 0.0, # iskonto_tipi, iskonto_degeri
-                0.0 # iskontolu_birim_fiyat_kdv_dahil
-            ]
-
-        item_to_update[2] = self.db.safe_float(yeni_miktar)
-        item_to_update[10] = self.db.safe_float(yeni_iskonto_yuzde_1)
-        item_to_update[11] = self.db.safe_float(yeni_iskonto_yuzde_2)
-        item_to_update[8] = self.db.safe_float(yeni_alis_fiyati_fatura_aninda)
-
-        if kdv_orani_current == 0:
-            original_birim_fiyat_kdv_haric_calc = self.db.safe_float(yeni_fiyat_kdv_dahil_orijinal)
-        else:
-            original_birim_fiyat_kdv_haric_calc = self.db.safe_float(yeni_fiyat_kdv_dahil_orijinal) / (1 + self.db.safe_float(kdv_orani_current) / 100)
-        item_to_update[3] = original_birim_fiyat_kdv_haric_calc
-
-        fiyat_iskonto_1_sonrasi_dahil = self.db.safe_float(yeni_fiyat_kdv_dahil_orijinal) * (1 - self.db.safe_float(yeni_iskonto_yuzde_1) / 100)
-        iskontolu_birim_fiyat_kdv_dahil = fiyat_iskonto_1_sonrasi_dahil * (1 - self.db.safe_float(yeni_iskonto_yuzde_2) / 100)
-        
-        if iskontolu_birim_fiyat_kdv_dahil < 0: iskontolu_birim_fiyat_kdv_dahil = 0.0
-        item_to_update[14] = iskontolu_birim_fiyat_kdv_dahil
-
-        iskontolu_birim_fiyat_kdv_haric = iskontolu_birim_fiyat_kdv_dahil / (1 + self.db.safe_float(kdv_orani_current) / 100) if self.db.safe_float(kdv_orani_current) != 0 else iskontolu_birim_fiyat_kdv_dahil
-
-        item_to_update[5] = (iskontolu_birim_fiyat_kdv_dahil - iskontolu_birim_fiyat_kdv_haric) * self.db.safe_float(yeni_miktar)
-        item_to_update[6] = iskontolu_birim_fiyat_kdv_haric * self.db.safe_float(yeni_miktar)
-        item_to_update[7] = iskontolu_birim_fiyat_kdv_dahil * self.db.safe_float(yeni_miktar)
-
-        if kalem_index != -1: # Mevcut kalemi güncelle
-            self.fatura_kalemleri_ui[kalem_index] = tuple(item_to_update)
-        else: # Yeni kalemi ekle
-            self.fatura_kalemleri_ui.append(tuple(item_to_update))
-
-        self.sepeti_guncelle_ui()
-        self.toplamlari_hesapla_ui()
-        
-    def sepeti_guncelle_ui(self):
-        if not hasattr(self, 'sep_tree'):
-            return
-
-        self.sep_tree.clear()
-
-        for i, k in enumerate(self.fatura_kalemleri_ui):
-            miktar_f = self.db.safe_float(k[2])
-            birim_fiyat_gosterim_f = self.db.safe_float(k[14])
-            original_bf_haric_f = self.db.safe_float(k[3])
-            kdv_orani_f = self.db.safe_float(k[4])
-            iskonto_yuzde_1_f = self.db.safe_float(k[10])
-            iskonto_yuzde_2_f = self.db.safe_float(k[11])
-            kalem_toplam_dahil_f = self.db.safe_float(k[7])
-            
-            miktar_gosterim = f"{miktar_f:.2f}".rstrip('0').rstrip('.')
-            original_bf_dahil = original_bf_haric_f * (1 + kdv_orani_f / 100)
-            uygulanan_iskonto = (original_bf_dahil - birim_fiyat_gosterim_f) * miktar_f
-
-            item_qt = QTreeWidgetItem(self.sep_tree)
-            item_qt.setText(0, str(i + 1))
-            item_qt.setText(1, k[1])
-            item_qt.setText(2, miktar_gosterim)
-            item_qt.setText(3, self.db._format_currency(birim_fiyat_gosterim_f))
-            item_qt.setText(4, f"%{kdv_orani_f:.0f}")
-            item_qt.setText(5, f"{iskonto_yuzde_1_f:.2f}".replace('.',','))
-            item_qt.setText(6, f"{iskonto_yuzde_2_f:.2f}".replace('.',','))
-            item_qt.setText(7, self.db._format_currency(uygulanan_iskonto))
-            item_qt.setText(8, self.db._format_currency(kalem_toplam_dahil_f))
-            item_qt.setText(9, "Geçmişi Gör")
-            item_qt.setText(10, str(k[0]))
-
-            # Tüm sütunlardaki veriyi ortala ve fontu büyüt
-            for col_idx in range(item_qt.columnCount()):
-                item_qt.setTextAlignment(col_idx, Qt.AlignCenter)
-                item_qt.setFont(col_idx, QFont("Segoe UI", 12))
-
-            item_qt.setData(2, Qt.UserRole, miktar_f)
-            item_qt.setData(3, Qt.UserRole, birim_fiyat_gosterim_f)
-            item_qt.setData(4, Qt.UserRole, kdv_orani_f)
-            item_qt.setData(5, Qt.UserRole, iskonto_yuzde_1_f)
-            item_qt.setData(6, Qt.UserRole, iskonto_yuzde_2_f)
-            item_qt.setData(7, Qt.UserRole, uygulanan_iskonto)
-            item_qt.setData(8, Qt.UserRole, kalem_toplam_dahil_f)
-            item_qt.setData(10, Qt.UserRole, k[0])
-
-        self.toplamlari_hesapla_ui()
-
-    def toplamlari_hesapla_ui(self):
-        if not hasattr(self, 'tkh_l'): return
-
-        toplam_kdv_haric_kalemler = sum(self.db.safe_float(k[6]) for k in self.fatura_kalemleri_ui)
-        toplam_kdv_dahil_kalemler = sum(self.db.safe_float(k[7]) for k in self.fatura_kalemleri_ui)
-        toplam_kdv_kalemler = sum(self.db.safe_float(k[5]) for k in self.fatura_kalemleri_ui)
-
-        genel_iskonto_tipi = self.genel_iskonto_tipi_cb.currentText()
-        genel_iskonto_degeri_str = self.genel_iskonto_degeri_e.text()
-        genel_iskonto_degeri = self.db.safe_float(genel_iskonto_degeri_str) if self.genel_iskonto_degeri_e.isEnabled() else 0.0
-        
-        uygulanan_genel_iskonto_tutari = 0.0
-
-        if genel_iskonto_tipi == 'YUZDE' and genel_iskonto_degeri > 0:
-            uygulanan_genel_iskonto_tutari = toplam_kdv_haric_kalemler * (genel_iskonto_degeri / 100)
-        elif genel_iskonto_tipi == 'TUTAR' and genel_iskonto_degeri > 0:
-            uygulanan_genel_iskonto_tutari = genel_iskonto_degeri
-
-        nihai_toplam_kdv_dahil = toplam_kdv_dahil_kalemler - uygulanan_genel_iskonto_tutari
-        nihai_toplam_kdv_haric = toplam_kdv_haric_kalemler - uygulanan_genel_iskonto_tutari
-        nihai_toplam_kdv = nihai_toplam_kdv_dahil - nihai_toplam_kdv_haric
-
-        self.tkh_l.setText(f"KDV Hariç Toplam: {self.db._format_currency(nihai_toplam_kdv_haric)}")
-        self.tkdv_l.setText(f"Toplam KDV: {self.db._format_currency(nihai_toplam_kdv)}")
-        self.gt_l.setText(f"Genel Toplam: {self.db._format_currency(nihai_toplam_kdv_dahil)}")
-        self.lbl_uygulanan_genel_iskonto.setText(f"Uygulanan Genel İskonto: {self.db._format_currency(uygulanan_genel_iskonto_tutari)}")
-
-    def secili_kalemi_sil(self):
-        selected_items = self.sep_tree.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(self.app, "Uyarı", "Lütfen silmek için bir kalem seçin.")
-            return
-            
-        selected_item_qt = selected_items[0]
-        kalem_index_str = selected_item_qt.text(0)
-        try:
-            kalem_index = int(kalem_index_str) - 1
-        except ValueError:
-            QMessageBox.critical(self.app, "Hata", "Seçili kalemin indeksi okunamadı.")
-            return
-
-        del self.fatura_kalemleri_ui[kalem_index]
-        
-        self.sepeti_guncelle_ui()
-        self.toplamlari_hesapla_ui()
-        
-    def sepeti_temizle(self):
-        if self.fatura_kalemleri_ui and QMessageBox.question(self.app, "Onay", "Tüm kalemleri silmek istiyor musunuz?", QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
-            self.fatura_kalemleri_ui.clear()
-            self.sepeti_guncelle_ui()
-            self.toplamlari_hesapla_ui()
-
-    def _open_sepet_context_menu(self, pos):
-        item = self.sep_tree.itemAt(pos)
-        if not item: return
-
-        self.sep_tree.setCurrentItem(item)
-
-        context_menu = QMenu(self)
-
-        edit_action = context_menu.addAction("Kalemi Düzenle")
-        edit_action.triggered.connect(lambda: self._kalem_duzenle_penceresi_ac(item, None))
-
-        delete_action = context_menu.addAction("Seçili Kalemi Sil")
-        delete_action.triggered.connect(self.secili_kalemi_sil)
-
-        history_action = context_menu.addAction("Fiyat Geçmişi")
-        history_action.triggered.connect(lambda: self._on_sepet_kalem_click(item, 9))
-        
-        urun_karti_action = context_menu.addAction("Ürün Kartını Aç")
-        urun_karti_action.triggered.connect(lambda: self._open_urun_karti_from_sep_item(item, None))
-
-        context_menu.exec(self.sep_tree.mapToGlobal(pos))
-
-    def _kalem_duzenle_penceresi_ac(self, item, column):
-        kalem_index_str = item.text(0)
-        try: kalem_index = int(kalem_index_str) - 1
-        except ValueError:
-            QMessageBox.critical(self.app, "Hata", "Seçili kalemin indeksi okunamadı."); return
-
-        kalem_verisi = self.fatura_kalemleri_ui[kalem_index]
-        from pencereler import KalemDuzenlePenceresi
-        dialog = KalemDuzenlePenceresi(self, self.db, kalem_index, kalem_verisi, self.islem_tipi, self.duzenleme_id)
-        dialog.exec()
-
-    def _on_sepet_kalem_click(self, item, column):
-        header_text = self.sep_tree.headerItem().text(column)
-        if header_text == "Fiyat Geçmişi":
-            urun_id_str = item.text(10)
-            kalem_index_str = item.text(0)
-            try:
-                urun_id = int(urun_id_str)
-                kalem_index = int(kalem_index_str) - 1
-            except ValueError:
-                QMessageBox.critical(self.app, "Hata", "Ürün ID veya kalem indeksi okunamadı."); return
-
-            if not self.secili_cari_id:
-                QMessageBox.warning(self.app, "Uyarı", "Fiyat geçmişini görmek için lütfen önce bir cari seçin."); return
-            
-            from pencereler import FiyatGecmisiPenceresi
-            dialog = FiyatGecmisiPenceresi(self.app, self.db, self.secili_cari_id, urun_id, self.islem_tipi, self._update_sepet_kalem_from_history, kalem_index)
-            dialog.exec()
-
-    def _update_sepet_kalem_from_history(self, kalem_index, new_price_kdv_dahil, new_iskonto_1, new_iskonto_2):
-        if not (0 <= kalem_index < len(self.fatura_kalemleri_ui)): return
-        
-        current_kalem_data = list(self.fatura_kalemleri_ui[kalem_index])
-        
-        urun_id = current_kalem_data[0]
-        urun_adi = current_kalem_data[1]
-        miktar = current_kalem_data[2]
-        kdv_orani = current_kalem_data[4]
-        alis_fiyati_fatura_aninda = current_kalem_data[8]
-
-        self.kalem_guncelle(kalem_index=kalem_index, yeni_miktar=miktar, yeni_fiyat_kdv_dahil_orijinal=new_price_kdv_dahil, yeni_iskonto_yuzde_1=new_iskonto_1, yeni_iskonto_yuzde_2=new_iskonto_2, yeni_alis_fiyati_fatura_aninda=alis_fiyati_fatura_aninda, u_id=urun_id, urun_adi=urun_adi, kdv_orani=kdv_orani)
-
-
-    def _get_urun_adi_by_id(self, urun_id):
-        for urun in self.tum_urunler_cache:
-            if urun.get('id') == urun_id:
-                return urun.get('ad')
-        return "Bilinmeyen Ürün"
-
-    def _get_urun_full_details_by_id(self, urun_id):
-        for urun in self.tum_urunler_cache:
-            if urun.get('id') == urun_id:
-                return urun
-        return None
-
-    def _get_original_invoice_items_from_db(self, fatura_id):
-        try:
-            return self.db.fatura_kalemleri_al(fatura_id)
-        except Exception as e:
-            logging.error(f"Orijinal fatura kalemleri çekilirken hata: {e}", exc_info=True)
-            return []
-        
-    def _open_urun_karti_from_sep_item(self, item, column):
-        urun_id_str = item.text(10)
-        try: urun_id = int(urun_id_str)
-        except ValueError: QMessageBox.critical(self.app, "Hata", "Ürün ID okunamadı."); return
-        
-        try:
-            urun_detaylari = self.db.stok_getir_by_id(urun_id)
-            if not urun_detaylari:
-                QMessageBox.critical(self.app, "Hata", "Ürün detayları bulunamadı.")
-                return
-            from pencereler import StokKartiPenceresi
-            dialog = StokKartiPenceresi(self.app, self.db, urun_duzenle=urun_detaylari, app_ref=self.app)
-            dialog.exec()
-        except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Ürün kartı açılamadı: {e}")
-            logging.error(f"Ürün kartı açma hatası: {e}", exc_info=True)
-
-    def _secili_kalemi_sil(self):
-        selected_items = self.sep_tree.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(self.app, "Uyarı", "Lütfen silmek için bir kalem seçin.")
-            return
-
-        reply = QMessageBox.question(self.app, "Silme Onayı", "Seçili kalemi sepetten silmek istediğinizden emin misiniz?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            item_qt = selected_items[0]
-            kalem_sira_no = int(item_qt.text(0))
-            kalem_index = kalem_sira_no - 1
-
-            if 0 <= kalem_index < len(self.fatura_kalemleri_ui):
-                del self.fatura_kalemleri_ui[kalem_index]
-                self._sepeti_guncelle_ui()
-                self.toplamlari_hesapla_ui()
-                QMessageBox.information(self.app, "Başarılı", "Kalem sepetten silindi.")
-            else:
-                QMessageBox.critical(self.app, "Hata", "Geçersiz kalem seçimi.")
-
-    def _sepeti_temizle(self):
-        if not self.fatura_kalemleri_ui:
-            return
-
-        reply = QMessageBox.question(self.app, "Temizleme Onayı", "Tüm kalemleri sepetten silmek istediğinizden emin misiniz?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            self.fatura_kalemleri_ui.clear()
-            self._sepeti_guncelle_ui()
-            self.toplamlari_hesapla_ui()
-            QMessageBox.information(self.app, "Başarılı", "Sepet temizlendi.")
-
-    def _sepeti_guncelle_ui(self):
-        if not hasattr(self, 'sep_tree'):
-            return
-
-        self.sep_tree.clear()
-
-        for i, k in enumerate(self.fatura_kalemleri_ui):
-            miktar_f = self.db.safe_float(k[2])
-            birim_fiyat_gosterim_f = self.db.safe_float(k[14])
-            original_bf_haric_f = self.db.safe_float(k[3])
-            kdv_orani_f = self.db.safe_float(k[4])
-            iskonto_yuzde_1_f = self.db.safe_float(k[10])
-            iskonto_yuzde_2_f = self.db.safe_float(k[11])
-            kalem_toplam_dahil_f = self.db.safe_float(k[7])
-            
-            miktar_gosterim = f"{miktar_f:.2f}".rstrip('0').rstrip('.')
-            original_bf_dahil = original_bf_haric_f * (1 + kdv_orani_f / 100)
-            uygulanan_iskonto = (original_bf_dahil - birim_fiyat_gosterim_f) * miktar_f
-
-            item_qt = QTreeWidgetItem(self.sep_tree)
-            item_qt.setText(0, str(i + 1))
-            item_qt.setText(1, k[1])
-            item_qt.setText(2, miktar_gosterim)
-            item_qt.setText(3, self.db._format_currency(birim_fiyat_gosterim_f))
-            item_qt.setText(4, f"%{kdv_orani_f:.0f}")
-            item_qt.setText(5, f"{iskonto_yuzde_1_f:.2f}".replace('.',','))
-            item_qt.setText(6, f"{iskonto_yuzde_2_f:.2f}".replace('.',','))
-            item_qt.setText(7, self.db._format_currency(uygulanan_iskonto))
-            item_qt.setText(8, self.db._format_currency(kalem_toplam_dahil_f))
-            item_qt.setText(9, "Geçmişi Gör")
-            item_qt.setText(10, str(k[0]))
-
-            item_qt.setData(2, Qt.UserRole, miktar_f)
-            item_qt.setData(3, Qt.UserRole, birim_fiyat_gosterim_f)
-            item_qt.setData(4, Qt.UserRole, kdv_orani_f)
-            item_qt.setData(5, Qt.UserRole, iskonto_yuzde_1_f)
-            item_qt.setData(6, Qt.UserRole, iskonto_yuzde_2_f)
-            item_qt.setData(7, Qt.UserRole, uygulanan_iskonto)
-            item_qt.setData(8, Qt.UserRole, kalem_toplam_dahil_f)
-            item_qt.setData(10, Qt.UserRole, k[0])
-
-        self.toplamlari_hesapla_ui()
-
-    def _format_numeric_line_edit(self, line_edit: QLineEdit, decimals: int):
-        text = line_edit.text()
-        if not text: return
-
-        # Noktayı virgüle çevir (Türkçe locale için)
-        # Bu kısım sadece kullanıcının nokta girmesi durumunda çalışır.
-        if '.' in text and ',' not in text:
-            cursor_pos = line_edit.cursorPosition()
-            line_edit.setText(text.replace('.', ','))
-            # İmleç konumunu koru
-            if cursor_pos <= len(line_edit.text()):
-                line_edit.setCursorPosition(cursor_pos)
-            else:
-                line_edit.setCursorPosition(len(line_edit.text()))
-            text = line_edit.text() # Güncellenmiş metni al
-
-        # Eğer sadece ondalık ayıracı varsa, formatlamadan çık
-        if text == ',' or text == '-':
-            return
-        
-        try:
-            # Virgülü noktaya çevirerek float'a dönüştür
-            value = float(text.replace(',', '.'))
-            
-            # locale.format_string kullanarak binlik ayraçları ve ondalık basamakları ayarla
-            # grouping=True ile binlik ayıracı ekler
-            formatted_text = locale.format_string(f"%.{decimals}f", value, grouping=True)
-
-            # Sadece değişiklik varsa güncelle ve imleci koru
-            if line_edit.text() != formatted_text:
-                current_cursor_pos = line_edit.cursorPosition()
-                line_edit.setText(formatted_text)
-                # İmleci mümkün olduğunca koru. Eğer formatlama sonucu metin uzadıysa,
-                # imleci yeni uzunluğa göre ayarla.
-                if current_cursor_pos <= len(formatted_text):
-                    line_edit.setCursorPosition(current_cursor_pos)
-                else:
-                    line_edit.setCursorPosition(len(formatted_text))
-
-        except ValueError:
-            # Geçersiz bir değer girildiğinde formatlama yapma, ancak mevcut metni bırak
-            pass
-        except Exception as e:
-            logging.error(f"Sayısal giriş formatlama hatası: {e}", exc_info=True)
-
-    def _kaydet_fatura(self):
-        fatura_no = self.f_no_e.text().strip()
-        fatura_tarihi = self.fatura_tarihi_entry.text().strip()
-        odeme_turu = self.odeme_turu_cb.currentText()
-        vade_tarihi = self.entry_vade_tarihi.text().strip() if self.entry_vade_tarihi.isVisible() else None
-        fatura_notlari = self.fatura_notlari_text.toPlainText().strip()
-        genel_iskonto_tipi = self.genel_iskonto_tipi_cb.currentText()
-        genel_iskonto_degeri = float(self.genel_iskonto_degeri_e.text().replace(',', '.')) if self.genel_iskonto_degeri_e.isEnabled() else 0.0
-        misafir_adi = self.entry_misafir_adi.text().strip() if self.misafir_adi_container_frame.isVisible() else None
-
-        kasa_banka_id = None
-        if self.islem_hesap_cb.isEnabled() and self.islem_hesap_cb.currentData():
-            kasa_banka_id = self.islem_hesap_cb.currentData()
-
-        if not fatura_no: QMessageBox.critical(self, "Eksik Bilgi", "Fatura Numarası boş olamaz."); return
-        try: datetime.strptime(fatura_tarihi, '%Y-%m-%d')
-        except ValueError: QMessageBox.critical(self, "Hata", "Fatura Tarihi formatı (YYYY-AA-GG) olmalıdır."); return
-
-        if not self.secili_cari_id and not misafir_adi: QMessageBox.critical(self, "Eksik Bilgi", "Lütfen bir cari seçin veya Misafir Adı girin."); return
-        if odeme_turu == self.ODEME_TURU_ACIK_HESAP and not vade_tarihi: QMessageBox.critical(self, "Eksik Bilgi", "Açık Hesap için Vade Tarihi zorunludur."); return
-        if vade_tarihi:
-            try: datetime.strptime(vade_tarihi, '%Y-%m-%d')
-            except ValueError: QMessageBox.critical(self, "Hata", "Vade Tarihi formatı (YYYY-AA-GG) olmalıdır."); return
-
-        if odeme_turu in self.pesin_odeme_turleri and kasa_banka_id is None: QMessageBox.critical(self, "Eksik Bilgi", "Peşin ödeme türleri için Kasa/Banka seçimi zorunludur."); return
-        if not self.fatura_kalemleri_ui: QMessageBox.critical(self, "Eksik Bilgi", "Faturada en az bir kalem olmalıdır."); return
-
-        kalemler_to_send_to_api = []
-        for k_ui in self.fatura_kalemleri_ui:
-            kalemler_to_send_to_api.append({
-                "urun_id": k_ui[0], "miktar": self.db.safe_float(k_ui[2]), "birim_fiyat": self.db.safe_float(k_ui[3]),
-                "kdv_orani": self.db.safe_float(k_ui[4]), "alis_fiyati_fatura_aninda": self.db.safe_float(k_ui[8]),
-                "iskonto_yuzde_1": self.db.safe_float(k_ui[10]), "iskonto_yuzde_2": self.db.safe_float(k_ui[11]),
-                "iskonto_tipi": k_ui[12], "iskonto_degeri": self.db.safe_float(k_ui[13])
-            })
-    
-        fatura_data = {
-            "fatura_no": fatura_no, "tarih": fatura_tarihi, "fatura_turu": self.islem_tipi,
-            "cari_id": self.secili_cari_id, "odeme_turu": odeme_turu, "kalemler": kalemler_to_send_to_api,
-            "kasa_banka_id": kasa_banka_id, "misafir_adi": misafir_adi, "fatura_notlari": fatura_notlari,
-            "vade_tarihi": vade_tarihi, "genel_iskonto_tipi": genel_iskonto_tipi,
-            "genel_iskonto_degeri": genel_iskonto_degeri,
-            "original_fatura_id": self.iade_modu_aktif and self.original_fatura_id_for_iade or None
-        }
-
-        try:
-            if self.duzenleme_id: response = self.db.fatura_guncelle(self.duzenleme_id, fatura_data)
-            else: response = self.db.fatura_ekle(fatura_data)
-            
-            QMessageBox.information(self, "Başarılı", "Fatura başarıyla kaydedildi!")
-            
-            if self.yenile_callback: self.yenile_callback()
-            
-            if not self.duzenleme_id: self.accept()
-            else: self._reset_form_for_new_invoice()
-            
-        except Exception as e:
-            error_detail = str(e)
-            QMessageBox.critical(self, "Hata", f"Fatura kaydedilirken bir hata oluştu:\n{error_detail}")
-            logging.error(f"Fatura kaydetme hatası: {e}", exc_info=True)
-            
-    def _yukle_kasa_banka_hesaplarini(self):
-        self.islem_hesap_cb.clear()
-        self.kasa_banka_map.clear()
-        
-        try:
-            hesaplar_response = self.db.kasa_banka_listesi_al()
-            # API'den gelen yanıtın dict içinde 'items' anahtarı olup olmadığını kontrol et
-            if isinstance(hesaplar_response, dict) and "items" in hesaplar_response:
-                hesaplar = hesaplar_response["items"]
-            elif isinstance(hesaplar_response, list): # Eğer API doğrudan liste dönüyorsa
-                hesaplar = hesaplar_response
-                self.app.set_status_message("Uyarı: Kasa/Banka listesi API yanıtı beklenen formatta değil. Doğrudan liste olarak işleniyor.", "orange")
-            else: # Beklenmeyen bir format gelirse
-                hesaplar = []
-                self.app.set_status_message("Hata: Kasa/Banka listesi API'den alınamadı veya formatı geçersiz.", "red")
-                logging.error(f"Kasa/Banka listesi API'den beklenen formatta gelmedi: {type(hesaplar_response)} - {hesaplar_response}")
-                # Hata durumunda fonksiyonu sonlandır
-                self.islem_hesap_cb.addItem("Hesap Yok", None)
-                self.islem_hesap_cb.setEnabled(False)
-                return
-
-
-            if hesaplar:
-                for h in hesaplar:
-                    display_text = f"{h.get('hesap_adi')} ({h.get('tip')})"
-                    if h.get('tip') == "BANKA" and h.get('banka_adi'):
-                        display_text += f" - {h.get('banka_adi')}"
-                    self.kasa_banka_map[display_text] = h.get('id')
-                    self.islem_hesap_cb.addItem(display_text, h.get('id'))
-                self.islem_hesap_cb.setCurrentIndex(0)
-                self.islem_hesap_cb.setEnabled(True)
-            else:
-                self.islem_hesap_cb.clear()
-                self.islem_hesap_cb.addItem("Hesap Yok", None)
-                self.islem_hesap_cb.setEnabled(False)
-
-            self.app.set_status_message(f"{len(hesaplar)} kasa/banka hesabı API'den yüklendi.")
-
-        except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Kasa/Banka hesapları çekilirken hata: {e}")
-            logging.error(f"FaturaPenceresi Kasa/Banka yükleme hatası: {e}", exc_info=True)
-            self.islem_hesap_cb.clear()
-            self.islem_hesap_cb.addItem("Hesap Yok", None)
-            self.islem_hesap_cb.setEnabled(False)
+    def _fatura_kaydedildi(self):
+        """Kaydetme işlemi tamamlandığında çağrılan iç metot."""
+        self.saved_successfully.emit()
 
 class FaturaDetayPenceresi(QDialog):
     def __init__(self, parent_app, db_manager, fatura_id):
@@ -3014,21 +1389,21 @@ class FaturaDetayPenceresi(QDialog):
         gercek_uygulanan_genel_iskonto = self.db.safe_float(toplam_kdv_dahil_kalemler_genel_iskonto_oncesi) - self.db.safe_float(toplam_kdv_dahil_fatura_ana_db)
         if gercek_uygulanan_genel_iskonto < 0: gercek_uygulanan_genel_iskonto = 0.0
 
-        self.sag_panel_layout.addWidget(QLabel("Toplam KDV Hariç:", font=font_label), 0, 0, Qt.AlignRight)
+        self.sag_panel_layout.addWidget(QLabel("Toplam KDV Hariç:", font=font_label), 0, 0, Qt.AlignCenter)
         self.tkh_l = QLabel(self.db._format_currency(toplam_kdv_haric_fatura_ana_db), font=font_value)
-        self.sag_panel_layout.addWidget(self.tkh_l, 0, 1, Qt.AlignRight)
+        self.sag_panel_layout.addWidget(self.tkh_l, 0, 1, Qt.AlignCenter)
         
-        self.sag_panel_layout.addWidget(QLabel("Toplam KDV:", font=font_label), 1, 0, Qt.AlignRight)
+        self.sag_panel_layout.addWidget(QLabel("Toplam KDV:", font=font_label), 1, 0, Qt.AlignCenter)
         self.tkdv_l = QLabel(self.db._format_currency(toplam_kdv_hesaplanan_detay), font=font_value)
-        self.sag_panel_layout.addWidget(self.tkdv_l, 1, 1, Qt.AlignRight)
+        self.sag_panel_layout.addWidget(self.tkdv_l, 1, 1, Qt.AlignCenter)
         
-        self.sag_panel_layout.addWidget(QLabel("Genel Toplam:", font=font_header), 2, 0, Qt.AlignRight)
+        self.sag_panel_layout.addWidget(QLabel("Genel Toplam:", font=font_header), 2, 0, Qt.AlignCenter)
         self.gt_l = QLabel(self.db._format_currency(toplam_kdv_dahil_fatura_ana_db), font=QFont("Segoe UI", 12, QFont.Bold))
-        self.sag_panel_layout.addWidget(self.gt_l, 2, 1, Qt.AlignRight)
+        self.sag_panel_layout.addWidget(self.gt_l, 2, 1, Qt.AlignCenter)
         
-        self.sag_panel_layout.addWidget(QLabel("Uygulanan Genel İskonto:", font=font_label), 3, 0, Qt.AlignRight)
+        self.sag_panel_layout.addWidget(QLabel("Uygulanan Genel İskonto:", font=font_label), 3, 0, Qt.AlignCenter)
         self.lbl_uygulanan_genel_iskonto = QLabel(self.db._format_currency(gercek_uygulanan_genel_iskonto), font=font_value)
-        self.sag_panel_layout.addWidget(self.lbl_uygulanan_genel_iskonto, 3, 1, Qt.AlignRight)
+        self.sag_panel_layout.addWidget(self.lbl_uygulanan_genel_iskonto, 3, 1, Qt.AlignCenter)
 
         # Fatura Kalemleri GroupBox
         kalemler_frame = QGroupBox("Fatura Kalemleri", self)
@@ -3043,11 +1418,11 @@ class FaturaDetayPenceresi(QDialog):
         self.kalem_tree.setSortingEnabled(True)
 
         col_defs_kalem = [
-            ("Sıra", 40, Qt.AlignCenter), ("Ürün Kodu", 90, Qt.AlignLeft), ("Ürün Adı", 180, Qt.AlignLeft),
-            ("Miktar", 60, Qt.AlignRight), ("Birim Fiyat", 90, Qt.AlignRight), ("KDV %", 60, Qt.AlignRight),
-            ("İskonto 1 (%)", 75, Qt.AlignRight), ("İskonto 2 (%)", 75, Qt.AlignRight),
-            ("Uyg. İsk. Tutarı", 100, Qt.AlignRight), ("Tutar (Dah.)", 110, Qt.AlignRight),
-            ("Alış Fiyatı (Fatura Anı)", 120, Qt.AlignRight)
+            ("Sıra", 40, Qt.AlignCenter), ("Ürün Kodu", 90, Qt.AlignCenter), ("Ürün Adı", 180, Qt.AlignCenter),
+            ("Miktar", 60, Qt.AlignCenter), ("Birim Fiyat", 90, Qt.AlignCenter), ("KDV %", 60, Qt.AlignCenter),
+            ("İskonto 1 (%)", 75, Qt.AlignCenter), ("İskonto 2 (%)", 75, Qt.AlignCenter),
+            ("Uyg. İsk. Tutarı", 100, Qt.AlignCenter), ("Tutar (Dah.)", 110, Qt.AlignCenter),
+            ("Alış Fiyatı (Fatura Anı)", 120, Qt.AlignCenter)
         ]
         for i, (col_name, width, alignment) in enumerate(col_defs_kalem):
             self.kalem_tree.setColumnWidth(i, width)
@@ -3247,7 +1622,7 @@ class YeniMusteriEklePenceresi(QDialog):
         }
 
         for i, (label_text, entry_name) in enumerate(labels_entries.items()):
-            form_layout.addWidget(QLabel(label_text), i, 0, alignment=Qt.AlignLeft)
+            form_layout.addWidget(QLabel(label_text), i, 0, alignment=Qt.AlignCenter)
             if entry_name == "entry_adres":
                 widget = QTextEdit()
                 widget.setFixedHeight(80) # Adres alanı için yükseklik
@@ -3449,11 +1824,11 @@ class SiparisDetayPenceresi(QDialog):
 
         from PySide6.QtWidgets import QHeaderView
         col_defs_kalem = [
-            ("Sıra", 40, Qt.AlignCenter), ("Ürün Kodu", 90, Qt.AlignLeft), ("Ürün Adı", 180, Qt.AlignLeft),
-            ("Miktar", 60, Qt.AlignRight), ("Birim Fiyat", 90, Qt.AlignRight), ("KDV %", 60, Qt.AlignRight),
-            ("İskonto 1 (%)", 75, Qt.AlignRight), ("İskonto 2 (%)", 75, Qt.AlignRight),
-            ("Uyg. İsk. Tutarı", 100, Qt.AlignRight), ("Tutar (Dah.)", 110, Qt.AlignRight),
-            ("Alış Fiyatı (Sipariş Anı)", 120, Qt.AlignRight), ("Satış Fiyatı (Sipariş Anı)", 120, Qt.AlignRight)
+            ("Sıra", 40, Qt.AlignCenter), ("Ürün Kodu", 90, Qt.AlignCenter), ("Ürün Adı", 180, Qt.AlignCenter),
+            ("Miktar", 60, Qt.AlignCenter), ("Birim Fiyat", 90, Qt.AlignCenter), ("KDV %", 60, Qt.AlignCenter),
+            ("İskonto 1 (%)", 75, Qt.AlignCenter), ("İskonto 2 (%)", 75, Qt.AlignCenter),
+            ("Uyg. İsk. Tutarı", 100, Qt.AlignCenter), ("Tutar (Dah.)", 110, Qt.AlignCenter),
+            ("Alış Fiyatı (Sipariş Anı)", 120, Qt.AlignCenter), ("Satış Fiyatı (Sipariş Anı)", 120, Qt.AlignCenter)
         ]
         for i, (col_name, width, alignment) in enumerate(col_defs_kalem):
             self.kalem_tree.setColumnWidth(i, width)
@@ -3472,7 +1847,7 @@ class SiparisDetayPenceresi(QDialog):
         self.main_layout.addWidget(alt_toplam_iskonto_frame)
 
         self.lbl_genel_toplam = QLabel(f"Genel Toplam (KDV Dahil): {self.db._format_currency(self.siparis_ana.get('toplam_tutar'))}", font=QFont("Segoe UI", 10, QFont.Bold))
-        alt_toplam_iskonto_frame_layout.addWidget(self.lbl_genel_toplam, 0, 1, 1, 2, Qt.AlignRight)
+        alt_toplam_iskonto_frame_layout.addWidget(self.lbl_genel_toplam, 0, 1, 1, 2, Qt.AlignCenter)
         alt_toplam_iskonto_frame_layout.setColumnStretch(0, 1) # Sol tarafı esnet
 
         self._butonlari_olustur()
@@ -3674,7 +2049,7 @@ class YoneticiAyarlariPenceresi(QDialog):
         
         btn_kapat = QPushButton("Kapat")
         btn_kapat.clicked.connect(self.close)
-        main_layout.addWidget(btn_kapat, alignment=Qt.AlignRight)
+        main_layout.addWidget(btn_kapat, alignment=Qt.AlignCenter)
 
     def _confirm_and_run_utility(self, utility_function, button_text):
         confirm_message = f"'{button_text}' işlemini gerçekleştirmek istediğinizden emin misiniz?\n\nBU İŞLEM GERİ ALINAMAZ!"
@@ -3735,7 +2110,7 @@ class SirketBilgileriPenceresi(QDialog):
         self.entries = {}
 
         for i, (label_text, db_key_name, widget_type) in enumerate(self.field_definitions):
-            main_frame_layout.addWidget(QLabel(label_text), i, 0, alignment=Qt.AlignLeft)
+            main_frame_layout.addWidget(QLabel(label_text), i, 0, alignment=Qt.AlignCenter)
             
             if widget_type == QTextEdit:
                 widget = QTextEdit()
@@ -3904,7 +2279,7 @@ class IlgiliFaturalarDetayPenceresi(QDialog):
         main_layout = QVBoxLayout(self)
         title_label = QLabel(f"{self.urun_adi} Ürününün Yer Aldığı Faturalar")
         title_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        title_label.setAlignment(Qt.AlignLeft)
+        title_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title_label)
 
         filter_frame = QFrame(self)
@@ -3931,13 +2306,13 @@ class IlgiliFaturalarDetayPenceresi(QDialog):
 
         from PySide6.QtWidgets import QHeaderView
         col_defs_fatura = [
-            ("ID", 40, Qt.AlignRight), # Sağa hizala
-            ("Fatura No", 120, Qt.AlignLeft),
+            ("ID", 40, Qt.AlignCenter), # Sağa hizala
+            ("Fatura No", 120, Qt.AlignCenter),
             ("Tarih", 85, Qt.AlignCenter),
             ("Tip", 70, Qt.AlignCenter),
-            ("Cari/Misafir", 200, Qt.AlignLeft),
-            ("KDV Hariç Top.", 120, Qt.AlignRight),
-            ("KDV Dahil Top.", 120, Qt.AlignRight)
+            ("Cari/Misafir", 200, Qt.AlignCenter),
+            ("KDV Hariç Top.", 120, Qt.AlignCenter),
+            ("KDV Dahil Top.", 120, Qt.AlignCenter)
         ]
         for i, (col_name, width, alignment) in enumerate(col_defs_fatura):
             self.ilgili_faturalar_tree.setColumnWidth(i, width)
@@ -3954,7 +2329,7 @@ class IlgiliFaturalarDetayPenceresi(QDialog):
 
         btn_kapat = QPushButton("Kapat")
         btn_kapat.clicked.connect(self.close)
-        main_layout.addWidget(btn_kapat, alignment=Qt.AlignRight)
+        main_layout.addWidget(btn_kapat, alignment=Qt.AlignCenter)
 
     def _load_ilgili_faturalar(self, index=None): # index parametresi QComboBox'tan gelir, kullanılmıyor
         self.ilgili_faturalar_tree.clear()
@@ -4047,7 +2422,7 @@ class KategoriMarkaYonetimiPenceresi(QDialog):
         main_layout = QVBoxLayout(self)
         title_label = QLabel("Kategori & Marka Yönetimi")
         title_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        title_label.setAlignment(Qt.AlignLeft)
+        title_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title_label)
         main_frame = QWidget(self)
         main_frame_layout = QHBoxLayout(main_frame)
@@ -4094,7 +2469,7 @@ class KategoriMarkaYonetimiPenceresi(QDialog):
         marka_frame_layout.addWidget(self.marka_tree, 1, 0, 1, 5)
         btn_kapat = QPushButton("Kapat")
         btn_kapat.clicked.connect(self._on_close)
-        main_layout.addWidget(btn_kapat, alignment=Qt.AlignRight)
+        main_layout.addWidget(btn_kapat, alignment=Qt.AlignCenter)
         self._kategori_listesini_yukle()
         self._marka_listesini_yukle()
         
@@ -4131,71 +2506,88 @@ class KategoriMarkaYonetimiPenceresi(QDialog):
         if not kategori_adi:
             QMessageBox.warning(self.app, "Uyarı", "Kategori adı boş olamaz.")
             return
+
         try:
+            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
             success, message = self.db.nitelik_ekle("kategoriler", {"ad": kategori_adi})
+            
             if success:
-                QMessageBox.information(self.app, "Başarılı", message)
+                QMessageBox.information(self.app, "Başarılı", f"'{kategori_adi}' kategorisi başarıyla eklendi.")
                 self.kategori_entry.clear()
                 self._kategori_listesini_yukle()
                 if hasattr(self.app, 'stok_yonetimi_sayfasi') and hasattr(self.app.stok_yonetimi_sayfasi, '_yukle_filtre_comboboxlari_stok_yonetimi'):
                     self.app.stok_yonetimi_sayfasi._yukle_filtre_comboboxlari_stok_yonetimi()
-                self.app.set_status_message(message)
+                self.app.set_status_message(f"'{kategori_adi}' kategorisi başarıyla eklendi.")
             else:
                 QMessageBox.critical(self.app, "Hata", message)
+                self.app.set_status_message(f"Kategori ekleme başarısız: {message}")
         except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Kategori eklenirken bir hata oluştu:\n{e}")
-            self.app.set_status_message(f"Kategori ekleme başarısız: {e}")
+            QMessageBox.critical(self.app, "Beklenmeyen Hata", f"Kategori eklenirken beklenmeyen bir hata oluştu:\n{e}")
+            self.app.set_status_message(f"Kategori eklenirken hata: {e}")
 
     def _kategori_guncelle_ui(self):
         selected_items = self.kategori_tree.selectedItems()
         if not selected_items:
             QMessageBox.warning(self.app, "Uyarı", "Lütfen güncellemek için bir kategori seçin.")
             return
+
         selected_item = selected_items[0]
         kategori_id = selected_item.data(0, Qt.UserRole)
         yeni_kategori_adi = self.kategori_entry.text().strip()
+
         if not yeni_kategori_adi:
             QMessageBox.warning(self.app, "Uyarı", "Kategori adı boş olamaz.")
             return
+
         try:
+            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
             success, message = self.db.nitelik_guncelle("kategoriler", kategori_id, {"ad": yeni_kategori_adi})
+            
             if success:
-                QMessageBox.information(self.app, "Başarılı", message)
+                QMessageBox.information(self.app, "Başarılı", f"'{yeni_kategori_adi}' kategorisi başarıyla güncellendi.")
                 self.kategori_entry.clear()
                 self._kategori_listesini_yukle()
                 if hasattr(self.app, 'stok_yonetimi_sayfasi') and hasattr(self.app.stok_yonetimi_sayfasi, '_yukle_filtre_comboboxlari_stok_yonetimi'):
                     self.app.stok_yonetimi_sayfasi._yukle_filtre_comboboxlari_stok_yonetimi()
-                self.app.set_status_message(message)
+                self.app.set_status_message(f"'{yeni_kategori_adi}' kategorisi başarıyla güncellendi.")
             else:
                 QMessageBox.critical(self.app, "Hata", message)
+                self.app.set_status_message(f"Kategori güncelleme başarısız: {message}")
         except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Kategori güncellenirken bir hata oluştu:\n{e}")
-            self.app.set_status_message(f"Kategori güncelleme başarısız: {e}")
+            QMessageBox.critical(self.app, "Beklenmeyen Hata", f"Kategori güncellenirken beklenmeyen bir hata oluştu:\n{e}")
+            self.app.set_status_message(f"Kategori güncellenirken hata: {e}")
 
     def _kategori_sil_ui(self):
         selected_items = self.kategori_tree.selectedItems()
         if not selected_items:
             QMessageBox.warning(self.app, "Uyarı", "Lütfen silmek için bir kategori seçin.")
             return
+
         selected_item = selected_items[0]
         kategori_id = selected_item.data(0, Qt.UserRole)
         kategori_adi = selected_item.text(1)
-        reply = QMessageBox.question(self.app, "Onay", f"'{kategori_adi}' kategorisini silmek istediğinizden emin misiniz?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+        reply = QMessageBox.question(self.app, "Onay", f"'{kategori_adi}' kategorisini silmek istediğinizden emin misiniz?",
+                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
         if reply == QMessageBox.Yes:
             try:
+                # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
                 success, message = self.db.nitelik_sil("kategoriler", kategori_id)
+                
                 if success:
-                    QMessageBox.information(self.app, "Başarılı", message)
+                    QMessageBox.information(self.app, "Başarılı", f"'{kategori_adi}' kategorisi başarıyla silindi.")
                     self.kategori_entry.clear()
                     self._kategori_listesini_yukle()
                     if hasattr(self.app, 'stok_yonetimi_sayfasi') and hasattr(self.app.stok_yonetimi_sayfasi, '_yukle_filtre_comboboxlari_stok_yonetimi'):
                         self.app.stok_yonetimi_sayfasi._yukle_filtre_comboboxlari_stok_yonetimi()
-                    self.app.set_status_message(message)
+                    self.app.set_status_message(f"'{kategori_adi}' kategorisi başarıyla silindi.")
                 else:
                     QMessageBox.critical(self.app, "Hata", message)
+                    self.app.set_status_message(f"Kategori silme başarısız: {message}")
             except Exception as e:
-                QMessageBox.critical(self.app, "Hata", f"Kategori silinirken bir hata oluştu:\n{e}")
-                self.app.set_status_message(f"Kategori silme başarısız: {e}")
+                QMessageBox.critical(self.app, "Beklenmeyen Hata", f"Kategori silinirken beklenmeyen bir hata oluştu:\n{e}")
+                self.app.set_status_message(f"Kategori silinirken hata: {e}")
 
     def _open_kategori_context_menu(self, pos):
         item = self.kategori_tree.itemAt(pos)
@@ -4232,69 +2624,88 @@ class KategoriMarkaYonetimiPenceresi(QDialog):
         if not marka_adi:
             QMessageBox.warning(self.app, "Uyarı", "Marka adı boş olamaz.")
             return
+
         try:
+            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
             success, message = self.db.nitelik_ekle("markalar", {"ad": marka_adi})
+            
             if success:
-                QMessageBox.information(self.app, "Başarılı", message)
+                QMessageBox.information(self.app, "Başarılı", f"'{marka_adi}' markası başarıyla eklendi.")
                 self.marka_entry.clear()
                 self._marka_listesini_yukle()
                 if hasattr(self.app, 'stok_yonetimi_sayfasi') and hasattr(self.app.stok_yonetimi_sayfasi, '_yukle_filtre_comboboxlari_stok_yonetimi'):
                     self.app.stok_yonetimi_sayfasi._yukle_filtre_comboboxlari_stok_yonetimi()
-                self.app.set_status_message(message)
+                self.app.set_status_message(f"'{marka_adi}' markası başarıyla eklendi.")
             else:
                 QMessageBox.critical(self.app, "Hata", message)
+                self.app.set_status_message(f"Marka ekleme başarısız: {message}")
         except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Marka eklenirken bir hata oluştu:\n{e}")
-            self.app.set_status_message(f"Marka ekleme başarısız: {e}")
+            QMessageBox.critical(self.app, "Beklenmeyen Hata", f"Marka eklenirken beklenmeyen bir hata oluştu:\n{e}")
+            self.app.set_status_message(f"Marka eklenirken hata: {e}")
 
     def _marka_guncelle_ui(self):
         selected_items = self.marka_tree.selectedItems()
         if not selected_items:
             QMessageBox.warning(self.app, "Uyarı", "Lütfen güncellemek için bir marka seçin.")
             return
-        marka_id = selected_items[0].data(0, Qt.UserRole)
+
+        selected_item = selected_items[0]
+        marka_id = selected_item.data(0, Qt.UserRole)
         yeni_marka_adi = self.marka_entry.text().strip()
+
         if not yeni_marka_adi:
             QMessageBox.warning(self.app, "Uyarı", "Marka adı boş olamaz.")
             return
+
         try:
+            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
             success, message = self.db.nitelik_guncelle("markalar", marka_id, {"ad": yeni_marka_adi})
+
             if success:
-                QMessageBox.information(self.app, "Başarılı", message)
+                QMessageBox.information(self.app, "Başarılı", f"'{yeni_marka_adi}' markası başarıyla güncellendi.")
                 self.marka_entry.clear()
                 self._marka_listesini_yukle()
                 if hasattr(self.app, 'stok_yonetimi_sayfasi') and hasattr(self.app.stok_yonetimi_sayfasi, '_yukle_filtre_comboboxlari_stok_yonetimi'):
                     self.app.stok_yonetimi_sayfasi._yukle_filtre_comboboxlari_stok_yonetimi()
-                self.app.set_status_message(message)
+                self.app.set_status_message(f"'{yeni_marka_adi}' markası başarıyla güncellendi.")
             else:
                 QMessageBox.critical(self.app, "Hata", message)
+                self.app.set_status_message(f"Marka güncelleme başarısız: {message}")
         except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Marka güncellenirken bir hata oluştu:\n{e}")
-            self.app.set_status_message(f"Marka güncelleme başarısız: {e}")
+            QMessageBox.critical(self.app, "Beklenmeyen Hata", f"Marka güncellenirken beklenmeyen bir hata oluştu:\n{e}")
+            self.app.set_status_message(f"Marka güncellenirken hata: {e}")
 
     def _marka_sil_ui(self):
         selected_items = self.marka_tree.selectedItems()
         if not selected_items:
             QMessageBox.warning(self.app, "Uyarı", "Lütfen silmek için bir marka seçin.")
             return
-        marka_id = selected_items[0].data(0, Qt.UserRole)
-        marka_adi = selected_items[0].text(1)
-        reply = QMessageBox.question(self.app, "Onay", f"'{marka_adi}' markasını silmek istediğinizden emin misiniz?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+        selected_item = selected_items[0]
+        marka_id = selected_item.data(0, Qt.UserRole)
+        marka_adi = selected_item.text(1)
+
+        reply = QMessageBox.question(self.app, "Onay", f"'{marka_adi}' markasını silmek istediğinizden emin misiniz?",
+                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
         if reply == QMessageBox.Yes:
             try:
+                # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
                 success, message = self.db.nitelik_sil("markalar", marka_id)
+                
                 if success:
-                    QMessageBox.information(self.app, "Başarılı", message)
+                    QMessageBox.information(self.app, "Başarılı", f"'{marka_adi}' markası başarıyla silindi.")
                     self.marka_entry.clear()
                     self._marka_listesini_yukle()
                     if hasattr(self.app, 'stok_yonetimi_sayfasi') and hasattr(self.app.stok_yonetimi_sayfasi, '_yukle_filtre_comboboxlari_stok_yonetimi'):
                         self.app.stok_yonetimi_sayfasi._yukle_filtre_comboboxlari_stok_yonetimi()
-                    self.app.set_status_message(message)
+                    self.app.set_status_message(f"'{marka_adi}' markası başarıyla silindi.")
                 else:
                     QMessageBox.critical(self.app, "Hata", message)
+                    self.app.set_status_message(f"Marka silme başarısız: {message}")
             except Exception as e:
-                QMessageBox.critical(self.app, "Hata", f"Marka silinirken bir hata oluştu:\n{e}")
-                self.app.set_status_message(f"Marka silme başarısız: {e}")
+                QMessageBox.critical(self.app, "Beklenmeyen Hata", f"Marka silinirken beklenmeyen bir hata oluştu:\n{e}")
+                self.app.set_status_message(f"Marka silinirken hata: {e}")
 
     def _open_marka_context_menu(self, pos):
         item = self.marka_tree.itemAt(pos)
@@ -4318,7 +2729,7 @@ class UrunNitelikYonetimiPenceresi(QDialog):
         main_layout = QVBoxLayout(self)
         title_label = QLabel("Ürün Grubu, Birimi ve Menşe Ülke Yönetimi")
         title_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        title_label.setAlignment(Qt.AlignLeft)
+        title_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title_label)
 
         # Ana içerik çerçevesi (grid gibi düzenleme için)
@@ -4405,7 +2816,7 @@ class UrunNitelikYonetimiPenceresi(QDialog):
 
         btn_kapat = QPushButton("Kapat")
         btn_kapat.clicked.connect(self._on_close)
-        main_layout.addWidget(btn_kapat, alignment=Qt.AlignRight)
+        main_layout.addWidget(btn_kapat, alignment=Qt.AlignCenter)
 
     def _on_close(self):
         if self.refresh_callback:
@@ -5471,7 +3882,7 @@ class YeniTedarikciEklePenceresi(QDialog):
         }
 
         for i, (label_text, entry_name) in enumerate(labels_entries.items()):
-            form_layout.addWidget(QLabel(label_text), i, 0, alignment=Qt.AlignLeft)
+            form_layout.addWidget(QLabel(label_text), i, 0, alignment=Qt.AlignCenter)
             widget = QTextEdit() if entry_name == "entry_adres" else QLineEdit()
             if isinstance(widget, QTextEdit): widget.setFixedHeight(80)
             self.entries[entry_name] = widget
@@ -5568,7 +3979,7 @@ class KalemDuzenlePenceresi(QDialog):
         main_layout.addWidget(main_frame)
         main_frame_layout = QGridLayout(main_frame) # Izgara düzenleyici
         
-        main_frame_layout.addWidget(QLabel(f"Ürün: <b>{self.urun_adi}</b>", font=QFont("Segoe UI", 12, QFont.Bold)), 0, 0, 1, 3, Qt.AlignLeft)
+        main_frame_layout.addWidget(QLabel(f"Ürün: <b>{self.urun_adi}</b>", font=QFont("Segoe UI", 12, QFont.Bold)), 0, 0, 1, 3, Qt.AlignCenter)
         main_frame_layout.setColumnStretch(1, 1) # İkinci sütun genişlesin
 
         current_row = 1
@@ -5644,7 +4055,7 @@ class KalemDuzenlePenceresi(QDialog):
 
         btn_f = QFrame(self)
         btn_layout = QHBoxLayout(btn_f)
-        main_layout.addWidget(btn_f, alignment=Qt.AlignRight)
+        main_layout.addWidget(btn_f, alignment=Qt.AlignCenter)
         
         btn_guncelle = QPushButton("Güncelle")
         btn_guncelle.clicked.connect(self._kalemi_kaydet)
@@ -5792,11 +4203,11 @@ class FiyatGecmisiPenceresi(QDialog):
 
         from PySide6.QtWidgets import QHeaderView # PySide6'ya özel import
         col_defs = [
-            ("Fatura No", 120, Qt.AlignLeft),
+            ("Fatura No", 120, Qt.AlignCenter),
             ("Tarih", 90, Qt.AlignCenter),
-            ("Fiyat (KDV Dahil)", 120, Qt.AlignRight),
-            ("İskonto 1 (%)", 90, Qt.AlignRight),
-            ("İskonto 2 (%)", 90, Qt.AlignRight)
+            ("Fiyat (KDV Dahil)", 120, Qt.AlignCenter),
+            ("İskonto 1 (%)", 90, Qt.AlignCenter),
+            ("İskonto 2 (%)", 90, Qt.AlignCenter)
         ]
 
         for i, (col_name, width, alignment) in enumerate(col_defs):
@@ -5927,7 +4338,7 @@ class KullaniciYonetimiPenceresi(QDialog):
         self.tree_kul.setSortingEnabled(True) # Sıralama özelliği
 
         self.tree_kul.setColumnWidth(0, 50)
-        self.tree_kul.headerItem().setTextAlignment(0, Qt.AlignRight)
+        self.tree_kul.headerItem().setTextAlignment(0, Qt.AlignCenter)
         self.tree_kul.headerItem().setTextAlignment(2, Qt.AlignCenter)
         self.tree_kul.header().setSectionResizeMode(1, QHeaderView.Stretch) # Kullanıcı Adı genişlesin
 
@@ -5940,17 +4351,17 @@ class KullaniciYonetimiPenceresi(QDialog):
         form_layout = QGridLayout(form_frame)
         main_layout.addWidget(form_frame)
 
-        form_layout.addWidget(QLabel("Kullanıcı Adı:"), 0, 0, Qt.AlignLeft)
+        form_layout.addWidget(QLabel("Kullanıcı Adı:"), 0, 0, Qt.AlignCenter)
         self.k_adi_yeni_e = QLineEdit()
         form_layout.addWidget(self.k_adi_yeni_e, 0, 1)
         form_layout.setColumnStretch(1, 1) # Genişlesin
 
-        form_layout.addWidget(QLabel("Yeni Şifre:"), 1, 0, Qt.AlignLeft)
+        form_layout.addWidget(QLabel("Yeni Şifre:"), 1, 0, Qt.AlignCenter)
         self.sifre_yeni_e = QLineEdit()
         self.sifre_yeni_e.setEchoMode(QLineEdit.Password) # Şifre gizleme
         form_layout.addWidget(self.sifre_yeni_e, 1, 1)
 
-        form_layout.addWidget(QLabel("Yetki:"), 0, 2, Qt.AlignLeft)
+        form_layout.addWidget(QLabel("Yetki:"), 0, 2, Qt.AlignCenter)
         self.yetki_yeni_cb = QComboBox()
         self.yetki_yeni_cb.addItems(["kullanici", "admin"])
         self.yetki_yeni_cb.setCurrentText("kullanici") # Varsayılan
@@ -6167,7 +4578,7 @@ class YeniGelirGiderEklePenceresi(QDialog):
         
         current_row = 0
 
-        entry_frame_layout.addWidget(QLabel("Tarih (YYYY-AA-GG):"), current_row, 0, Qt.AlignLeft)
+        entry_frame_layout.addWidget(QLabel("Tarih (YYYY-AA-GG):"), current_row, 0, Qt.AlignCenter)
         self.tarih_entry = QLineEdit()
         self.tarih_entry.setText(datetime.now().strftime('%Y-%m-%d'))
         # setup_date_entry PySide6 için placeholder, validator ile manuel kontrol daha iyi
@@ -6179,7 +4590,7 @@ class YeniGelirGiderEklePenceresi(QDialog):
         entry_frame_layout.addWidget(btn_date, current_row, 2)
         current_row += 1
 
-        entry_frame_layout.addWidget(QLabel("İşlem Tipi:"), current_row, 0, Qt.AlignLeft)
+        entry_frame_layout.addWidget(QLabel("İşlem Tipi:"), current_row, 0, Qt.AlignCenter)
         self.tip_combo = QComboBox()
         self.tip_combo.addItems(["GELİR", "GİDER"])
         if initial_tip and initial_tip in ["GELİR", "GİDER"]:
@@ -6190,23 +4601,23 @@ class YeniGelirGiderEklePenceresi(QDialog):
         entry_frame_layout.addWidget(self.tip_combo, current_row, 1)
         current_row += 1
 
-        entry_frame_layout.addWidget(QLabel("Sınıflandırma:"), current_row, 0, Qt.AlignLeft)
+        entry_frame_layout.addWidget(QLabel("Sınıflandırma:"), current_row, 0, Qt.AlignCenter)
         self.siniflandirma_combo = QComboBox()
         entry_frame_layout.addWidget(self.siniflandirma_combo, current_row, 1)
         current_row += 1
 
-        entry_frame_layout.addWidget(QLabel("Tutar (TL):"), current_row, 0, Qt.AlignLeft)
+        entry_frame_layout.addWidget(QLabel("Tutar (TL):"), current_row, 0, Qt.AlignCenter)
         self.tutar_entry = QLineEdit("0,00")
         setup_numeric_entry(self.app, self.tutar_entry) # <-- allow_negative=False, decimal_places=2 parametreleri kaldırıldı
         entry_frame_layout.addWidget(self.tutar_entry, current_row, 1)
         current_row += 1
 
-        entry_frame_layout.addWidget(QLabel("İşlem Kasa/Banka (*):"), current_row, 0, Qt.AlignLeft)
+        entry_frame_layout.addWidget(QLabel("İşlem Kasa/Banka (*):"), current_row, 0, Qt.AlignCenter)
         self.kasa_banka_combobox = QComboBox()
         entry_frame_layout.addWidget(self.kasa_banka_combobox, current_row, 1)
         current_row += 1
         
-        entry_frame_layout.addWidget(QLabel("Açıklama:"), current_row, 0, Qt.AlignLeft)
+        entry_frame_layout.addWidget(QLabel("Açıklama:"), current_row, 0, Qt.AlignCenter)
         self.aciklama_entry = QLineEdit()
         entry_frame_layout.addWidget(self.aciklama_entry, current_row, 1)
         current_row += 1
@@ -6408,7 +4819,7 @@ class TarihAraligiDialog(QDialog): # simpledialog.Dialog yerine QDialog kullanı
         form_layout = QGridLayout()
         main_layout.addLayout(form_layout)
 
-        form_layout.addWidget(QLabel("Başlangıç Tarihi (YYYY-AA-GG):"), 0, 0, Qt.AlignLeft)
+        form_layout.addWidget(QLabel("Başlangıç Tarihi (YYYY-AA-GG):"), 0, 0, Qt.AlignCenter)
         self.bas_tarih_entry_dialog = QLineEdit()
         self.bas_tarih_entry_dialog.setText(self.bas_tarih_str)
         form_layout.addWidget(self.bas_tarih_entry_dialog, 0, 1)
@@ -6417,7 +4828,7 @@ class TarihAraligiDialog(QDialog): # simpledialog.Dialog yerine QDialog kullanı
         btn_bas_tarih.clicked.connect(lambda: DatePickerDialog(self.app, self.bas_tarih_entry_dialog)) # app referansı kullanıldı
         form_layout.addWidget(btn_bas_tarih, 0, 2)
 
-        form_layout.addWidget(QLabel("Bitiş Tarihi (YYYY-AA-GG):"), 1, 0, Qt.AlignLeft)
+        form_layout.addWidget(QLabel("Bitiş Tarihi (YYYY-AA-GG):"), 1, 0, Qt.AlignCenter)
         self.bit_tarih_entry_dialog = QLineEdit()
         self.bit_tarih_entry_dialog.setText(self.bitis_tarih_str)
         form_layout.addWidget(self.bit_tarih_entry_dialog, 1, 1)
@@ -6477,13 +4888,13 @@ class OdemeTuruSecimDialog(QDialog):
         form_frame = QFrame(self)
         form_layout = QGridLayout(form_frame)
         main_layout.addWidget(form_frame)
-        form_layout.addWidget(QLabel("Ödeme Türü (*):"), 0, 0, Qt.AlignLeft)
+        form_layout.addWidget(QLabel("Ödeme Türü (*):"), 0, 0, Qt.AlignCenter)
         self.odeme_turu_cb = QComboBox()
         self._set_odeme_turu_values()
         form_layout.addWidget(self.odeme_turu_cb, 0, 1)
         self.odeme_turu_cb.currentIndexChanged.connect(self._odeme_turu_degisince_hesap_combobox_ayarla)
         self.odeme_turu_cb.setCurrentIndex(0)
-        form_layout.addWidget(QLabel("İşlem Kasa/Banka (*):"), 1, 0, Qt.AlignLeft)
+        form_layout.addWidget(QLabel("İşlem Kasa/Banka (*):"), 1, 0, Qt.AlignCenter)
         self.islem_hesap_cb = QComboBox()
         self.islem_hesap_cb.setEnabled(False)
         form_layout.addWidget(self.islem_hesap_cb, 1, 1)
@@ -6494,7 +4905,7 @@ class OdemeTuruSecimDialog(QDialog):
         self.btn_vade_tarihi.setFixedWidth(30)
         self.btn_vade_tarihi.clicked.connect(lambda: DatePickerDialog(self.app, self.entry_vade_tarihi))
         self.btn_vade_tarihi.setEnabled(False)
-        form_layout.addWidget(self.lbl_vade_tarihi, 2, 0, Qt.AlignLeft)
+        form_layout.addWidget(self.lbl_vade_tarihi, 2, 0, Qt.AlignCenter)
         form_layout.addWidget(self.entry_vade_tarihi, 2, 1)
         form_layout.addWidget(self.btn_vade_tarihi, 2, 2)
         self.lbl_vade_tarihi.hide()
@@ -6519,13 +4930,20 @@ class OdemeTuruSecimDialog(QDialog):
                               self.db.ODEME_TURU_EFT_HAVALE, self.db.ODEME_TURU_CEK, 
                               self.db.ODEME_TURU_SENET, self.db.ODEME_TURU_ACIK_HESAP, 
                               self.db.ODEME_TURU_ETKISIZ_FATURA]
-        is_perakende_musteri = (self.fatura_tipi == 'SATIŞ' and self.initial_cari_id is not None and 
-                                str(self.initial_cari_id) == str(self.db.get_perakende_musteri_id()))
-        if is_perakende_musteri:
+        
+        # Seçili cari varsayılan bir cari mi diye kontrol et
+        is_default_cari = (
+            (self.fatura_tipi == self.db.FATURA_TIP_SATIS and self.initial_cari_id is not None and str(self.initial_cari_id) == str(self.db.get_perakende_musteri_id())) or
+            (self.fatura_tipi == self.db.FATURA_TIP_ALIS and self.initial_cari_id is not None and str(self.initial_cari_id) == str(self.db.get_genel_tedarikci_id()))
+        )
+
+        if is_default_cari:
+            # Varsayılan cari ise, açık hesap ve etkisiz faturayı listeden çıkar.
             self.odeme_turu_cb.addItems([p for p in all_payment_values if p != self.db.ODEME_TURU_ACIK_HESAP and p != self.db.ODEME_TURU_ETKISIZ_FATURA])
         else:
+            # Diğer cariler için sadece etkisiz faturayı çıkar.
             self.odeme_turu_cb.addItems([p for p in all_payment_values if p != self.db.ODEME_TURU_ETKISIZ_FATURA])
-
+            
     def _yukle_kasa_banka_hesaplarini(self):
         self.islem_hesap_cb.clear()
         self.kasa_banka_map.clear()
@@ -6566,51 +4984,47 @@ class OdemeTuruSecimDialog(QDialog):
             self.islem_hesap_cb.setEnabled(False)
 
     def _odeme_turu_degisince_hesap_combobox_ayarla(self):
-        secili_odeme_turu = self.odeme_turu_cb.currentText()
+        selected_odeme_turu = self.odeme_turu_cb.currentText()
         pesin_odeme_turleri = ["NAKİT", "KART", "EFT/HAVALE", "ÇEK", "SENET"]
-        if secili_odeme_turu == "AÇIK HESAP":
-            self.lbl_vade_tarihi.show()
-            self.entry_vade_tarihi.show()
-            self.btn_vade_tarihi.show()
-            self.entry_vade_tarihi.setEnabled(True)
-            self.btn_vade_tarihi.setEnabled(True)
-            if not self.entry_vade_tarihi.text():
-                self.entry_vade_tarihi.setText(datetime.now().strftime('%Y-%m-%d'))
-        else:
-            self.lbl_vade_tarihi.hide()
-            self.entry_vade_tarihi.hide()
-            self.btn_vade_tarihi.hide()
-            self.entry_vade_tarihi.setEnabled(False)
-            self.entry_vade_tarihi.clear()
-        if secili_odeme_turu in pesin_odeme_turleri:
-            self.islem_hesap_cb.setEnabled(True)
-            try:
-                varsayilan_kb_info = self.db.get_kasa_banka_by_odeme_turu(secili_odeme_turu)
-                if varsayilan_kb_info and varsayilan_kb_info[0]:
-                    varsayilan_kb_id = varsayilan_kb_info[0]
-                    index = self.islem_hesap_cb.findData(varsayilan_kb_id)
-                    if index != -1:
-                        self.islem_hesap_cb.setCurrentIndex(index)
-                    elif self.islem_hesap_cb.count() > 0:
-                        self.islem_hesap_cb.setCurrentIndex(0)
-                elif self.islem_hesap_cb.count() > 0:
-                    self.islem_hesap_cb.setCurrentIndex(0)
-                else:
-                    self.islem_hesap_cb.clear()
-                    self.islem_hesap_cb.addItem("Hesap Yok", None)
-                    self.islem_hesap_cb.setEnabled(False)
-            except Exception as e:
-                logging.warning(f"Varsayılan kasa/banka çekilirken hata: {e}")
-                if self.islem_hesap_cb.count() > 0:
-                    self.islem_hesap_cb.setCurrentIndex(0)
-                else:
-                    self.islem_hesap_cb.clear()
-                    self.islem_hesap_cb.addItem("Hesap Yok", None)
-                    self.islem_hesap_cb.setEnabled(False)
-        else:
-            self.islem_hesap_cb.clear()
-            self.islem_hesap_cb.addItem("Hesap Yok", None)
+        
+        self.islem_hesap_cb.blockSignals(True)
+        self.islem_hesap_cb.clear()
+        self.kasa_banka_map.clear()
+        
+        if selected_odeme_turu == self.db.ODEME_TURU_ACIK_HESAP:
+            self.islem_hesap_cb.addItem("Hesap Yok", userData=None)
             self.islem_hesap_cb.setEnabled(False)
+        elif selected_odeme_turu in pesin_odeme_turleri:
+            try:
+                hesaplar_response = self.db.kasa_banka_listesi_al(limit=10000)
+                hesaplar = []
+                if isinstance(hesaplar_response, dict) and "items" in hesaplar_response:
+                    hesaplar = hesaplar_response["items"]
+                elif isinstance(hesaplar_response, list):
+                    hesaplar = hesaplar_response
+                else:
+                    hesaplar = []
+
+                if hesaplar:
+                    for h in hesaplar:
+                        display_text = f"{h.get('hesap_adi')} ({h.get('tip')})"
+                        if h.get('tip') == "BANKA" and h.get('banka_adi'):
+                            display_text += f" - {h.get('banka_adi')}"
+                        self.kasa_banka_map[display_text] = h.get('id')
+                        self.islem_hesap_cb.addItem(display_text, h.get('id'))
+                    self.islem_hesap_cb.setEnabled(True)
+                    self.islem_hesap_cb.setCurrentIndex(0)
+                else:
+                    self.islem_hesap_cb.addItem("Hesap Yok", None)
+                    self.islem_hesap_cb.setEnabled(False)
+            except Exception:
+                self.islem_hesap_cb.addItem("Hesap Yok", None)
+                self.islem_hesap_cb.setEnabled(False)
+        else:
+            self.islem_hesap_cb.addItem("Hesap Yok", userData=None)
+            self.islem_hesap_cb.setEnabled(False)
+        
+        self.islem_hesap_cb.blockSignals(False)
 
     def _onayla(self):
         secili_odeme_turu = self.odeme_turu_cb.currentText()
@@ -6657,14 +5071,14 @@ class TopluVeriEklePenceresi(QDialog):
         main_frame_layout = QGridLayout(main_frame)
         main_layout.addWidget(main_frame)
 
-        main_frame_layout.addWidget(QLabel("Veri Tipi:"), 0, 0, Qt.AlignLeft)
+        main_frame_layout.addWidget(QLabel("Veri Tipi:"), 0, 0, Qt.AlignCenter)
         self.veri_tipi_combo = QComboBox()
         self.veri_tipi_combo.addItems(["Müşteri", "Tedarikçi", "Stok/Ürün Ekle/Güncelle"])
         self.veri_tipi_combo.setCurrentText("Müşteri")
         self.veri_tipi_combo.currentIndexChanged.connect(self._show_template_info_and_options)
         main_frame_layout.addWidget(self.veri_tipi_combo, 0, 1)
 
-        main_frame_layout.addWidget(QLabel("Excel Dosyası:"), 1, 0, Qt.AlignLeft)
+        main_frame_layout.addWidget(QLabel("Excel Dosyası:"), 1, 0, Qt.AlignCenter)
         self.dosya_yolu_entry = QLineEdit()
         main_frame_layout.addWidget(self.dosya_yolu_entry, 1, 1)
         btn_gozat = QPushButton("Gözat...")
@@ -6690,12 +5104,12 @@ class TopluVeriEklePenceresi(QDialog):
         
         self.template_info_label = QLabel()
         self.template_info_label.setWordWrap(True)
-        self.template_info_label.setAlignment(Qt.AlignLeft)
+        self.template_info_label.setAlignment(Qt.AlignCenter)
         main_frame_layout.addWidget(self.template_info_label, 3, 0, 1, 2) # İki sütuna yay
 
         self.detayli_aciklama_button = QPushButton("Detaylı Bilgi / Şablon Açıklaması")
         self.detayli_aciklama_button.clicked.connect(self._show_detayli_aciklama_penceresi)
-        main_frame_layout.addWidget(self.detayli_aciklama_button, 3, 2, Qt.AlignRight | Qt.AlignTop)
+        main_frame_layout.addWidget(self.detayli_aciklama_button, 3, 2, Qt.AlignCenter | Qt.AlignTop)
         self.detayli_aciklama_button.hide() # Başlangıçta gizli
 
         main_frame_layout.setColumnStretch(1, 1) # Excel Dosyası entry'sinin genişlemesi için
@@ -6962,29 +5376,29 @@ class AciklamaDetayPenceresi(QDialog):
         main_layout.addWidget(btn_kapat, alignment=Qt.AlignCenter) # Ortala
 
 class CariSecimPenceresi(QDialog):
-    def __init__(self, parent_window, db_manager, cari_selection_type, callback_func): # Parametre adı değiştirildi
-        super().__init__(parent_window) 
-        self.app = parent_window.app # parent_window'un içindeki app referansını al
+    # 'callback_func' parametresi artık init metodunda bulunmuyor.
+    def __init__(self, parent_window, db_manager, cari_selection_type):
+        super().__init__(parent_window)
+        self.app = parent_window.app
         self.db = db_manager
         
-        # Doğrudan cari tipini sakla (MUSTERI veya TEDARIKCI)
-        self.cari_to_select_type = cari_selection_type 
-        self.callback_func = callback_func
+        self.cari_to_select_type = cari_selection_type
+        # Seçilen cari verilerini saklamak için sınıf özelliklerini tanımlıyoruz.
+        self.secili_cari_id = None
+        self.secili_cari_adi = None
 
         self.setWindowTitle("Cari Seçimi")
-        self.setFixedSize(600, 450) # geometry yerine setFixedSize kullanıldı
-        self.setModal(True) # Diğer pencerelere tıklamayı engeller
+        self.setFixedSize(600, 450)
+        self.setModal(True)
 
-        self.tum_cariler_cache_data = [] 
-        self.cari_map_display_to_id = {} 
+        self.tum_cariler_cache_data = []
 
-        # Pencere başlığını doğru cari tipine göre ayarla
         if self.cari_to_select_type == self.db.CARI_TIP_MUSTERI:
             baslik_text = "Müşteri Seçimi"
         elif self.cari_to_select_type == self.db.CARI_TIP_TEDARIKCI:
             baslik_text = "Tedarikçi Seçimi"
-        else: 
-            baslik_text = "Cari Seçimi (Bilinmeyen Tip)" # Bilinmeyen bir tip gelirse
+        else:
+            baslik_text = "Cari Seçimi (Bilinmeyen Tip)"
             logging.warning(f"CariSecimPenceresi bilinmeyen tip ile başlatıldı: {cari_selection_type}")
 
         title_label = QLabel(baslik_text)
@@ -6993,18 +5407,23 @@ class CariSecimPenceresi(QDialog):
         main_layout = QVBoxLayout(self)
         main_layout.addWidget(title_label)
 
-        # Arama Çerçevesi
+        # BURASI GÜNCELLENDİ: Arama çubuğu düzeni
         search_frame = QFrame(self)
         search_layout = QHBoxLayout(search_frame)
         main_layout.addWidget(search_frame)
 
-        search_layout.addWidget(QLabel("Ara (Ad/Kod):"), Qt.AlignLeft)
+        # 'Ara (Ad/Kod):' yazısını sola hizalı olarak yerleştiriyoruz.
+        search_layout.addWidget(QLabel("Ara (Ad/Kod):")) 
         self.search_entry = QLineEdit()
         self.search_entry.textChanged.connect(self._filtre_liste)
-        search_layout.addWidget(self.search_entry)
-        search_layout.setStretchFactor(self.search_entry, 1) # Genişlemesi için
+        
+        # Arama kutusunun metin hizalamasını sola ayarlıyoruz ve minimum genişlik veriyoruz.
+        self.search_entry.setAlignment(Qt.AlignLeft)
+        self.search_entry.setMinimumWidth(200)
 
-        # Cari Listesi Treeview
+        search_layout.addWidget(self.search_entry)
+        search_layout.setStretchFactor(self.search_entry, 1)
+
         tree_frame = QFrame(self)
         tree_layout = QVBoxLayout(tree_frame)
         main_layout.addWidget(tree_frame)
@@ -7012,18 +5431,17 @@ class CariSecimPenceresi(QDialog):
         self.cari_tree = QTreeWidget()
         self.cari_tree.setHeaderLabels(["Cari Adı", "Kodu"])
         self.cari_tree.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.cari_tree.setSortingEnabled(True) # Sıralama özelliği
-        
-        self.cari_tree.setColumnWidth(0, 300) # Cari Adı sütun genişliği
-        self.cari_tree.header().setSectionResizeMode(0, QHeaderView.Stretch) # Cari Adı genişlesin
-        self.cari_tree.setColumnWidth(1, 100) # Kodu sütun genişliği
-        self.cari_tree.headerItem().setTextAlignment(1, Qt.AlignCenter) # Kodu sütununu ortala
+        self.cari_tree.setSortingEnabled(True)
+
+        self.cari_tree.setColumnWidth(0, 300)
+        self.cari_tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.cari_tree.setColumnWidth(1, 100)
+        self.cari_tree.headerItem().setTextAlignment(1, Qt.AlignCenter)
 
         tree_layout.addWidget(self.cari_tree)
-        
-        self.cari_tree.itemDoubleClicked.connect(self._sec) # Çift tıklama ile seçim
 
-        # Butonlar
+        self.cari_tree.itemDoubleClicked.connect(self._sec)
+
         button_frame = QFrame(self)
         button_layout = QHBoxLayout(button_frame)
         main_layout.addWidget(button_frame)
@@ -7031,62 +5449,59 @@ class CariSecimPenceresi(QDialog):
         btn_sec = QPushButton("Seç")
         btn_sec.clicked.connect(self._sec)
         button_layout.addWidget(btn_sec)
-        
-        button_layout.addStretch() # Sağ tarafa yaslamak için boşluk
+
+        button_layout.addStretch()
 
         btn_iptal = QPushButton("İptal")
-        btn_iptal.clicked.connect(self.close) # QDialog'u kapat
+        btn_iptal.clicked.connect(self.reject)
         button_layout.addWidget(btn_iptal)
 
-        # Başlangıç yüklemesi
         self._yukle_carileri()
         self.search_entry.setFocus()
-    
+
+    def _sec(self):
+        """Seçili cariyi kaydeder ve diyalog penceresini kapatır."""
+        selected_items = self.cari_tree.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "Seçim Yok", "Lütfen bir cari seçin.")
+            return
+
+        selected_item = selected_items[0]
+        # Seçilen verileri sınıf özelliklerine kaydet
+        self.secili_cari_id = selected_item.data(0, Qt.UserRole)
+        self.secili_cari_adi = selected_item.text(0)
+        
+        # Diyalogu kapat ve sonucu ACCEPTED olarak işaretle
+        self.accept()
+
     def _yukle_carileri(self):
-        """Tüm carileri (müşteri veya tedarikçi) API'den çeker ve listeler."""
-        self.tum_cariler_cache_data = [] 
-        self.cari_map_display_to_id = {} 
+        self.tum_cariler_cache_data = []
 
         try:
             kod_anahtari_db = ''
-
-            # self.cari_to_select_type'ı doğrudan kullanarak doğru API çağrısını yap
-            if self.cari_to_select_type == self.db.CARI_TIP_MUSTERI: 
+            if self.cari_to_select_type == self.db.CARI_TIP_MUSTERI:
                 cariler_response = self.db.musteri_listesi_al(limit=10000)
-                kod_anahtari_db = 'kod' 
-            elif self.cari_to_select_type == self.db.CARI_TIP_TEDARIKCI: 
+                kod_anahtari_db = 'kod'
+            elif self.cari_to_select_type == self.db.CARI_TIP_TEDARIKCI:
                 cariler_response = self.db.tedarikci_listesi_al(limit=10000)
-                kod_anahtari_db = 'tedarikci_kodu' # Tedarikçi modelinde 'tedarikci_kodu' alanı varsa
-            else: # Beklenmeyen veya geçersiz tip
+                kod_anahtari_db = 'tedarikci_kodu'
+            else:
                 self.app.set_status_message("Hata: CariSecimPenceresi için geçersiz tip belirtildi.", "red")
                 logging.error(f"CariSecimPenceresi._yukle_carileri: Geçersiz cari_to_select_type: {self.cari_to_select_type}")
-                return # Fonksiyonu sonlandır
+                return
 
-            cariler = []
-            if isinstance(cariler_response, dict) and "items" in cariler_response:
-                cariler = cariler_response["items"]
-            elif isinstance(cariler_response, list): # Eğer API doğrudan liste dönüyorsa
+            cariler = cariler_response.get("items", [])
+            if isinstance(cariler_response, list):
                 cariler = cariler_response
                 self.app.set_status_message("Uyarı: Cari listesi API yanıtı beklenen formatta değil. Doğrudan liste olarak işleniyor.", "orange")
-            else:
-                self.app.set_status_message("Hata: Cari listesi API'den alınamadı veya formatı geçersiz.", "red")
-                logging.error(f"Cari listesi API'den beklenen formatta gelmedi: {type(cariler_response)} - {cariler_response}")
-                return # Hata durumunda fonksiyonu sonlandır
 
-            for c in cariler: # c: dict objesi
+            for c in cariler:
                 cari_id = c.get('id')
                 cari_ad = c.get('ad')
+                cari_kodu = c.get(kod_anahtari_db, "")
+                self.tum_cariler_cache_data.append(c)
 
-                # Cari kodunu almak için dinamik anahtar kullan
-                cari_kodu = c.get(kod_anahtari_db, "") 
-
-                display_text = f"{cari_ad} (Kod: {cari_kodu})" 
-                self.cari_map_display_to_id[display_text] = str(cari_id) 
-                self.tum_cariler_cache_data.append(c) 
-
-            self._filtre_liste() 
-
-            # Varsayılan seçimi yap
+            self._filtre_liste()
             default_id_str = None
             if self.cari_to_select_type == self.db.CARI_TIP_MUSTERI and self.db.get_perakende_musteri_id() is not None:
                 default_id_str = str(self.db.get_perakende_musteri_id())
@@ -7094,39 +5509,42 @@ class CariSecimPenceresi(QDialog):
                 default_id_str = str(self.db.get_genel_tedarikci_id())
 
             if default_id_str:
-                # Treeview'deki item'ı ID'sine göre bul ve seç
                 for i in range(self.cari_tree.topLevelItemCount()):
                     item = self.cari_tree.topLevelItem(i)
-                    if item.data(0, Qt.UserRole) == int(default_id_str): # UserRole'a kaydettiğimiz ID ile karşılaştır
+                    if item.data(0, Qt.UserRole) == int(default_id_str):
                         item.setSelected(True)
                         self.cari_tree.scrollToItem(item)
                         break
 
-        except Exception as e: # Düzeltildi: requests.exceptions.RequestException yerine daha genel hata yakalandı
+        except Exception as e:
             QMessageBox.critical(self, "API Hatası", f"Cari listesi çekilirken hata: {e}")
             logging.error(f"Cari listesi yükleme hatası: {e}", exc_info=True)
-            
-    def _filtre_liste(self): # event parametresi kaldırıldı
-        """Arama terimine göre cari listesini filtreler."""
-        arama_terimi = self.search_entry.text().lower().strip()
-        normalized_arama_terimi = normalize_turkish_chars(arama_terimi) 
+
+    def _filtre_liste(self):
+        """
+        Arama kutusuna yazıldıkça cari listesini filtreler.
+        """
+        # Arama terimini al ve normalleştirerek küçük harfe dönüştür.
+        arama_terimi = self.search_entry.text().strip()
+        normalized_arama_terimi = normalize_turkish_chars(arama_terimi).lower()
 
         self.cari_tree.clear()
 
-        for cari_row in self.tum_cariler_cache_data: # cari_row: dict objesi
+        for cari_row in self.tum_cariler_cache_data:
             cari_id = cari_row.get('id')
             cari_ad = cari_row.get('ad')
-            
             cari_kodu = ""
-            # self.cari_to_select_type'a göre doğru kod alanını kullan
-            if self.cari_to_select_type == self.db.CARI_TIP_MUSTERI: 
+            if self.cari_to_select_type == self.db.CARI_TIP_MUSTERI:
                 cari_kodu = cari_row.get('kod', '')
-            elif self.cari_to_select_type == self.db.CARI_TIP_TEDARIKCI: 
-                cari_kodu = cari_row.get('tedarikci_kodu', '')
+            elif self.cari_to_select_type == self.db.CARI_TIP_TEDARIKCI:
+                # Tedarikçi kodu için `kod` anahtarını kullanıyoruz, `tedarikci_kodu` değil.
+                cari_kodu = cari_row.get('kod', '')
             
-            normalized_cari_ad = normalize_turkish_chars(cari_ad) if cari_ad else ''
-            normalized_cari_kodu = normalize_turkish_chars(cari_kodu) if cari_kodu else ''
-
+            # Karşılaştırılacak verileri de normalleştirip küçük harfe dönüştürüyoruz.
+            normalized_cari_ad = normalize_turkish_chars(cari_ad).lower() if cari_ad else ''
+            normalized_cari_kodu = normalize_turkish_chars(cari_kodu).lower() if cari_kodu else ''
+            
+            # Arama filtresi mantığı
             if (not normalized_arama_terimi or
                 (normalized_cari_ad and normalized_arama_terimi in normalized_cari_ad) or
                 (normalized_cari_kodu and normalized_arama_terimi in normalized_cari_kodu)
@@ -7134,22 +5552,7 @@ class CariSecimPenceresi(QDialog):
                 item_qt = QTreeWidgetItem(self.cari_tree)
                 item_qt.setText(0, cari_ad)
                 item_qt.setText(1, cari_kodu)
-                item_qt.setData(0, Qt.UserRole, cari_id) # ID'yi UserRole olarak sakla
-
-    def _sec(self, item=None, column=None): # item ve column QTreeWidget sinyalinden gelir
-        selected_items = self.cari_tree.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(self, "Seçim Yok", "Lütfen bir cari seçin.")
-            return
-
-        selected_cari_id = selected_items[0].data(0, Qt.UserRole) # UserRole'dan ID'yi al
-        selected_cari_display_text = selected_items[0].text(0) # Cari Adı sütunu
-        
-        # YENİ EKLENEN SATIR: Sinyali kopararak tekrar açılmayı engelle
-        self.cari_tree.itemDoubleClicked.disconnect(self._sec) 
-
-        self.callback_func(selected_cari_id, selected_cari_display_text) # Callback'i çağır
-        self.accept() # QDialog'u kapat
+                item_qt.setData(0, Qt.UserRole, cari_id)
 
 class TedarikciSecimDialog(QDialog):
     def __init__(self, parent_window, db_manager, callback_func):
@@ -7175,7 +5578,7 @@ class TedarikciSecimDialog(QDialog):
         search_layout = QHBoxLayout(search_frame)
         main_layout.addWidget(search_frame)
 
-        search_layout.addWidget(QLabel("Ara (Ad/Kod):"), Qt.AlignLeft)
+        search_layout.addWidget(QLabel("Ara (Ad/Kod):"), Qt.AlignCenter)
         self.search_entry = QLineEdit()
         self.search_entry.textChanged.connect(self._filtre_liste)
         search_layout.addWidget(self.search_entry)
@@ -7245,26 +5648,21 @@ class TedarikciSecimDialog(QDialog):
             QMessageBox.critical(self, "API Hatası", f"Tedarikçi listesi çekilirken hata: {e}")
             logging.error(f"Tedarikçi listesi yükleme hatası: {e}", exc_info=True)
 
-    def _filtre_liste(self): # event parametresi kaldırıldı
+    def _filtre_liste(self):
         """Arama kutusuna yazıldıkça tedarikçi listesini filtreler."""
-        # Arama terimini al ve normalleştir
-        arama_terimi = self.search_entry.text().lower().strip()
-        normalized_arama_terimi = normalize_turkish_chars(arama_terimi) 
+        arama_terimi = self.search_entry.text().strip()
+        normalized_arama_terimi = normalize_turkish_chars(arama_terimi).lower()
         
-        # Treeview'i temizle
         self.tedarikci_tree.clear()
         
-        # Önbelleğe alınmış tedarikçi verileri üzerinde döngü.
-        for tedarikci_row in self.tum_tedarikciler_cache: # tedarikci_row: dict objesi
+        for tedarikci_row in self.tum_tedarikciler_cache:
             tedarikci_id = tedarikci_row.get('id')
-            tedarikci_kodu = tedarikci_row.get('tedarikci_kodu', '')
+            tedarikci_kodu = tedarikci_row.get('kod', '') # `tedarikci_kodu` yerine `kod`
             tedarikci_ad = tedarikci_row.get('ad')
             
-            # Tedarikçi adını ve kodunu normalleştirerek karşılaştırma yapalım.
-            normalized_tedarikci_ad = normalize_turkish_chars(tedarikci_ad) if tedarikci_ad else ''
-            normalized_tedarikci_kodu = normalize_turkish_chars(tedarikci_kodu) if tedarikci_kodu else ''
+            normalized_tedarikci_ad = normalize_turkish_chars(tedarikci_ad).lower() if tedarikci_ad else ''
+            normalized_tedarikci_kodu = normalize_turkish_chars(tedarikci_kodu).lower() if tedarikci_kodu else ''
             
-            # Filtreleme koşulu
             if (not normalized_arama_terimi or
                 (normalized_tedarikci_ad and normalized_arama_terimi in normalized_tedarikci_ad) or
                 (normalized_tedarikci_kodu and normalized_arama_terimi in normalized_tedarikci_kodu)
@@ -7272,8 +5670,8 @@ class TedarikciSecimDialog(QDialog):
                 item_qt = QTreeWidgetItem(self.tedarikci_tree)
                 item_qt.setText(0, tedarikci_ad)
                 item_qt.setText(1, tedarikci_kodu)
-                item_qt.setData(0, Qt.UserRole, tedarikci_id) # ID'yi UserRole olarak sakla
-
+                item_qt.setData(0, Qt.UserRole, tedarikci_id)
+                
     def _sec(self, item=None, column=None): # item ve column QTreeWidget sinyalinden gelir
         """Seçili tedarikçiyi onaylar ve callback fonksiyonunu çağırır."""
         selected_items = self.tedarikci_tree.selectedItems()
@@ -7355,7 +5753,7 @@ class GelirGiderSiniflandirmaYonetimiPenceresi(QDialog):
 
         btn_kapat = QPushButton("Kapat")
         btn_kapat.clicked.connect(self.close)
-        main_layout.addWidget(btn_kapat, alignment=Qt.AlignRight)
+        main_layout.addWidget(btn_kapat, alignment=Qt.AlignCenter)
 
         # Sağ tık menüsü (Ortak olabilir)
         self.context_menu = QMenu(self)
@@ -7586,7 +5984,7 @@ class BirimDuzenlePenceresi(QDialog):
         main_layout.addWidget(main_frame)
         main_frame_layout = QGridLayout(main_frame)
 
-        main_frame_layout.addWidget(QLabel("Birim Adı:"), 0, 0, Qt.AlignLeft)
+        main_frame_layout.addWidget(QLabel("Birim Adı:"), 0, 0, Qt.AlignCenter)
         self.birim_adi_entry = QLineEdit()
         self.birim_adi_entry.setText(self.mevcut_birim_adi)
         main_frame_layout.addWidget(self.birim_adi_entry, 0, 1)
@@ -7594,7 +5992,7 @@ class BirimDuzenlePenceresi(QDialog):
 
         button_frame = QFrame(self)
         button_layout = QHBoxLayout(button_frame)
-        main_layout.addWidget(button_frame, alignment=Qt.AlignRight) # Butonları sağa yasla
+        main_layout.addWidget(button_frame, alignment=Qt.AlignCenter) # Butonları sağa yasla
 
         btn_kaydet = QPushButton("Kaydet")
         btn_kaydet.clicked.connect(self._kaydet)
@@ -7639,7 +6037,7 @@ class GrupDuzenlePenceresi(QDialog):
         main_layout.addWidget(main_frame)
         main_frame_layout = QGridLayout(main_frame)
 
-        main_frame_layout.addWidget(QLabel("Grup Adı:"), 0, 0, Qt.AlignLeft)
+        main_frame_layout.addWidget(QLabel("Grup Adı:"), 0, 0, Qt.AlignCenter)
         self.grup_adi_entry = QLineEdit()
         self.grup_adi_entry.setText(self.mevcut_grup_adi)
         main_frame_layout.addWidget(self.grup_adi_entry, 0, 1)
@@ -7647,7 +6045,7 @@ class GrupDuzenlePenceresi(QDialog):
 
         button_frame = QFrame(self)
         button_layout = QHBoxLayout(button_frame)
-        main_layout.addWidget(button_frame, alignment=Qt.AlignRight) # Butonları sağa yasla
+        main_layout.addWidget(button_frame, alignment=Qt.AlignCenter) # Butonları sağa yasla
 
         btn_kaydet = QPushButton("Kaydet")
         btn_kaydet.clicked.connect(self._kaydet)
@@ -7693,7 +6091,7 @@ class UlkeDuzenlePenceresi(QDialog):
         main_layout.addWidget(main_frame)
         main_frame_layout = QGridLayout(main_frame)
 
-        main_frame_layout.addWidget(QLabel("Ülke Adı:"), 0, 0, Qt.AlignLeft)
+        main_frame_layout.addWidget(QLabel("Ülke Adı:"), 0, 0, Qt.AlignCenter)
         self.ulke_adi_entry = QLineEdit()
         self.ulke_adi_entry.setText(self.mevcut_ulke_adi)
         main_frame_layout.addWidget(self.ulke_adi_entry, 0, 1)
@@ -7701,7 +6099,7 @@ class UlkeDuzenlePenceresi(QDialog):
 
         button_frame = QFrame(self)
         button_layout = QHBoxLayout(button_frame)
-        main_layout.addWidget(button_frame, alignment=Qt.AlignRight) # Butonları sağa yasla
+        main_layout.addWidget(button_frame, alignment=Qt.AlignCenter) # Butonları sağa yasla
 
         btn_kaydet = QPushButton("Kaydet")
         btn_kaydet.clicked.connect(self._kaydet)
@@ -7747,7 +6145,7 @@ class SiniflandirmaDuzenlePenceresi(QDialog):
         main_layout.addWidget(main_frame)
         main_frame_layout = QGridLayout(main_frame)
 
-        main_frame_layout.addWidget(QLabel("Sınıflandırma Adı:"), 0, 0, Qt.AlignLeft)
+        main_frame_layout.addWidget(QLabel("Sınıflandırma Adı:"), 0, 0, Qt.AlignCenter)
         self.siniflandirma_adi_entry = QLineEdit()
         self.siniflandirma_adi_entry.setText(self.mevcut_siniflandirma_adi)
         main_frame_layout.addWidget(self.siniflandirma_adi_entry, 0, 1)
@@ -7755,7 +6153,7 @@ class SiniflandirmaDuzenlePenceresi(QDialog):
 
         button_frame = QFrame(self)
         button_layout = QHBoxLayout(button_frame)
-        main_layout.addWidget(button_frame, alignment=Qt.AlignRight) # Butonları sağa yasla
+        main_layout.addWidget(button_frame, alignment=Qt.AlignCenter) # Butonları sağa yasla
 
         btn_kaydet = QPushButton("Kaydet")
         btn_kaydet.clicked.connect(self._kaydet)
@@ -7772,20 +6170,16 @@ class SiniflandirmaDuzenlePenceresi(QDialog):
             return
 
         try:
-            # API endpointleri kullanıldı
-            if self.tip == "GELİR":
-                response = requests.put(f"{API_BASE_URL}/nitelikler/gelir_siniflandirmalari/{self.siniflandirma_id}", json={"siniflandirma_adi": yeni_siniflandirma_adi})
-            else: # GİDER
-                response = requests.put(f"{API_BASE_URL}/nitelikler/gider_siniflandirmalari/{self.siniflandirma_id}", json={"siniflandirma_adi": yeni_siniflandirma_adi})
-            response.raise_for_status()
+            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
+            success, message = self.db.nitelik_guncelle(f"{self.tip.lower()}_siniflandirmalari", self.siniflandirma_id, {"ad": yeni_siniflandirma_adi})
 
-            QMessageBox.information(self, "Başarılı", "Sınıflandırma başarıyla güncellendi.")
-            self.yenile_callback() # Ana listedeki sınıflandırmaları yenile
-            self.accept() # Pencereyi kapat
-        except requests.exceptions.RequestException as e:
+            if success:
+                QMessageBox.information(self, "Başarılı", "Sınıflandırma başarıyla güncellendi.")
+                self.yenile_callback()
+                self.accept()
+            else:
+                QMessageBox.critical(self, "Hata", message)
+        except Exception as e:
             error_detail = str(e)
-            if e.response is not None:
-                try: error_detail = e.response.json().get('detail', str(e.response.content))
-                except ValueError: pass
             QMessageBox.critical(self, "API Hatası", f"Sınıflandırma güncellenirken hata: {error_detail}")
             logging.error(f"Sınıflandırma güncelleme hatası: {error_detail}", exc_info=True)

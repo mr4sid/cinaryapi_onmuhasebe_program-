@@ -149,7 +149,7 @@ class NotificationDetailsPenceresi(QDialog):
         tarih_font = QFont()
         tarih_font.setItalic(True) # Italic stilini bu şekilde ayarlıyoruz
         tarih_label.setFont(tarih_font)
-        tarih_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        tarih_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(tarih_label)
 
         layout.addStretch()

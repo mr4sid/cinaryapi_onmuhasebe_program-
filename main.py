@@ -5,7 +5,7 @@ import json
 import logging  
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QFileDialog,
-    QWidget, QMenuBar, QStatusBar, QTabWidget,QDialog
+    QWidget, QMenuBar, QStatusBar, QTabWidget,QDialog, QVBoxLayout
 )
 from PySide6.QtGui import QAction
 from PySide6.QtGui import QIcon
@@ -227,6 +227,10 @@ class App(QMainWindow):
         self.tab_widget = QTabWidget(self)
         self.setCentralWidget(self.tab_widget)
 
+        # Hata veren satırın çözümü:
+        self.open_cari_ekstre_windows = {}
+        self.current_user = None
+
         self.ana_sayfa_widget = AnaSayfa(self, self.db_manager, self)
         self.tab_widget.addTab(self.ana_sayfa_widget, "Ana Sayfa")
 
@@ -239,6 +243,7 @@ class App(QMainWindow):
         self.tedarikci_yonetimi_sayfasi = TedarikciYonetimiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.tedarikci_yonetimi_sayfasi, "Tedarikçi Yönetimi")
 
+        # Hata burada başlıyordu. FaturaListesiSayfasi'na 'SATIŞ' ve 'ALIŞ' stringleri yerine sabitler gönderilmeli.
         self.fatura_listesi_sayfasi = FaturaListesiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.fatura_listesi_sayfasi, "Faturalar")
 
@@ -320,6 +325,19 @@ class App(QMainWindow):
         self.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
 
         self._update_status_bar()
+        
+    def register_cari_ekstre_window(self, window_instance):
+        """Açık olan cari ekstre pencerelerini takip eder."""
+        window_id = id(window_instance)
+        self.open_cari_ekstre_windows[window_id] = window_instance
+        logger.info(f"Yeni cari ekstre penceresi kaydedildi. Toplam açık: {len(self.open_cari_ekstre_windows)}")
+
+    def unregister_cari_ekstre_window(self, window_instance):
+        """Kapanan cari ekstre pencerelerini listeden çıkarır."""
+        window_id = id(window_instance)
+        if window_id in self.open_cari_ekstre_windows:
+            del self.open_cari_ekstre_windows[window_id]
+            logger.info(f"Cari ekstre penceresi kaydı silindi. Toplam açık: {len(self.open_cari_ekstre_windows)}")
 
     def _open_dialog_with_callback(self, dialog_class_path: str, refresh_callback=None, **kwargs):
         """
@@ -394,17 +412,45 @@ class App(QMainWindow):
 
     def show_invoice_form(self, fatura_tipi, duzenleme_id=None, initial_data=None):
         """Fatura oluşturma/düzenleme penceresini açar."""
-        from pencereler import FaturaPenceresi # Bu import burada yapılmalı
-        self.fatura_penceresi = FaturaPenceresi(
-            self, # parent
-            self.db_manager,
-            self, # app_ref
-            fatura_tipi=fatura_tipi, # fura_tipi -> fatura_tipi olarak düzeltildi
-            duzenleme_id=duzenleme_id,
-            yenile_callback=self._initial_load_data,
-            initial_data=initial_data
-        )
-        self.fatura_penceresi.show()
+        # Sınıflar buraya taşındığı için import satırlarını kaldırdık veya düzenledik.
+        # from pencereler import FaturaDetayPenceresi, FaturaGuncellemePenceresi
+        # from arayuz import FaturaOlusturmaSayfasi
+
+        # FaturaGuncellemePenceresi sınıfı hala pencereler.py içinde
+        from pencereler import FaturaGuncellemePenceresi
+        from arayuz import FaturaOlusturmaSayfasi
+
+        if duzenleme_id:
+            pencere = FaturaGuncellemePenceresi(
+                parent=self,
+                db_manager=self.db_manager,
+                fatura_id_duzenle=duzenleme_id,
+                yenile_callback_liste=self.fatura_listesi_sayfasi.fatura_listesini_yukle
+            )
+            pencere.exec()
+        else:
+            # Yeni fatura oluşturmak için FaturaOlusturmaSayfasi'nı bir QDialog içinde gösteriyoruz.
+            pencere = QDialog(self)
+            pencere.setWindowTitle("Yeni Satış Faturası" if fatura_tipi == self.db_manager.FATURA_TIP_SATIS else "Yeni Alış Faturası")
+            pencere.setWindowState(Qt.WindowMaximized)
+            pencere.setModal(True)
+
+            dialog_layout = QVBoxLayout(pencere)
+            fatura_form = FaturaOlusturmaSayfasi(
+                pencere,
+                self.db_manager,
+                self,
+                fatura_tipi,
+                yenile_callback=self.fatura_listesi_sayfasi.fatura_listesini_yukle,
+                initial_data=initial_data
+            )
+            dialog_layout.addWidget(fatura_form)
+            
+            # Sinyal bağlantılarını burada kuruyoruz.
+            fatura_form.saved_successfully.connect(pencere.accept)
+            fatura_form.cancelled_successfully.connect(pencere.reject)
+            
+            pencere.exec()
         logger.info(f"Fatura penceresi açıldı. Tip: {fatura_tipi}, ID: {duzenleme_id}")
 
     def set_status_message(self, message, color="black"):
@@ -528,9 +574,10 @@ class App(QMainWindow):
 
     def _fatura_karti_penceresi_ac(self):
         from pencereler import FaturaPenceresi
-        self.fatura_karti_penceresi = FaturaPenceresi(self, self.db_manager, app_ref=self, fatura_tipi="SATIŞ", yenile_callback=self.fatura_listesi_sayfasi.fatura_listesini_yukle)
+        # Bu metodun çağrıldığı yer de güncellenmeli
+        self.fatura_karti_penceresi = FaturaPenceresi(self, self.db_manager, app_ref=self, fatura_tipi=self.db_manager.FATURA_TIP_SATIS, yenile_callback=self.fatura_listesi_sayfasi.fatura_listesini_yukle)
         self.fatura_karti_penceresi.show()
-
+        
     def _siparis_karti_penceresi_ac(self):
         from pencereler import SiparisPenceresi
         self.siparis_karti_penceresi = SiparisPenceresi(self, self.db_manager, app_ref=self, siparis_tipi="SATIŞ_SIPARIS", yenile_callback=self.siparis_listesi_sayfasi.siparis_listesini_yukle)
