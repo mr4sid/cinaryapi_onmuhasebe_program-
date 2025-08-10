@@ -325,7 +325,7 @@ class App(QMainWindow):
         self.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
 
         self._update_status_bar()
-        
+
     def register_cari_ekstre_window(self, window_instance):
         """Açık olan cari ekstre pencerelerini takip eder."""
         window_id = id(window_instance)

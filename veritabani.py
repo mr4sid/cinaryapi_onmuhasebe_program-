@@ -180,8 +180,6 @@ class OnMuhasebe:
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Kullanıcı doğrulama başarısız: {e}")
             return None, None
-            
-
 
     def kullanici_listele(self):
         """API'den kullanıcı listesini çeker. Yanıtı 'items' listesi olarak döndürür."""
@@ -200,9 +198,14 @@ class OnMuhasebe:
             logger.error(f"Kullanıcı eklenirken hata: {e}")
             return False, f"Kullanıcı eklenirken hata: {e}"
 
-    def kullanici_guncelle_sifre_yetki(self, user_id, hashed_password, yetki):
+    def kullanici_guncelle_sifre_yetki(self, user_id, new_password, yetki):
         try:
-            self._make_api_request("PUT", f"/kullanicilar/{user_id}", json={"hashed_sifre": hashed_password, "yetki": yetki})
+            # API'den şifre hashing işlemini yapması beklenir.
+            data_to_update = {"yetki": yetki}
+            if new_password:
+                data_to_update["sifre"] = new_password
+                
+            self._make_api_request("PUT", f"/kullanicilar/{user_id}", json=data_to_update)
             return True, "Kullanıcı şifre ve yetki başarıyla güncellendi."
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Kullanıcı şifre/yetki güncellenirken hata: {e}")
@@ -413,6 +416,19 @@ class OnMuhasebe:
         except Exception as e: # Diğer olası hataları yakalar
             logger.error(f"Stok eklenirken beklenmeyen hata: {e}", exc_info=True)
             return False, f"Ürün eklenirken beklenmeyen bir hata oluştu: {e}"
+
+    def bulk_stok_upsert(self, stok_listesi: List[Dict[str, Any]]):
+        """
+        Stok verilerini toplu olarak API'ye gönderir.
+        """
+        try:
+            return self._make_api_request("POST", "/stoklar/bulk_upsert", json=stok_listesi)
+        except ValueError as e:
+            logger.error(f"Toplu stok ekleme/güncelleme API'den hata döndü: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Toplu stok ekleme/güncelleme sırasında beklenmedik hata: {e}", exc_info=True)
+            raise
 
     def stok_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, 
                              kategori_id: int = None, marka_id: int = None, urun_grubu_id: int = None, 
@@ -1239,15 +1255,33 @@ class OnMuhasebe:
                 "urun_id": urun_id,
                 "fatura_tipi": fatura_tipi
             }
+            # DEĞİŞİKLİK BURADA: API yolunu doğru adrese yönlendiriyoruz.
             response = self._make_api_request("GET", "/raporlar/fatura_kalem_gecmisi", params=params)
-            return response
+            return response.get('items', [])
         except Exception as e:
             logger.error(f"Geçmiş fatura kalemleri API'den alınamadı: {e}")
             return []
-
+                                                                
     def veresiye_borc_ekle(self, cari_id, cari_tip, tarih, tutar, aciklama):
-        logger.info(f"Veresiye borç ekleme simüle edildi: Cari ID: {cari_id}, Tutar: {tutar}")
-        return True, "Veresiye borç başarıyla eklendi (simülasyon)."
+        """
+        Veresiye borç ekleme işlemini API'ye gönderir.
+        """
+        data = {
+            "cari_id": cari_id,
+            "cari_turu": cari_tip,
+            "tarih": tarih,
+            "islem_turu": "VERESİYE_BORÇ",
+            "islem_yone": self.CARI_ISLEM_YON_BORC,
+            "tutar": tutar,
+            "aciklama": aciklama,
+            "kaynak": self.KAYNAK_TIP_VERESIYE_BORC_MANUEL
+        }
+        try:
+            self._make_api_request("POST", "/cari_hareketler/manuel", json=data)
+            return True, "Veresiye borç başarıyla eklendi."
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Veresiye borç eklenirken hata: {e}")
+            return False, f"Veresiye borç eklenirken hata: {e}"
 
     def get_next_stok_kodu(self):
         """API'den bir sonraki stok kodunu alır."""

@@ -3,7 +3,7 @@ import requests
 import json
 import logging
 from datetime import datetime, date
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ class FaturaService:
             return False, f"Sipariş faturaya dönüştürülemedi: {e}"
         except Exception as e:
             logger.error(f"Siparişi faturaya dönüştürürken beklenmeyen bir hata oluştu: {e}")
-            return False, f"Siparişi faturaya dönüştürürken beklenmeyen bir hata oluştu: {e}"
+            return False, f"Siparişi faturaya dönüştürülürken beklenmeyen bir hata oluştu: {e}"
 
 class CariService:
     def __init__(self, db_manager):
@@ -215,6 +215,193 @@ class TopluIslemService:
         """
         self.db = db_manager
         logger.info("TopluIslemService başlatıldı.")
+    
+    def toplu_musteri_analiz_et(self, raw_data: list) -> Dict[str, Union[List, Dict]]:
+        """
+        Ham müşteri listesini analiz eder ve önizleme için hazırlar.
+        """
+        # Bu fonksiyon için Pydantic model doğrulama mantığı API tarafında olduğundan,
+        # burada sadece basit formatlama ve kontrol yapılır.
+        processed_data = []
+        new_records = []
+        update_records = []
+        error_records = []
+        
+        # Her satır bir liste
+        for row_index, row in enumerate(raw_data):
+            try:
+                # Excel sütunlarına göre veriyi çek
+                kod = str(row[0]).strip() if len(row) > 0 and row[0] is not None else None
+                ad = str(row[1]).strip() if len(row) > 1 and row[1] is not None else None
+                
+                if not kod or not ad:
+                    error_records.append({"hata": "Kod veya Ad boş olamaz", "satir": row_index + 2, "veri": row})
+                    continue
+
+                # API'den mevcut müşteriyi kontrol et
+                mevcut_musteri_response = self.db._make_api_request("GET", f"/musteriler/", params={"arama": kod})
+                mevcut_musteri = mevcut_musteri_response.get("items")
+                
+                # Sadece kod ile tam eşleşme arıyoruz
+                if mevcut_musteri and mevcut_musteri[0].get('kod') == kod:
+                    # Güncelleme kaydı
+                    update_records.append({"kod": kod, "ad": ad})
+                else:
+                    # Yeni kayıt
+                    new_records.append({"kod": kod, "ad": ad})
+
+                processed_data.append({
+                    "kod": kod,
+                    "ad": ad,
+                    "telefon": str(row[2]).strip() if len(row) > 2 and row[2] is not None else None,
+                    "adres": str(row[3]).strip() if len(row) > 3 and row[3] is not None else None,
+                    "vergi_dairesi": str(row[4]).strip() if len(row) > 4 and row[4] is not None else None,
+                    "vergi_no": str(row[5]).strip() if len(row) > 5 and row[5] is not None else None
+                })
+            except Exception as e:
+                error_records.append({"hata": f"Analiz hatası: {e}", "satir": row_index + 2, "veri": row})
+                
+        return {
+            "all_processed_data": processed_data,
+            "new_records": new_records,
+            "update_records": update_records,
+            "error_records": error_records
+        }
+
+    def toplu_tedarikci_analiz_et(self, raw_data: list) -> Dict[str, Union[List, Dict]]:
+        """
+        Ham tedarikçi listesini analiz eder ve önizleme için hazırlar.
+        """
+        processed_data = []
+        new_records = []
+        update_records = []
+        error_records = []
+        
+        for row_index, row in enumerate(raw_data):
+            try:
+                kod = str(row[0]).strip() if len(row) > 0 and row[0] is not None else None
+                ad = str(row[1]).strip() if len(row) > 1 and row[1] is not None else None
+                
+                if not kod or not ad:
+                    error_records.append({"hata": "Kod veya Ad boş olamaz", "satir": row_index + 2, "veri": row})
+                    continue
+
+                mevcut_tedarikci_response = self.db._make_api_request("GET", f"/tedarikciler/", params={"arama": kod})
+                mevcut_tedarikci = mevcut_tedarikci_response.get("items")
+                
+                if mevcut_tedarikci and mevcut_tedarikci[0].get('kod') == kod:
+                    update_records.append({"kod": kod, "ad": ad})
+                else:
+                    new_records.append({"kod": kod, "ad": ad})
+
+                processed_data.append({
+                    "kod": kod,
+                    "ad": ad,
+                    "telefon": str(row[2]).strip() if len(row) > 2 and row[2] is not None else None,
+                    "adres": str(row[3]).strip() if len(row) > 3 and row[3] is not None else None,
+                    "vergi_dairesi": str(row[4]).strip() if len(row) > 4 and row[4] is not None else None,
+                    "vergi_no": str(row[5]).strip() if len(row) > 5 and row[5] is not None else None
+                })
+            except Exception as e:
+                error_records.append({"hata": f"Analiz hatası: {e}", "satir": row_index + 2, "veri": row})
+                
+        return {
+            "all_processed_data": processed_data,
+            "new_records": new_records,
+            "update_records": update_records,
+            "error_records": error_records
+        }
+        
+    def toplu_stok_analiz_et(self, raw_data: list, selected_update_fields: List[str]) -> Dict[str, Union[List, Dict]]:
+        """
+        Ham stok listesini analiz eder ve önizleme için hazırlar.
+        """
+        processed_data = []
+        new_records = []
+        update_records = []
+        error_records = []
+        
+        for row_index, row in enumerate(raw_data):
+            try:
+                kod = str(row[0]).strip() if len(row) > 0 and row[0] is not None else None
+                ad = str(row[1]).strip() if len(row) > 1 and row[1] is not None else None
+
+                if not kod or not ad:
+                    error_records.append({"hata": "Kod veya Ad boş olamaz", "satir": row_index + 2, "veri": row})
+                    continue
+                
+                # API'den mevcut stoku kontrol et
+                mevcut_stok_response = self.db._make_api_request("GET", f"/stoklar/", params={"arama": kod})
+                mevcut_stok = mevcut_stok_response.get("items")
+
+                # Sadece kod ile tam eşleşme arıyoruz
+                if mevcut_stok and mevcut_stok[0].get('kod') == kod:
+                    # Güncelleme kaydı
+                    update_records.append({"kod": kod, "ad": ad})
+                else:
+                    # Yeni kayıt
+                    new_records.append({"kod": kod, "ad": ad})
+                
+                # Sınıflandırma adlarına göre ID'leri bul
+                kategori_id = None
+                if str(row[7]).strip() not in ["", "None", None]:
+                    kategori_response = self.db._make_api_request("GET", "/nitelikler/kategoriler/", params={"arama": str(row[7]).strip()})
+                    if kategori_response.get("items"):
+                        kategori_id = kategori_response.get("items")[0].get("id")
+
+                marka_id = None
+                if str(row[8]).strip() not in ["", "None", None]:
+                    marka_response = self.db._make_api_request("GET", "/nitelikler/markalar/", params={"arama": str(row[8]).strip()})
+                    if marka_response.get("items"):
+                        marka_id = marka_response.get("items")[0].get("id")
+                
+                urun_grubu_id = None
+                if str(row[9]).strip() not in ["", "None", None]:
+                    urun_grubu_response = self.db._make_api_request("GET", "/nitelikler/urun_gruplari/", params={"arama": str(row[9]).strip()})
+                    if urun_grubu_response.get("items"):
+                        urun_grubu_id = urun_grubu_response.get("items")[0].get("id")
+
+                birim_id = None
+                if str(row[10]).strip() not in ["", "None", None]:
+                    birim_response = self.db._make_api_request("GET", "/nitelikler/urun_birimleri/", params={"arama": str(row[10]).strip()})
+                    if birim_response.get("items"):
+                        birim_id = birim_response.get("items")[0].get("id")
+
+                mense_id = None
+                if str(row[11]).strip() not in ["", "None", None]:
+                    ulke_response = self.db._make_api_request("GET", "/nitelikler/ulkeler/", params={"arama": str(row[11]).strip()})
+                    if ulke_response.get("items"):
+                        mense_id = ulke_response.get("items")[0].get("id")
+
+
+                processed_data.append({
+                    "kod": kod,
+                    "ad": ad,
+                    "miktar": float(str(row[2]).replace(",", ".")) if len(row) > 2 and row[2] is not None else None,
+                    "alis_fiyati": float(str(row[3]).replace(",", ".")) if len(row) > 3 and row[3] is not None else None,
+                    "satis_fiyati": float(str(row[4]).replace(",", ".")) if len(row) > 4 and row[4] is not None else None,
+                    "kdv_orani": float(str(row[5]).replace(",", ".")) if len(row) > 5 and row[5] is not None else None,
+                    "min_stok_seviyesi": float(str(row[6]).replace(",", ".")) if len(row) > 6 and row[6] is not None else None,
+                    "kategori_id": kategori_id,
+                    "marka_id": marka_id,
+                    "urun_grubu_id": urun_grubu_id,
+                    "birim_id": birim_id,
+                    "mense_id": mense_id,
+                    "detay": str(row[12]).strip() if len(row) > 12 and row[12] is not None else None,
+                    "urun_resmi_yolu": str(row[13]).strip() if len(row) > 13 and row[13] is not None else None,
+                    "selected_update_fields": selected_update_fields
+                })
+
+            except Exception as e:
+                error_records.append({"hata": f"Analiz hatası: {e}", "satir": row_index + 2, "veri": row})
+                
+        return {
+            "all_processed_data": processed_data,
+            "new_records": new_records,
+            "update_records": update_records,
+            "error_records": error_records,
+            "selected_update_fields_from_ui": selected_update_fields
+        }
 
     def toplu_musteri_ice_aktar(self, musteri_listesi: List[Dict[str, Any]]):
         """
@@ -226,7 +413,17 @@ class TopluIslemService:
 
         for musteri_data in musteri_listesi:
             try:
-                success, msg = self.db.musteri_ekle(musteri_data)
+                # Müşteri zaten var mı diye kontrol et
+                mevcut_musteri_response = self.db._make_api_request("GET", f"/musteriler/", params={"arama": musteri_data.get('kod')})
+                mevcut_musteri = mevcut_musteri_response.get("items")
+                
+                if mevcut_musteri and mevcut_musteri[0].get('kod') == musteri_data.get('kod'):
+                    # Güncelleme işlemi
+                    success, msg = self.db.musteri_guncelle(mevcut_musteri[0].get('id'), musteri_data)
+                else:
+                    # Ekleme işlemi
+                    success, msg = self.db.musteri_ekle(musteri_data)
+
                 if success:
                     basarili_sayisi += 1
                 else:
@@ -250,7 +447,14 @@ class TopluIslemService:
 
         for tedarikci_data in tedarikci_listesi:
             try:
-                success, msg = self.db.tedarikci_ekle(tedarikci_data)
+                mevcut_tedarikci_response = self.db._make_api_request("GET", f"/tedarikciler/", params={"arama": tedarikci_data.get('kod')})
+                mevcut_tedarikci = mevcut_tedarikci_response.get("items")
+
+                if mevcut_tedarikci and mevcut_tedarikci[0].get('kod') == tedarikci_data.get('kod'):
+                    success, msg = self.db.tedarikci_guncelle(mevcut_tedarikci[0].get('id'), tedarikci_data)
+                else:
+                    success, msg = self.db.tedarikci_ekle(tedarikci_data)
+
                 if success:
                     basarili_sayisi += 1
                 else:
@@ -268,26 +472,20 @@ class TopluIslemService:
         """
         Verilen stok listesini toplu olarak içe aktarır.
         """
-        basarili_sayisi = 0
-        hata_sayisi = 0
-        hatalar = []
-
-        for stok_data in stok_listesi:
-            try:
-                success, msg = self.db.stok_ekle(stok_data)
-                if success:
-                    basarili_sayisi += 1
-                else:
-                    hata_sayisi += 1
-                    hatalar.append(f"Stok '{stok_data.get('ad', 'Bilinmeyen')}' eklenirken hata: {msg}")
-            except Exception as e:
-                hata_sayisi += 1
-                hatalar.append(f"Stok '{stok_data.get('ad', 'Bilinmeyen')}' eklenirken beklenmeyen hata: {e}")
-                logger.error(f"Toplu stok içe aktarımında hata: {e} - Stok: {stok_data.get('ad')}")
-        
-        logger.info(f"Toplu stok içe aktarım tamamlandı. Başarılı: {basarili_sayisi}, Hata: {hata_sayisi}")
-        return {"basarili": basarili_sayisi, "hata": hata_sayisi, "hatalar": hatalar}
-
+        try:
+            response_data = self.db.bulk_stok_upsert(stok_listesi)
+            return {
+                "basarili": response_data.get("yeni_eklenen_sayisi", 0) + response_data.get("guncellenen_sayisi", 0),
+                "hata": response_data.get("hata_sayisi", 0),
+                "hatalar": response_data.get("hatalar", [])
+            }
+        except ValueError as e:
+            logger.error(f"Toplu stok ekleme/güncelleme API'den hata döndü: {e}")
+            return {"basarili": 0, "hata": len(stok_listesi), "hatalar": [f"Genel API hatası: {e}"]}
+        except Exception as e:
+            logger.error(f"Toplu stok ekleme/güncelleme sırasında beklenmedik hata: {e}", exc_info=True)
+            return {"basarili": 0, "hata": len(stok_listesi), "hatalar": [f"Beklenmedik bir hata oluştu: {e}"]}
+    
     def musteri_listesini_disa_aktar(self, **kwargs):
         """
         Müşteri listesini API'den alır ve döndürür.

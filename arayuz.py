@@ -456,7 +456,11 @@ class StokYonetimiSayfasi(QWidget):
                     stok_durumu_filter = False
 
                 kritik_stok_altinda = self.kritik_stok_altinda_checkBox.isChecked()
-                aktif_durum = self.aktif_urun_checkBox.isChecked()
+                
+                # Düzeltildi: aktif_durum filtresi sadece checkbox işaretliyse gönderilecek
+                aktif_durum_filtre = self.aktif_urun_checkBox.isChecked()
+                if not aktif_durum_filtre:
+                    aktif_durum_filtre = None
 
                 # self.db.stok_listesi_al metoduna uygun parametreleri hazırlıyoruz
                 filters = {
@@ -468,7 +472,7 @@ class StokYonetimiSayfasi(QWidget):
                     "urun_grubu_id": urun_grubu_id, # Yeni
                     "stok_durumu": stok_durumu_filter, # Yeni
                     "kritik_stok_altinda": kritik_stok_altinda,
-                    "aktif_durum": aktif_durum,
+                    "aktif_durum": aktif_durum_filtre, # Güncellendi
                 }
                 # Parametreleri temizle (None veya boş string olanları kaldırma)
                 params_to_send = {k: v for k, v in filters.items() if v is not None and str(v).strip() != ""}
@@ -1980,7 +1984,7 @@ class SiparisListesiSayfasi(QWidget):
                     for col_idx in range(self.siparis_tree.columnCount()):
                         item_qt.setBackground(col_idx, QBrush(QColor("#D5F5E3")))
                         item_qt.setForeground(col_idx, QBrush(QColor("green")))
-                elif durum in ['BEKLEMEDE', 'KISMİ_TESLIMAT']:
+                elif durum in ['BEKLEMEDE', 'KISMİ_TESLİMAT']:
                     for col_idx in range(self.siparis_tree.columnCount()):
                         item_qt.setBackground(col_idx, QBrush(QColor("#FCF3CF")))
                         item_qt.setForeground(col_idx, QBrush(QColor("#874F15")))
@@ -3056,15 +3060,12 @@ class BaseIslemSayfasi(QWidget):
         # Sepet panelinin içeriğini oluştururken artık 'sepet_panel_frame'i parent olarak veriyoruz.
         self._setup_sepet_paneli(sepet_panel_frame)
 
-        # Alt barı oluşturup ana düzenleyiciye ekliyoruz.
+        # DEĞİŞİKLİK BURADA: Alt barı oluşturup ana düzenleyiciye ekliyoruz.
         self.alt_f = QFrame(self)
-        self.alt_layout = QHBoxLayout(self.alt_f)
-        
-        # Alt çerçevenin 2. satırda yer almasını sağlıyoruz.
         self.main_layout.addWidget(self.alt_f, 2, 0, 1, 2)
         
         self._setup_alt_bar()
-        
+
     def _yukle_kasa_banka_hesaplarini(self):
         """Kasa/Banka hesaplarını API'den çeker ve ilgili combobox'ı doldurur."""
         # API'den kasa/banka hesaplarını çek
@@ -3129,6 +3130,14 @@ class BaseIslemSayfasi(QWidget):
         self.urun_arama_entry.setPlaceholderText("Ürün kodu veya adı ile ara...")
         self.urun_arama_entry.textChanged.connect(self._delayed_stok_yenile)
         urun_ekle_layout.addWidget(self.urun_arama_entry, 0, 1)
+
+        # DEĞİŞİKLİK: Ürün bulunamadığında gösterilecek etiketi ekliyoruz.
+        self.lbl_urun_bulunamadi = QLabel("Ürün bulunamadı.")
+        self.lbl_urun_bulunamadi.setAlignment(Qt.AlignCenter)
+        self.lbl_urun_bulunamadi.setStyleSheet("font-style: italic; color: gray;")
+        self.lbl_urun_bulunamadi.setVisible(False) # Başlangıçta gizli
+        urun_ekle_layout.addWidget(self.lbl_urun_bulunamadi, 1, 0, 1, 2)
+        
         self.urun_arama_sonuclari_tree = QTreeWidget()
         self.urun_arama_sonuclari_tree.setHeaderLabels(["Ürün Adı", "Kod", "Fiyat", "Stok"])
         self.urun_arama_sonuclari_tree.setColumnCount(4)
@@ -3197,8 +3206,13 @@ class BaseIslemSayfasi(QWidget):
         for i in range(self.sep_tree.columnCount()):
             self.sep_tree.headerItem().setTextAlignment(i, Qt.AlignCenter)
             self.sep_tree.headerItem().setFont(i, QFont("Segoe UI", 12, QFont.Bold))
+        
+        # ID sütununu gizliyoruz (index 10)
+        self.sep_tree.hideColumn(10)
 
-        self.sep_tree.itemDoubleClicked.connect(self._kalem_duzenle_penceresi_ac)
+        # DEĞİŞİKLİK BURADA: Sinyalleri yeni metotlara bağlıyoruz
+        self.sep_tree.itemClicked.connect(self._on_sepet_item_click) # Tek tıklama için
+        self.sep_tree.itemDoubleClicked.connect(self._on_sepet_item_double_click) # Çift tıklama için
         self.sep_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.sep_tree.customContextMenuRequested.connect(self._open_sepet_context_menu)
         sepet_layout.addWidget(self.sep_tree, 1) # Sepetin dikeyde genişlemesi için stretch faktörü 1 olarak ayarlandı
@@ -3218,57 +3232,67 @@ class BaseIslemSayfasi(QWidget):
         btn_s_f_layout.addWidget(self.btn_sepeti_temizle)
         btn_s_f_layout.addStretch() # Sağda boşluk bırakmak için
 
+    def _on_sepet_item_click(self, item, column):
+        """Sepet listesindeki bir öğeye tek tıklandığında çağrılır."""
+        # Eğer Fiyat Geçmişi sütununa (index 9) tek tıklandıysa
+        if column == 9:
+            self._open_fiyat_gecmisi_penceresi(item)
+
+    def _on_sepet_item_double_click(self, item, column):
+        # Sadece diğer sütunlara çift tıklandığında kalem düzenleme penceresini aç
+        if column != 9:
+            self._kalem_duzenle_penceresi_ac(item, column)
+
     def _setup_alt_bar(self):
         """Genel toplamlar ve kaydetme butonunu içeren alt barı oluşturur."""
-        self.alt_layout = QGridLayout(self.alt_f)
+        # Ana yatay layout
+        self.alt_layout = QHBoxLayout(self.alt_f)
         self.alt_f.setContentsMargins(10, 10, 10, 10)
         self.alt_f.setFrameShape(QFrame.StyledPanel)
-
-        # İçerik için ayrı bir QFrame ve QGridLayout oluşturuyoruz.
-        totals_groupbox = QGroupBox("Genel Toplamlar", self.alt_f)
-        totals_groupbox.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        totals_layout = QGridLayout(totals_groupbox)
-
-        self.alt_layout.addWidget(totals_groupbox, 0, 0, 2, 1)
+        self.alt_f.setStyleSheet("background-color: #f0f0f0;")
 
         font_t = QFont("Segoe UI", 10, QFont.Bold)
+        font_d = QFont("Segoe UI", 12, QFont.Bold)
         
-        # DEĞİŞİKLİK: Toplam etiketlerini daha düzenli yerleştiriyoruz.
-        totals_layout.addWidget(QLabel("KDV Hariç Toplam:", font=font_t), 0, 0)
-        self.tkh_l = QLabel("0.00 TL")
-        totals_layout.addWidget(self.tkh_l, 0, 1)
-        
-        totals_layout.addWidget(QLabel("Toplam KDV:", font=font_t), 1, 0)
-        self.tkdv_l = QLabel("0.00 TL")
-        totals_layout.addWidget(self.tkdv_l, 1, 1)
+        # Etiketleri oluşturma
+        self.alt_layout.addWidget(QLabel("KDV Hariç Toplam:", font=font_t))
+        self.tkh_l = QLabel("0.00 TL", font=font_d)
+        self.alt_layout.addWidget(self.tkh_l)
 
-        totals_layout.addWidget(QLabel("Genel Toplam:", font=font_t), 2, 0)
-        self.gt_l = QLabel("0.00 TL")
-        totals_layout.addWidget(self.gt_l, 2, 1)
-        
-        totals_layout.addWidget(QLabel("Uygulanan Genel İskonto:", font=font_t), 3, 0)
-        self.lbl_uygulanan_genel_iskonto = QLabel("0.00 TL")
-        totals_layout.addWidget(self.lbl_uygulanan_genel_iskonto, 3, 1)
+        self.alt_layout.addSpacing(20)
 
-        button_container = QFrame(self.alt_f)
-        button_layout = QVBoxLayout(button_container)
+        self.alt_layout.addWidget(QLabel("Toplam KDV:", font=font_t))
+        self.tkdv_l = QLabel("0.00 TL", font=font_d)
+        self.alt_layout.addWidget(self.tkdv_l)
         
-        self.alt_layout.addWidget(button_container, 0, 1, 2, 1)
+        self.alt_layout.addSpacing(20)
+
+        self.alt_layout.addWidget(QLabel("Uygulanan Genel İskonto:", font=font_t))
+        self.lbl_uygulanan_genel_iskonto = QLabel("0.00 TL", font=font_d)
+        self.alt_layout.addWidget(self.lbl_uygulanan_genel_iskonto)
+        
+        self.alt_layout.addSpacing(20)
+
+        self.alt_layout.addWidget(QLabel("Genel Toplam:", font=font_t))
+        self.gt_l = QLabel("0.00 TL", font=font_d)
+        self.alt_layout.addWidget(self.gt_l)
+        
+        # Esneklik ekleyerek butonları sağa yaslıyoruz
+        self.alt_layout.addStretch()
+
+        self.btn_iptal = QPushButton("İptal")
+        self.btn_iptal.setMinimumWidth(100)
+        self.btn_iptal.clicked.connect(self.cancelled_successfully.emit)
+        self.alt_layout.addWidget(self.btn_iptal)
 
         self.btn_kaydet = QPushButton("Kaydet")
+        self.btn_kaydet.setMinimumWidth(100)
         self.btn_kaydet.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        self.btn_kaydet.setStyleSheet("padding: 5px 10px;")
+        self.btn_kaydet.setStyleSheet("padding: 5px 10px; background-color: #4CAF50; color: white;")
         self.btn_kaydet.clicked.connect(self.kaydet)
-        button_layout.addWidget(self.btn_kaydet)
-        
-        self.btn_iptal = QPushButton("İptal")
-        self.btn_iptal.clicked.connect(self.cancelled_successfully.emit)
-        button_layout.addWidget(self.btn_iptal)
-
-        self.alt_layout.setColumnStretch(0, 1)
+        self.alt_layout.addWidget(self.btn_kaydet)
 
     def _open_sepet_context_menu(self, pos): # pos parametresi customContextMenuRequested sinyalinden gelir
-
         item = self.sep_tree.itemAt(pos) # Tıklanan öğeyi al
         if not item:
             return
@@ -3285,24 +3309,37 @@ class BaseIslemSayfasi(QWidget):
         delete_action.triggered.connect(self.secili_kalemi_sil)
 
         history_action = context_menu.addAction("Fiyat Geçmişi")
-        history_action.triggered.connect(lambda: self._on_sepet_kalem_click(item, self.sep_tree.columnCount() - 1)) # Fiyat geçmişi sütunu index'i
+        # DEĞİŞİKLİK BURADA: Yeni bir lambda fonksiyonu kullanarak FiyatGecmisiPenceresi'ni doğrudan açan bir metot çağırıyoruz.
+        history_action.triggered.connect(lambda: self._open_fiyat_gecmisi_penceresi(item))
 
         # Menüyü göster
         context_menu.exec(self.sep_tree.mapToGlobal(pos)) # Menüyü global koordinatlarda göster
 
-    def _open_urun_arama_context_menu(self, pos): # pos parametresi customContextMenuRequested sinyalinden gelir
-        item = self.urun_arama_sonuclari_tree.itemAt(pos)
-        if not item:
+    def _open_fiyat_gecmisi_penceresi(self, item):
+        """Fiyat Geçmişi penceresini açar."""
+        urun_id = item.data(10, Qt.UserRole)
+        kalem_index_str = item.text(0)
+        try:
+            kalem_index = int(kalem_index_str) - 1
+        except ValueError:
+            QMessageBox.critical(self.app, "Hata", "Kalem indeksi okunamadı.")
             return
 
-        self.urun_arama_sonuclari_tree.setCurrentItem(item)
-
-        context_menu = QMenu(self)
-
-        open_product_card_action = context_menu.addAction("Ürün Kartını Aç")
-        open_product_card_action.triggered.connect(lambda: self._open_urun_karti_from_search(item, None)) # item'ı direkt gönder
-
-        context_menu.exec(self.urun_arama_sonuclari_tree.mapToGlobal(pos))
+        if not self.secili_cari_id:
+            QMessageBox.warning(self.app, "Uyarı", "Fiyat geçmişini görmek için lütfen önce bir cari seçin.")
+            return
+        
+        from pencereler import FiyatGecmisiPenceresi
+        dialog = FiyatGecmisiPenceresi(
+            parent_app=self.app, 
+            db_manager=self.db, 
+            cari_id=self.secili_cari_id, 
+            urun_id=urun_id, 
+            fatura_tipi=self.islem_tipi,
+            update_callback=self._update_sepet_kalem_from_history,
+            current_kalem_index=kalem_index
+        )
+        dialog.exec()
 
     # --- ORTAK METOTLAR ---
     def _on_genel_iskonto_tipi_changed(self): # event=None kaldırıldı
@@ -3362,7 +3399,7 @@ class BaseIslemSayfasi(QWidget):
         except Exception as e: # Genel hata yakalama eklendi
             logger.error(f"Cari listesi yüklenirken hata oluştu: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Cari listesi yüklenemedi. Detay: {e}", "red")
-        
+                    
     def _cari_secim_penceresi_ac(self):
         """
         Cari Seçim penceresini açar ve seçimi aldıktan sonra formu günceller.
@@ -3393,6 +3430,21 @@ class BaseIslemSayfasi(QWidget):
             QMessageBox.critical(self.app, "Hata", f"Cari Seçim penceresi açılırken bir hata oluştu:\n{e}")
             self.app.set_status_message(f"Hata: Cari Seçim penceresi açılamadı - {e}")
             logging.error(f"Cari seçim penceresi açma hatası: {e}", exc_info=True)
+
+    def _sec(self):
+        """Seçili cariyi kaydeder ve diyalog penceresini kapatır."""
+        selected_items = self.cari_tree.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "Seçim Yok", "Lütfen bir cari seçin.")
+            return
+
+        selected_item = selected_items[0]
+        # Seçilen verileri sınıf özelliklerine kaydet
+        self.secili_cari_id = selected_item.data(0, Qt.UserRole)
+        self.secili_cari_adi = selected_item.text(0)
+        
+        # Diyalogu kapat ve sonucu ACCEPTED olarak işaretle
+        self.accept()
 
     def _on_cari_secildi_callback(self, selected_cari_id, selected_cari_display_text):
         self.secili_cari_id = selected_cari_id 
@@ -3505,16 +3557,22 @@ class BaseIslemSayfasi(QWidget):
                             if (normalized_arama_terimi in normalize_turkish_chars(urun_item.get('ad', '')).lower()) or
                                 (normalized_arama_terimi in normalize_turkish_chars(urun_item.get('kod', '')).lower())]
 
+        # DEĞİŞİKLİK: Ürün listesi boş bile olsa Treeview'i gizlemiyoruz.
+        # Sadece içeriğini temizliyoruz, başlıklar görünür kalır.
+        
         for urun_item in filtered_list:
             urun_id = urun_item.get('id')
+            if urun_id is None:
+                continue
+
             item_qt = QTreeWidgetItem(self.urun_arama_sonuclari_tree)
             item_qt.setText(0, urun_item.get('ad', ''))
             item_qt.setText(1, urun_item.get('kod', ''))
 
             fiyat_gosterim = 0.0
-            if self.islem_tipi in [self.db.FATURA_TIP_SATIS, self.db.FATURA_TIP_DEVIR_GIRIS]:
+            if self.islem_tipi in [self.db.FATURA_TIP_SATIS, self.db.FATURA_TIP_DEVIR_GIRIS, self.db.SIPARIS_TIP_SATIS]:
                 fiyat_gosterim = urun_item.get('satis_fiyati', 0.0)
-            elif self.islem_tipi == self.db.FATURA_TIP_ALIS:
+            elif self.islem_tipi in [self.db.FATURA_TIP_ALIS, self.db.SIPARIS_TIP_ALIS]:
                 fiyat_gosterim = urun_item.get('alis_fiyati', 0.0)
             elif self.islem_tipi == self.db.FATURA_TIP_SATIS_IADE:
                 fiyat_gosterim = urun_item.get('alis_fiyati', 0.0)
@@ -3545,9 +3603,8 @@ class BaseIslemSayfasi(QWidget):
             self.urun_arama_sonuclari_tree.setCurrentItem(self.urun_arama_sonuclari_tree.topLevelItem(0))
             self.urun_arama_sonuclari_tree.setFocus()
 
-        self.urun_arama_sonuclari_tree.setVisible(bool(filtered_list))
         self.secili_urun_bilgilerini_goster_arama_listesinden()
-        
+
     def _delayed_stok_yenile(self):
         if self.after_timer.isActive():
             self.after_timer.stop()
@@ -3697,7 +3754,8 @@ class BaseIslemSayfasi(QWidget):
         yeni_iskonto_yuzde_2 = self.db.safe_float(yeni_iskonto_yuzde_2)
         yeni_alis_fiyati_fatura_aninda = self.db.safe_float(yeni_alis_fiyati_fatura_aninda)
 
-        if kalem_index is not None:
+        # DEĞİŞİKLİK BURADA: kalem_index'in geçerli bir indeks olup olmadığını kontrol ediyoruz
+        if kalem_index != -1 and kalem_index is not None:
             item_to_update = list(self.fatura_kalemleri_ui[kalem_index])
             urun_id_current = item_to_update[0]
             # KDV oranını mevcut kalemden al
@@ -3755,7 +3813,7 @@ class BaseIslemSayfasi(QWidget):
         item_to_update[7] = kalem_toplam_kdv_dahil
 
         # Listeyi güncelle veya yeni kalem olarak ekle
-        if kalem_index is not None:
+        if kalem_index != -1 and kalem_index is not None:
             self.fatura_kalemleri_ui[kalem_index] = tuple(item_to_update)
         else:
             self.fatura_kalemleri_ui.append(tuple(item_to_update))
@@ -3817,12 +3875,12 @@ class BaseIslemSayfasi(QWidget):
             # Metot çağrısının UI kurulumundan sonra olduğundan emin olun.
             # print("DEBUG: toplamlari_hesapla_ui: UI etiketleri veya temel değişkenler henüz tanımlanmadı. Atlanıyor.")
             return 
-
+        
         # self.db.safe_float kullanarak tüm sayısal değerleri güvenli bir şekilde alıyoruz
         toplam_kdv_haric_kalemler = sum(self.db.safe_float(k[6]) for k in self.fatura_kalemleri_ui)
         toplam_kdv_dahil_kalemler = sum(self.db.safe_float(k[7]) for k in self.fatura_kalemleri_ui)
         # toplam_kdv_kalemler = sum(self.db.safe_float(k[5]) for k in self.fatura_kalemleri_ui) # Eğer ayrı bir KDV toplamı etiketi varsa kullanılabilir
-
+        
         genel_iskonto_tipi = self.genel_iskonto_tipi_cb.currentText() # QComboBox'tan al
         genel_iskonto_degeri = self.db.safe_float(self.genel_iskonto_degeri_e.text()) # QLineEdit'ten al
         
@@ -3836,17 +3894,17 @@ class BaseIslemSayfasi(QWidget):
             uygulanan_genel_iskonto_tutari = toplam_kdv_haric_kalemler * (genel_iskonto_degeri / 100)
         elif genel_iskonto_tipi == 'TUTAR' and genel_iskonto_degeri > 0:
             uygulanan_genel_iskonto_tutari = genel_iskonto_degeri
-
+        
         # Nihai toplamları hesapla
         nihai_toplam_kdv_dahil = toplam_kdv_dahil_kalemler - uygulanan_genel_iskonto_tutari
         nihai_toplam_kdv_haric = toplam_kdv_haric_kalemler - uygulanan_genel_iskonto_tutari
         nihai_toplam_kdv = nihai_toplam_kdv_dahil - nihai_toplam_kdv_haric
 
         # UI etiketlerini güncelle
-        self.tkh_l.setText(f"KDV Hariç Toplam: {self.db._format_currency(nihai_toplam_kdv_haric)}")
-        self.tkdv_l.setText(f"Toplam KDV: {self.db._format_currency(nihai_toplam_kdv)}")
-        self.gt_l.setText(f"Genel Toplam: {self.db._format_currency(nihai_toplam_kdv_dahil)}")
-        self.lbl_uygulanan_genel_iskonto.setText(f"Uygulanan Genel İskonto: {self.db._format_currency(uygulanan_genel_iskonto_tutari)}")
+        self.tkh_l.setText(self.db._format_currency(nihai_toplam_kdv_haric))
+        self.tkdv_l.setText(self.db._format_currency(nihai_toplam_kdv))
+        self.gt_l.setText(self.db._format_currency(nihai_toplam_kdv_dahil))
+        self.lbl_uygulanan_genel_iskonto.setText(self.db._format_currency(uygulanan_genel_iskonto_tutari))
 
     def secili_kalemi_sil(self):
         selected_items = self.sep_tree.selectedItems() # QTreeWidget'tan seçili öğeleri al
@@ -3883,8 +3941,114 @@ class BaseIslemSayfasi(QWidget):
             return
 
         kalem_verisi = self.fatura_kalemleri_ui[kalem_index]
-        # KalemDuzenlePenceresi'nin PySide6 versiyonu burada çağrılacak.
-        QMessageBox.information(self.app, "Kalem Düzenle", f"Kalem {kalem_index_str} için düzenleme penceresi açılacak.")
+        
+        # Yeni Kod: KalemDuzenlePenceresi'ni başlatıp gösteriyoruz.
+        from pencereler import KalemDuzenlePenceresi
+        dialog = KalemDuzenlePenceresi(
+            parent_page=self,
+            db_manager=self.db,
+            kalem_index=kalem_index,
+            kalem_verisi=kalem_verisi,
+            islem_tipi=self.islem_tipi,
+            fatura_id_duzenle=self.duzenleme_id
+        )
+        dialog.exec()
+        
+    def _double_click_add_to_cart(self, item):
+        """
+        Ürün arama listesindeki bir ürüne çift tıklandığında ürünü sepete ekler.
+        Bu metot daha önce FaturaPenceresi'nde bulunuyordu.
+        """
+        selected_items = self.urun_arama_sonuclari_tree.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self.app, "Geçersiz Ürün", "Lütfen sepete eklemek için arama listesinden bir ürün seçin.")
+            return
+
+        urun_id = selected_items[0].data(0, Qt.UserRole)
+        if urun_id not in self.urun_map_filtrelenmis:
+            QMessageBox.warning(self.app, "Geçersiz Ürün", "Seçili ürün detayları bulunamadı.")
+            return
+        
+        urun_detaylari = self.urun_map_filtrelenmis[urun_id]
+        
+        # Fatura tipine göre varsayılan birim fiyatı belirle
+        birim_fiyat_kdv_dahil_input = 0.0
+        if self.islem_tipi == self.db.FATURA_TIP_SATIS or self.islem_tipi == self.db.FATURA_TIP_DEVIR_GIRIS:
+            birim_fiyat_kdv_dahil_input = urun_detaylari.get('satis_fiyati', 0.0)
+        elif self.islem_tipi == self.db.FATURA_TIP_ALIS:
+            birim_fiyat_kdv_dahil_input = urun_detaylari.get('alis_fiyati', 0.0)
+        elif self.islem_tipi == self.db.FATURA_TIP_SATIS_IADE:
+            birim_fiyat_kdv_dahil_input = urun_detaylari.get('alis_fiyati', 0.0)
+        elif self.islem_tipi == self.db.FATURA_TIP_ALIS_IADE:
+            birim_fiyat_kdv_dahil_input = urun_detaylari.get('satis_fiyati', 0.0)
+
+        # Varsayılan miktar 1 ve iskonto 0 olacak
+        eklenecek_miktar = 1.0
+        iskonto_yuzde_1 = 0.0
+        iskonto_yuzde_2 = 0.0
+
+        # Satış ve Satış İade faturalarında stok kontrolü yap
+        if self.islem_tipi in [self.db.FATURA_TIP_SATIS, self.db.FATURA_TIP_ALIS_IADE]:
+            mevcut_stok = urun_detaylari.get('miktar', 0.0)
+            
+            sepetteki_urun_miktari = sum(k[2] for k in self.fatura_kalemleri_ui if k[0] == urun_id)
+            
+            # Eğer mevcut bir fatura düzenleniyorsa, orijinal fatura kalemindeki miktarı mevcut stoka geri ekle
+            if self.duzenleme_id:
+                original_fatura_kalemleri = self._get_original_invoice_items_from_db(self.duzenleme_id)
+                for orig_kalem in original_fatura_kalemleri:
+                    if orig_kalem['urun_id'] == urun_id:
+                        if self.islem_tipi == self.db.FATURA_TIP_SATIS:
+                            mevcut_stok += orig_kalem['miktar']
+                        elif self.islem_tipi == self.db.FATURA_TIP_ALIS_IADE:
+                            mevcut_stok += orig_kalem['miktar']
+                        break
+            
+            if (sepetteki_urun_miktari + eklenecek_miktar) > mevcut_stok:
+                reply = QMessageBox.question(self.app, "Stok Uyarısı",
+                                            f"'{urun_detaylari['ad']}' için stok yetersiz!\n"
+                                            f"Mevcut stok: {mevcut_stok:.2f} adet\n"
+                                            f"Sepete eklenecek toplam: {sepetteki_urun_miktari + eklenecek_miktar:.2f} adet\n\n"
+                                            "Devam etmek negatif stok oluşturacaktır. Emin misiniz?",
+                                            QMessageBox.Yes | QMessageBox.No)
+                if reply == QMessageBox.No: return
+
+        # Ürünün orijinal alış fiyatı, eğer satış faturasıysa. Kalem detayına kaydedilecek.
+        alis_fiyati_fatura_aninda = urun_detaylari.get('alis_fiyati', 0.0)
+
+        # Ürün sepette zaten varsa, sadece miktarını artır
+        existing_kalem_index = -1
+        for i, kalem in enumerate(self.fatura_kalemleri_ui):
+            if kalem[0] == urun_id:
+                existing_kalem_index = i
+                # Çift tıklamada miktarını 1 artır
+                eklenecek_miktar = kalem[2] + 1.0
+                # Birim fiyat ve iskonto oranları aynı kalsın (ilk eklendiği gibi)
+                birim_fiyat_kdv_dahil_input = kalem[14]
+                iskonto_yuzde_1 = kalem[10]
+                iskonto_yuzde_2 = kalem[11]
+                break
+
+        # kalem_guncelle metodunu kullanarak kalemi sepete ekle veya güncelle
+        self.kalem_guncelle(
+            kalem_index=existing_kalem_index,
+            yeni_miktar=eklenecek_miktar,
+            yeni_fiyat_kdv_dahil_orijinal=birim_fiyat_kdv_dahil_input,
+            yeni_iskonto_yuzde_1=iskonto_yuzde_1,
+            yeni_iskonto_yuzde_2=iskonto_yuzde_2,
+            yeni_alis_fiyati_fatura_aninda=alis_fiyati_fatura_aninda,
+            u_id=urun_id,
+            urun_adi=urun_detaylari['ad'],
+        )
+
+        # Alanları temizle ve arama kutusuna odaklan
+        self.urun_arama_entry.clear()
+        self.mik_e.setText("1")
+        self.birim_fiyat_e.setText("0,00")
+        self.iskonto_yuzde_1_e.setText("0,00")
+        self.iskonto_yuzde_2_e.setText("0,00")
+        self.stk_l.setText("-") # Stok etiketini temizle
+        self.urun_arama_entry.setFocus()
 
     def _on_sepet_kalem_click(self, item, column): # item ve column sinyalden gelir
         # QTreeWidget'ta sütun bazlı tıklama algılama (Fiyat Geçmişi butonu için)
@@ -3903,8 +4067,18 @@ class BaseIslemSayfasi(QWidget):
                 QMessageBox.warning(self.app, "Uyarı", "Fiyat geçmişini görmek için lütfen önce bir cari seçin.")
                 return
             
-            # FiyatGecmisiPenceresi'nin PySide6 versiyonu burada çağrılacak.
-            QMessageBox.information(self.app, "Fiyat Geçmişi", f"Ürün ID: {urun_id}, Cari ID: {self.secili_cari_id} için fiyat geçmişi açılacak.")
+            # Yeni Kod: FiyatGecmisiPenceresi'ni başlatıp gösteriyoruz.
+            from pencereler import FiyatGecmisiPenceresi
+            dialog = FiyatGecmisiPenceresi(
+                parent_app=self.app, 
+                db_manager=self.db, 
+                cari_id=self.secili_cari_id, 
+                urun_id=urun_id, 
+                fatura_tipi=self.islem_tipi,
+                update_callback=self._update_sepet_kalem_from_history,
+                current_kalem_index=kalem_index
+            )
+            dialog.exec()
 
     def _update_sepet_kalem_from_history(self, kalem_index, new_price_kdv_dahil, new_iskonto_1, new_iskonto_2):
         if not (0 <= kalem_index < len(self.fatura_kalemleri_ui)): return
@@ -3926,7 +4100,7 @@ class BaseIslemSayfasi(QWidget):
                             new_iskonto_1, new_iskonto_2, # Yeni iskontolar
                             0.0, # Bu parametre fatura anı alış fiyatı, fiyat geçmişinden gelmez
                             urun_adi=self.fatura_kalemleri_ui[kalem_index][1]) # Ürün adı
-
+                
     def _check_stock_on_quantity_change(self): # event=None kaldırıldı
         selected_items = self.urun_arama_sonuclari_tree.selectedItems()
         if not selected_items: self.stk_l.setStyleSheet("color: black;"); return
@@ -3992,13 +4166,17 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         super().__init__(parent, db_manager, app_ref, fatura_tipi, duzenleme_id, yenile_callback,
                          initial_cari_id=initial_cari_id, initial_urunler=initial_urunler, initial_data=initial_data)
 
+        # DEĞİŞİKLİK BURADA: FaturaService'i başlatıyoruz
+        from hizmetler import FaturaService
+        self.fatura_service = FaturaService(self.db)
+
         # DEĞİŞİKLİK: Fatura numarası alma ve diğer başlangıç verilerini yükleme işlemini
         # form oluşturulduktan sonra doğrudan başlatıyoruz.
         if not self.duzenleme_id and not self.initial_data:
             self._reset_form_for_new_invoice(ask_confirmation=False)
             
         QTimer.singleShot(0, self._on_iade_modu_changed)
-                        
+
     def _setup_sol_panel(self, parent_frame):
         """Faturaya özel UI bileşenlerini sol panele yerleştirir."""
         parent_layout = parent_frame.layout()
@@ -4117,56 +4295,53 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
                                 
     def _setup_alt_bar(self):
         """Genel toplamlar ve kaydetme butonunu içeren alt barı oluşturur."""
-        self.alt_layout = QGridLayout(self.alt_f)
+        # Ana yatay layout
+        self.alt_layout = QHBoxLayout(self.alt_f)
         self.alt_f.setContentsMargins(10, 10, 10, 10)
         self.alt_f.setFrameShape(QFrame.StyledPanel)
+        self.alt_f.setStyleSheet("background-color: #f0f0f0;")
 
-        # İçerik için ayrı bir QFrame ve QGridLayout oluşturuyoruz.
-        totals_groupbox = QGroupBox("Genel Toplamlar", self.alt_f)
-        totals_groupbox.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        totals_layout = QGridLayout(totals_groupbox)
+        # DEĞİŞİKLİK: Yazı tipi boyutlarını ve boşlukları güncelliyoruz.
+        font_t = QFont("Segoe UI", 16, QFont.Bold)
+        font_d = QFont("Segoe UI", 18, QFont.Bold)
         
-        # Genel toplamlar grubunu, grid'in sol tarafına yerleştir.
-        self.alt_layout.addWidget(totals_groupbox, 0, 0, 2, 1)
+        # Etiketleri oluşturma
+        self.alt_layout.addWidget(QLabel("KDV Hariç Toplam:", font=font_t))
+        self.tkh_l = QLabel("0.00 TL", font=font_d)
+        self.alt_layout.addWidget(self.tkh_l)
 
-        font_t = QFont("Segoe UI", 10, QFont.Bold)
-        
-        # Toplam etiketlerini daha düzenli yerleştiriyoruz.
-        totals_layout.addWidget(QLabel("KDV Hariç Toplam:", font=font_t), 0, 0)
-        self.tkh_l = QLabel("0.00 TL")
-        totals_layout.addWidget(self.tkh_l, 0, 1)
-        
-        totals_layout.addWidget(QLabel("Toplam KDV:", font=font_t), 1, 0)
-        self.tkdv_l = QLabel("0.00 TL")
-        totals_layout.addWidget(self.tkdv_l, 1, 1)
+        self.alt_layout.addSpacing(36)
 
-        totals_layout.addWidget(QLabel("Genel Toplam:", font=font_t), 2, 0)
-        self.gt_l = QLabel("0.00 TL")
-        totals_layout.addWidget(self.gt_l, 2, 1)
+        self.alt_layout.addWidget(QLabel("Toplam KDV:", font=font_t))
+        self.tkdv_l = QLabel("0.00 TL", font=font_d)
+        self.alt_layout.addWidget(self.tkdv_l)
         
-        totals_layout.addWidget(QLabel("Uygulanan Genel İskonto:", font=font_t), 3, 0)
-        self.lbl_uygulanan_genel_iskonto = QLabel("0.00 TL")
-        totals_layout.addWidget(self.lbl_uygulanan_genel_iskonto, 3, 1)
+        self.alt_layout.addSpacing(36)
 
-        # Butonlar için ayrı bir container
-        button_container = QFrame(self.alt_f)
-        button_layout = QVBoxLayout(button_container)
+        self.alt_layout.addWidget(QLabel("Uygulanan Genel İskonto:", font=font_t))
+        self.lbl_uygulanan_genel_iskonto = QLabel("0.00 TL", font=font_d)
+        self.alt_layout.addWidget(self.lbl_uygulanan_genel_iskonto)
         
-        # Butonları sağ tarafa yerleştir
-        self.alt_layout.addWidget(button_container, 0, 1, 2, 1)
+        self.alt_layout.addSpacing(36)
+
+        self.alt_layout.addWidget(QLabel("Genel Toplam:", font=font_t))
+        self.gt_l = QLabel("0.00 TL", font=font_d)
+        self.alt_layout.addWidget(self.gt_l)
+        
+        # Esneklik ekleyerek butonları sağa yaslıyoruz
+        self.alt_layout.addStretch()
+
+        self.btn_iptal = QPushButton("İptal")
+        self.btn_iptal.setMinimumWidth(100)
+        self.btn_iptal.clicked.connect(self.cancelled_successfully.emit)
+        self.alt_layout.addWidget(self.btn_iptal)
 
         self.btn_kaydet = QPushButton("Kaydet")
+        self.btn_kaydet.setMinimumWidth(100)
         self.btn_kaydet.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        self.btn_kaydet.setStyleSheet("padding: 5px 10px;")
+        self.btn_kaydet.setStyleSheet("padding: 5px 10px; background-color: #4CAF50; color: white;")
         self.btn_kaydet.clicked.connect(self.kaydet)
-        button_layout.addWidget(self.btn_kaydet)
-        
-        self.btn_iptal = QPushButton("İptal")
-        self.btn_iptal.clicked.connect(self.cancelled_successfully.emit)
-        button_layout.addWidget(self.btn_iptal)
-        
-        # Genişlik ayarı
-        self.alt_layout.setColumnStretch(0, 1)
+        self.alt_layout.addWidget(self.btn_kaydet)
 
     def _on_iade_modu_changed(self):
         # DÜZELTME: self.parent() yerine self.parent kullanıldı
@@ -4216,7 +4391,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         if self.duzenleme_id:
             return "Fatura Güncelleme"
         return "Yeni Satış Faturası" if self.islem_tipi == self.db.FATURA_TIP_SATIS else "Yeni Alış Faturası"
-            
+                
     def _setup_ozel_alanlar(self, parent_frame):
         """Ana sınıfın sol paneline faturaya özel alanları ekler ve klavye navigasyon sırasını belirler."""
         layout = QGridLayout(parent_frame) # parent_frame'in layout'unu ayarla
@@ -4602,7 +4777,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         # Diğer ilgili kontrolleri çağır
         self._odeme_turu_ve_misafir_adi_kontrol()
         self._odeme_turu_degisince_hesap_combobox_ayarla()
-        
+
     def _odeme_turu_ve_misafir_adi_kontrol(self):
         """
         Cari seçimine göre Misafir Adı alanının görünürlüğünü/aktifliğini ve ödeme türü seçeneklerini yönetir.
@@ -4671,7 +4846,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
             self.odeme_turu_cb.blockSignals(False)
 
         self._odeme_turu_degisince_hesap_combobox_ayarla()
-        
+
     def _odeme_turu_degisince_hesap_combobox_ayarla(self):
         selected_odeme_turu = self.odeme_turu_cb.currentText()
         pesin_odeme_turleri = ["NAKİT", "KART", "EFT/HAVALE", "ÇEK", "SENET"]
@@ -4849,6 +5024,9 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
                                             QMessageBox.Yes | QMessageBox.No)
                 if reply == QMessageBox.No: return
 
+        # Ürünün orijinal alış fiyatı, eğer satış faturasıysa. Kalem detayına kaydedilecek.
+        alis_fiyati_fatura_aninda = urun_detaylari.get('alis_fiyati', 0.0)
+
         # Ürün sepette zaten varsa, sadece miktarını artır
         existing_kalem_index = -1
         for i, kalem in enumerate(self.fatura_kalemleri_ui):
@@ -4862,9 +5040,6 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
                 iskonto_yuzde_2 = kalem[11]
                 break
 
-        # Ürünün orijinal alış fiyatı, eğer satış faturasıysa. Kalem detayına kaydedilecek.
-        alis_fiyati_fatura_aninda = urun_detaylari.get('alis_fiyati', 0.0)
-
         # kalem_guncelle metodunu kullanarak kalemi sepete ekle veya güncelle
         self.kalem_guncelle(
             kalem_index=existing_kalem_index,
@@ -4875,7 +5050,6 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
             yeni_alis_fiyati_fatura_aninda=alis_fiyati_fatura_aninda,
             u_id=urun_id,
             urun_adi=urun_detaylari['ad'],
-            kdv_orani=urun_detaylari.get('kdv_orani', 0.0)
         )
 
         # Alanları temizle ve arama kutusuna odaklan

@@ -194,11 +194,11 @@ class StokUpdate(StokBase):
     kod: Optional[str] = None
     ad: Optional[str] = None
     detay: Optional[str] = None
-    miktar: Optional[float] = None # Optional yapıldı
-    alis_fiyati: Optional[float] = None # Optional yapıldı
-    satis_fiyati: Optional[float] = None # Optional yapıldı
-    kdv_orani: Optional[float] = None # Optional yapıldı
-    min_stok_seviyesi: Optional[float] = None # Optional yapıldı
+    miktar: Optional[float] = None
+    alis_fiyati: Optional[float] = None
+    satis_fiyati: Optional[float] = None
+    kdv_orani: Optional[float] = None
+    min_stok_seviyesi: Optional[float] = None
     aktif: Optional[bool] = None
     urun_resmi_yolu: Optional[str] = None
     kategori_id: Optional[int] = None
@@ -705,3 +705,10 @@ class DefaultIdResponse(BaseModel):
 
 class NetBakiyeResponse(BaseModel):
     net_bakiye: float
+
+class TopluIslemSonucResponse(BaseModel):
+    yeni_eklenen_sayisi: int
+    guncellenen_sayisi: int
+    hata_sayisi: int
+    hatalar: List[str]
+    toplam_islenen: int    

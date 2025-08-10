@@ -245,3 +245,42 @@ def delete_stok_hareket(hareket_id: int, db: Session = Depends(get_db)):
     db.delete(db_hareket)
     db.commit()
     return {"detail": "Stok hareketi başarıyla silindi."}
+
+@router.post("/bulk_upsert", response_model=modeller.TopluIslemSonucResponse)
+def bulk_stok_upsert_endpoint(
+    stok_listesi: List[modeller.StokCreate],
+    db: Session = Depends(get_db)
+):
+    yeni_eklenen = 0
+    guncellenen = 0
+    hata_veren = 0
+    hatalar = []
+
+    for stok_data in stok_listesi:
+        try:
+            db_stok = db.query(semalar.Stok).filter(semalar.Stok.kod == stok_data.kod).first()
+            
+            if db_stok:
+                # Stok zaten varsa güncelle
+                for key, value in stok_data.model_dump(exclude_unset=True).items():
+                    setattr(db_stok, key, value)
+                db.add(db_stok)
+                guncellenen += 1
+            else:
+                # Stok yoksa yeni ekle
+                yeni_stok = semalar.Stok(**stok_data.model_dump())
+                db.add(yeni_stok)
+                yeni_eklenen += 1
+        except Exception as e:
+            hata_veren += 1
+            hatalar.append(f"Kod '{stok_data.kod}' için hata: {str(e)}")
+
+    db.commit() # Tüm işlemler tamamlandıktan sonra veritabanı kaydını onayla
+
+    return {
+        "yeni_eklenen_sayisi": yeni_eklenen,
+        "guncellenen_sayisi": guncellenen,
+        "hata_sayisi": hata_veren,
+        "hatalar": hatalar,
+        "toplam_islenen": yeni_eklenen + guncellenen + hata_veren
+    }

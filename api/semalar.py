@@ -3,12 +3,12 @@ from sqlalchemy import (
     Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text, Enum,
     create_engine, and_
 )
-from sqlalchemy.orm import relationship, declarative_base, sessionmaker, foreign # <-- 'foreign' tekrar eklendi
-from sqlalchemy.dialects import postgresql # PostgreSQL'e özgü tipler için eklendi (örnekte kullanılmasa da kalsın)
-from datetime import datetime
+from sqlalchemy.orm import relationship, declarative_base, sessionmaker, Mapped, mapped_column, foreign
+from sqlalchemy.dialects import postgresql
+from datetime import datetime, date
 import enum
-
-from .veritabani import Base # Base objesi api.veritabani'ndan alınır
+from typing import List, Optional
+from .veritabani import Base
 
 # Enum tanımları
 class FaturaTuruEnum(str, enum.Enum):
@@ -110,14 +110,14 @@ class CariHareket(Base):
     __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
-    cari_id = Column(Integer, index=True) # Bu, ForeignKey olarak belirtilmeyen, ancak ilişkide kullanılan sütun.
+    cari_id = Column(Integer, index=True) 
     cari_turu = Column(Enum(CariTipiEnum), index=True)
     tarih = Column(Date)
-    islem_turu = Column(String) # Enum olabilir, ama şimdilik string kalsın. (FATURA, TAHSİLAT, ÖDEME, VERESİYE_BORÇ)
+    islem_turu = Column(String)
     islem_yone = Column(Enum(IslemYoneEnum))
     tutar = Column(Float)
     aciklama = Column(Text, nullable=True)
-    kaynak = Column(String) # KaynakTipEnum ile uyumlu olmalı
+    kaynak = Column(String) 
     kaynak_id = Column(Integer, nullable=True)
     odeme_turu = Column(Enum(OdemeTuruEnum), nullable=True)
     kasa_banka_id = Column(Integer, ForeignKey('kasalar_bankalar.id'), nullable=True)
@@ -126,20 +126,17 @@ class CariHareket(Base):
     olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
-    # Dairesel bağımlılıklar için primaryjoin'de foreign() annotasyonu kullanıldı.
-    # Bu, cari_id'nin bir ForeignKey olarak tanımlanmamış olmasına rağmen,
-    # bu ilişkide bir yabancı anahtar sütunu olarak davrandığını belirtir.
     musteri_iliski = relationship(
         "Musteri", 
         primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_turu == 'MUSTERI'),
         viewonly=True,
-        overlaps="cari_hareketler" # Musteri sınıfındaki 'cari_hareketler' ile çakışmayı belirtir
+        overlaps="cari_hareketler"
     )
     tedarikci_iliski = relationship(
         "Tedarikci", 
         primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_turu == 'TEDARIKCI'),
         viewonly=True,
-        overlaps="cari_hareketler" # Tedarikci sınıfındaki 'cari_hareketler' ile çakışmayı belirtir
+        overlaps="cari_hareketler"
     )
     kasa_banka_hesabi = relationship("KasaBanka", backref="cari_hareketler_iliski")
 
@@ -181,7 +178,7 @@ class Musteri(Base):
         primaryjoin=lambda: and_(Musteri.id == foreign(CariHareket.cari_id), CariHareket.cari_turu == 'MUSTERI'), 
         back_populates="musteri_iliski",
         cascade="all, delete-orphan",
-        overlaps="musteri_iliski" # Kendi ilişki adı ile çakışır
+        overlaps="musteri_iliski" 
     )
     faturalar = relationship("Fatura", foreign_keys="[Fatura.cari_id]", primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ_IADE'])", back_populates="ilgili_musteri", cascade="all, delete-orphan", overlaps="ilgili_musteri")
     siparisler = relationship("Siparis", foreign_keys="Siparis.cari_id", primaryjoin="Musteri.id == Siparis.cari_id and Siparis.siparis_turu == 'SATIŞ_SIPARIS'", back_populates="musteri_siparis", overlaps="musteri_siparis")
@@ -205,7 +202,7 @@ class Tedarikci(Base):
         primaryjoin=lambda: and_(Tedarikci.id == foreign(CariHareket.cari_id), CariHareket.cari_turu == 'TEDARIKCI'),
         back_populates="tedarikci_iliski",
         cascade="all, delete-orphan",
-        overlaps="tedarikci_iliski" # Kendi ilişki adı ile çakışır
+        overlaps="tedarikci_iliski" 
     )
     faturalar = relationship(
         "Fatura",
@@ -220,9 +217,10 @@ class Tedarikci(Base):
         foreign_keys="Siparis.cari_id",
         primaryjoin="Tedarikci.id == Siparis.cari_id and Siparis.siparis_turu == 'ALIŞ_SIPARIS'",
         back_populates="tedarikci_siparis",
+        cascade="all, delete-orphan",
         overlaps="tedarikci_siparis"
     )
-
+    
 class KasaBanka(Base):
     __tablename__ = 'kasalar_bankalar'
     __table_args__ = {'extend_existing': True}

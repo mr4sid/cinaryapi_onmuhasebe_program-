@@ -83,9 +83,31 @@ def create_tables():
             for ad in ulkeler: db.add(Ulke(ad=ad))
             for ad in gelir_siniflandirmalari: db.add(GelirSiniflandirma(ad=ad))
             for ad in gider_siniflandirmalari: db.add(GiderSiniflandirma(ad=ad))
+            
+            # --- YENİ EKLENEN KOD ---
+            logger.info("Varsayılan cari ve kasa hesapları ekleniyor...")
+            
+            # Varsayılan Perakende Müşterisi ve Genel Tedarikçi'yi ekle
+            perakende_musteri = Musteri(ad="Perakende Müşterisi", kod="PERAKENDE_MUSTERI", aktif=True)
+            genel_tedarikci = Tedarikci(ad="Genel Tedarikçi", kod="GENEL_TEDARIKCI", aktif=True)
+            db.add(perakende_musteri)
+            db.add(genel_tedarikci)
+            db.commit() # ID'leri alabilmek için commit ediyoruz
 
+            # Varsayılan Nakit Kasa'yı ekle
+            nakit_kasa = KasaBanka(
+                hesap_adi="Nakit Kasa",
+                kod="NAKİT_KASA",
+                tip="KASA",
+                bakiye=0.0,
+                para_birimi="TL",
+                aktif=True,
+                varsayilan_odeme_turu="NAKİT"
+            )
+            db.add(nakit_kasa)
             db.commit()
-            logger.info("Varsayılan nitelikler başarıyla eklendi.")
+
+            logger.info("Varsayılan cariler ve kasa hesabı başarıyla eklendi.")
 
         except Exception as e:
             logger.error(f"Varsayılan veriler eklenirken hata oluştu: {e}")

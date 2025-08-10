@@ -79,11 +79,11 @@ def create_initial_data():
             logger.info("Varsayılan 'Genel Tedarikçi' zaten mevcut.")
 
         # Varsayılan NAKİT hesabını kontrol et ve ekle
-        nakit_kasa = db.query(KasaBanka).filter(KasaBanka.kod == "NAKİT_KASA").first() # Kodu "NAKİT" yerine "NAKİT_KASA" olarak düzeltildi
+        nakit_kasa = db.query(KasaBanka).filter(KasaBanka.kod == "NAKİT_KASA").first()
         if not nakit_kasa:
             yeni_kasa = KasaBanka(
-                hesap_adi="NAKİT KASA",
-                kod="NAKİT_KASA", # Kodu "NAKİT" yerine "NAKİT_KASA" olarak düzeltildi
+                hesap_adi="Nakit Kasa",
+                kod="NAKİT_KASA",
                 tip="KASA",
                 bakiye=0.0,
                 para_birimi="TL",
