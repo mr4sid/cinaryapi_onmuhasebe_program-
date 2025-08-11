@@ -5060,6 +5060,8 @@ class TopluVeriEklePenceresi(QDialog):
         self.setWindowTitle("Toplu Veri Ekleme (Excel)")
         self.setFixedSize(600, 650)
         self.setModal(True)
+        self.bekleme_penceresi = None
+        self.bekleme_penceresi_yazma = None
 
         main_layout = QVBoxLayout(self)
         title_label = QLabel("Toplu Veri Ekleme (Excel)")
@@ -5190,7 +5192,7 @@ class TopluVeriEklePenceresi(QDialog):
         if selected_type == "Müşteri": message = "Müşteri Veri Şablonu Detayları:\n\nExcel dosyasının ilk satırı başlık (header) olmalıdır. Veriler ikinci satırdan başlamalıdır.\n\nSütun Sırası ve Açıklamaları:\n1.  **Müşteri Kodu (ZORUNLU):** Müşterinin benzersiz kodu.\n2.  **Ad Soyad (ZORUNLU):** Müşterinin tam adı veya şirket adı.\n3.  **Telefon (İsteğe Bağlı)**\n4.  **Adres (İsteğe Bağlı)**\n5.  **Vergi Dairesi (İsteğe Bağlı)**\n6.  **Vergi No (İsteğe Bağlı)**"
         elif selected_type == "Tedarikçi": message = "Tedarikçi Veri Şablonu Detayları:\n\nExcel dosyasının ilk satırı başlık (header) olmalıdır. Veriler ikinci satırdan başlamalıdır.\n\nSütun Sırası ve Açıklamaları:\n1.  **Tedarikçi Kodu (ZORUNLU):** Tedarikçinin benzersiz kodu.\n2.  **Ad Soyad (ZORUNLU):** Tedarikçinin tam adı veya şirket adı.\n3.  **Telefon (İsteğe Bağlı)**\n4.  **Adres (İsteğe Bağlı)**\n5.  **Vergi Dairesi (İsteğe Bağlı)**\n6.  **Vergi No (İsteğe Bağlı)**"
         elif selected_type == "Stok/Ürün Ekle/Güncelle": message = "Stok/Ürün Veri Şablonu Detayları:\n\n'Ürün Kodu' eşleşirse güncelleme, eşleşmezse yeni kayıt yapılır.\n\nSütunlar:\n1.  **Ürün Kodu (ZORUNLU)**\n2.  **Ürün Adı (Yeni ürün için ZORUNLU)**\n3.  **Miktar (İsteğe Bağlı):** Pozitif girilirse, mevcut stoğa eklemek için bir 'ALIŞ' faturası oluşturulur.\n4.  **Alış Fiyatı (KDV Dahil) (İsteğe Bağlı)**\n5.  **Satış Fiyatı (KDV Dahil) (İsteğe Bağlı)**\n6.  **KDV Oranı (%) (İsteğe Bağlı)**\n7.  **Minimum Stok Seviyesi (İsteğe Bağlı)**\n8.  **Kategori Adı (İsteğe Bağlı)**\n9.  **Marka Adı (İsteğe Bağlı)**\n10. **Ürün Grubu Adı (İsteğe Bağlı)**\n11. **Ürün Birimi Adı (İsteğe Bağlı)**\n12. **Menşe Ülke Adı (İsteğe Bağlı)**\n13. **Ürün Detayı (İsteğe Bağlı)**\n14. **Ürün Resmi Yolu (İsteğe Bağlı):** Resim dosyasının tam yolu (ör: C:/resimler/urun1.png)."
-        from pencereler import AciklamaDetayPenceresi # PySide6 dialog
+        from pencereler import AciklamaDetayPenceresi
         AciklamaDetayPenceresi(self, title, message).exec()
 
     def _gozat_excel_dosyasi(self):
@@ -5199,7 +5201,6 @@ class TopluVeriEklePenceresi(QDialog):
             self.dosya_yolu_entry.setText(file_path)
 
     def _toggle_all_checkboxes(self, state, force_off=False):
-        # state QCheckBox.Checked (2) veya QCheckBox.Unchecked (0) olabilir
         is_checked = (state == Qt.Checked) if not force_off else False
         for key, checkbox in self.cb_vars.items():
             checkbox.setChecked(is_checked)
@@ -5212,8 +5213,8 @@ class TopluVeriEklePenceresi(QDialog):
             return
 
         from pencereler import BeklemePenceresi
-        bekleme_penceresi = BeklemePenceresi(self, message="Excel okunuyor ve veriler analiz ediliyor...")
-        QTimer.singleShot(0, bekleme_penceresi.exec)
+        self.bekleme_penceresi = BeklemePenceresi(self, message="Excel okunuyor ve veriler analiz ediliyor...")
+        self.bekleme_penceresi.show()
         
         selected_update_fields = []
         if veri_tipi == "Stok/Ürün Ekle/Güncelle":
@@ -5224,12 +5225,10 @@ class TopluVeriEklePenceresi(QDialog):
                     if cb.isChecked():
                         selected_update_fields.append(key)
         
-        # Analiz işlemini ayrı bir thread'de başlat
         threading.Thread(target=self._analiz_et_ve_onizle_threaded, 
-                         args=(dosya_yolu, veri_tipi, selected_update_fields, bekleme_penceresi)).start()
+                         args=(dosya_yolu, veri_tipi, selected_update_fields)).start()
 
-
-    def _analiz_et_ve_onizle_threaded(self, dosya_yolu, veri_tipi, selected_update_fields, bekleme_penceresi):
+    def _analiz_et_ve_onizle_threaded(self, dosya_yolu, veri_tipi, selected_update_fields):
         analysis_results = {}
         try:
             workbook = openpyxl.load_workbook(dosya_yolu, data_only=True)
@@ -5244,10 +5243,8 @@ class TopluVeriEklePenceresi(QDialog):
             if not raw_data_from_excel_list:
                 raise ValueError("Excel dosyasında okunacak geçerli veri bulunamadı.")
             
-            from hizmetler import TopluIslemService # TopluIslemService'i import et
-            local_db_manager = self.db.__class__(api_base_url=self.db.api_base_url) # Aynı db örneğini API modunda yeniden yarat
-            from hizmetler import FaturaService # Sadece TopluIslemService'in tanımı için gerekli
-            # HATA DÜZELTME: TopluIslemService artık sadece bir bağımlılık alıyor.
+            from hizmetler import TopluIslemService
+            local_db_manager = self.db.__class__(api_base_url=self.db.api_base_url)
             local_toplu_islem_service = TopluIslemService(local_db_manager)
 
             if veri_tipi == "Müşteri":
@@ -5257,25 +5254,38 @@ class TopluVeriEklePenceresi(QDialog):
             elif veri_tipi == "Stok/Ürün Ekle/Güncelle":
                 analysis_results = local_toplu_islem_service.toplu_stok_analiz_et(raw_data_from_excel_list, selected_update_fields)
             
-            # UI güncellemeleri ana thread'e gönderilmeli
-            QTimer.singleShot(0, bekleme_penceresi.close) # Bekleme penceresini kapat
-            QTimer.singleShot(0, lambda: self._onizleme_penceresini_ac(veri_tipi, analysis_results))
+            # Analiz tamamlandığında UI güncellemesi için bir sinyal göndeririz.
+            # QTimer.singleShot kullanarak UI thread'inde çalışmasını sağlarız.
+            QTimer.singleShot(0, lambda: self._on_analysis_complete(veri_tipi, analysis_results))
 
         except Exception as e:
-            QTimer.singleShot(0, bekleme_penceresi.close)
+            QTimer.singleShot(0, self.bekleme_penceresi.close)
             QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Hata", f"Veri analizi başarısız oldu:\n{e}"))
             logging.error(f"Toplu veri analizi thread'inde hata: {e}", exc_info=True)
-        finally:
-            # OnMuhasebe API istemcisi olduğundan doğrudan kapatma işlemi gereksizdir.
-            # `conn` attribute hatası bu satırın kaldırılmasıyla çözülmüştür.
-            pass
+
+    def _on_analysis_complete(self, veri_tipi, analysis_results):
+        """Analiz tamamlandığında çağrılan ve UI'yi güncelleyen metot."""
+        self.bekleme_penceresi.close()
+        self._onizleme_penceresini_ac(veri_tipi, analysis_results)
 
     def _onizleme_penceresini_ac(self, veri_tipi, analysis_results):
-        from pencereler import TopluVeriOnizlemePenceresi
-        dialog = TopluVeriOnizlemePenceresi(self.app, self.db, veri_tipi, analysis_results, 
-                                            callback_on_confirm=self._gercek_yazma_islemini_yap_threaded_from_onizleme)
-        dialog.exec()
+        try:
+            dialog = TopluVeriOnizlemePenceresi(self, self.db, veri_tipi, analysis_results, 
+                                                callback_on_confirm=self._yazma_islemi_threaded_from_onizleme)
+            dialog.exec()
+        except Exception as e:
+            logging.error(f"Önizleme penceresi açılırken bir hata oluştu: {e}", exc_info=True)
+            QMessageBox.critical(self, "Hata", f"Önizleme penceresi açılırken beklenmedik bir hata oluştu:\n{e}")
 
+    def _yazma_islemi_threaded_from_onizleme(self, veri_tipi, analysis_results):
+        from pencereler import BeklemePenceresi
+        self.bekleme_penceresi_yazma = BeklemePenceresi(self, message=f"Toplu {veri_tipi} veritabanına yazılıyor, lütfen bekleyiniz...")
+        self.bekleme_penceresi_yazma.show()
+
+        threading.Thread(target=self._yazma_islemi_threaded, args=(
+            veri_tipi, 
+            analysis_results
+        )).start()
 
     def _gercek_yazma_islemini_yap_threaded_from_onizleme(self, veri_tipi, analysis_results):
         from pencereler import BeklemePenceresi # PySide6 dialog
@@ -5291,8 +5301,7 @@ class TopluVeriEklePenceresi(QDialog):
             bekleme_penceresi_gercek_islem
         )).start()
 
-
-    def _yazma_islemi_threaded(self, veri_tipi, analysis_results, bekleme_penceresi):
+    def _yazma_islemi_threaded(self, veri_tipi, analysis_results):
         success = False
         message = ""
         try:
@@ -5300,7 +5309,7 @@ class TopluVeriEklePenceresi(QDialog):
             local_db_manager = self.db.__class__(api_base_url=self.db.api_base_url, app_ref=self.app)
             local_toplu_islem_service = TopluIslemService(local_db_manager)
 
-            result = {"basarili": 0, "hata": 0, "hatalar": []}
+            result = {"yeni_eklenen_sayisi": 0, "guncellenen_sayisi": 0, "hata_sayisi": 0, "hatalar": []}
             data_to_import = analysis_results.get('all_processed_data', [])
 
             if veri_tipi == "Müşteri":
@@ -5308,24 +5317,25 @@ class TopluVeriEklePenceresi(QDialog):
             elif veri_tipi == "Tedarikçi":
                 result = local_toplu_islem_service.toplu_tedarikci_ice_aktar(data_to_import)
             elif veri_tipi == "Stok/Ürün Ekle/Güncelle":
-                # API çağrısını tek bir istekte yapmak için `bulk_stok_upsert` kullanıyoruz.
                 try:
                     response = local_db_manager.bulk_stok_upsert(data_to_import)
                     result = {
-                        "basarili": response.get("yeni_eklenen_sayisi", 0) + response.get("guncellenen_sayisi", 0),
-                        "hata": response.get("hata_sayisi", 0),
+                        "yeni_eklenen_sayisi": response.get("yeni_eklenen_sayisi", 0),
+                        "guncellenen_sayisi": response.get("guncellenen_sayisi", 0),
+                        "hata_sayisi": response.get("hata_sayisi", 0),
                         "hatalar": response.get("hatalar", [])
                     }
                 except Exception as e:
-                    result = {"basarili": 0, "hata": len(data_to_import), "hatalar": [f"Toplu işlem sırasında hata: {e}"]}
+                    result = {"yeni_eklenen_sayisi": 0, "guncellenen_sayisi": 0, "hata_sayisi": len(data_to_import), "hatalar": [f"Toplu işlem sırasında hata: {e}"]}
 
-            success = result["hata"] == 0
+            success = result["hata_sayisi"] == 0
             if success:
-                message = f"{result['basarili']} {veri_tipi} başarıyla eklendi/güncellendi."
+                message = f"{result['yeni_eklenen_sayisi']} yeni {veri_tipi} başarıyla eklendi, {result['guncellenen_sayisi']} güncellendi."
             else:
-                message = f"{result['basarili']} {veri_tipi} başarıyla eklendi/güncellendi, ancak {result['hata']} kayıt hata verdi:\n" + "\n".join(result["hatalar"])
+                message = f"Hata: {result['yeni_eklenen_sayisi']} yeni {veri_tipi} başarıyla eklendi, {result['guncellenen_sayisi']} güncellendi ancak {result['hata_sayisi']} kayıt hata verdi:\n" + "\n".join(result["hatalar"])
 
-            QTimer.singleShot(0, bekleme_penceresi.kapat)
+            # UI güncellemelerini ana iş parçacığına taşı
+            QTimer.singleShot(0, lambda: self.bekleme_penceresi_yazma.close())
             if success:
                 QTimer.singleShot(0, lambda: QMessageBox.information(self, "Başarılı", message))
                 QTimer.singleShot(0, lambda: self._refresh_related_lists(veri_tipi))
@@ -5334,15 +5344,14 @@ class TopluVeriEklePenceresi(QDialog):
                 QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Hata", f"Toplu {veri_tipi} işlemi başarısız oldu:\n{message}"))
 
         except Exception as e:
-            QTimer.singleShot(0, bekleme_penceresi.kapat)
+            QTimer.singleShot(0, lambda: self.bekleme_penceresi_yazma.close())
             QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Kritik Hata", f"İşlem sırasında beklenmedik bir hata oluştu: {e}"))
             logging.error(f"Toplu yazma işlemi thread'inde hata: {e}", exc_info=True)
         finally:
             pass
 
     def _refresh_related_lists(self, veri_tipi):
-        # UI'daki sekme sayfalarını yenileme
-        if veri_tipi == "Müşteri" and hasattr(self.app, 'musteri_yonetimi_sayfasi'): 
+        if veri_tipi == "Müşteri" and hasattr(self.app, 'musteri_yonetimi_sayfasi'):
             self.app.musteri_yonetimi_sayfasi.musteri_listesini_yenile()
         elif veri_tipi == "Tedarikçi" and hasattr(self.app, 'tedarikci_yonetimi_sayfasi'):
             self.app.tedarikci_yonetimi_sayfasi.tedarikci_listesini_yenile()
@@ -5350,6 +5359,204 @@ class TopluVeriEklePenceresi(QDialog):
             self.app.stok_yonetimi_sayfasi.stok_listesini_yenile()
         if hasattr(self.app, 'ana_sayfa'):
             self.app.ana_sayfa.guncelle_ozet_bilgiler()
+
+class TopluVeriOnizlemePenceresi(QDialog):
+    def __init__(self, parent_app, db_manager, veri_tipi, analysis_results, callback_on_confirm):
+        super().__init__(parent_app)
+        self.db = db_manager
+        self.app = parent_app
+        self.veri_tipi = veri_tipi
+        self.analysis_results = analysis_results
+        self.callback_on_confirm = callback_on_confirm
+
+        self.setWindowTitle(f"Toplu {veri_tipi} İçe Aktarım Önizlemesi")
+        self.setFixedSize(800, 600)
+        self.setModal(True)
+
+        main_layout = QVBoxLayout(self)
+        title_label = QLabel(f"Toplu {veri_tipi} İçe Aktarım Önizlemesi")
+        title_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(title_label)
+        
+        info_label_text = f"<b>Yeni Eklenecek Kayıt Sayısı:</b> {len(self.analysis_results.get('new_records', []))}<br>" \
+                          f"<b>Güncellenecek Kayıt Sayısı:</b> {len(self.analysis_results.get('update_records', []))}<br>" \
+                          f"<b>Hata Veren Kayıt Sayısı:</b> {len(self.analysis_results.get('error_records', []))}"
+        info_label = QLabel(info_label_text)
+        main_layout.addWidget(info_label)
+
+        self.tree_preview = QTreeWidget()
+        self.tree_preview.setHeaderLabels(["Durum", "Kod", "Ad", "Hata Detayı"])
+        self.tree_preview.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tree_preview.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.tree_preview.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.tree_preview.header().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.tree_preview.header().setSectionResizeMode(3, QHeaderView.Stretch)
+        main_layout.addWidget(self.tree_preview)
+
+        self._populate_preview_tree()
+
+        button_layout = QHBoxLayout()
+        main_layout.addLayout(button_layout)
+        btn_onayla = QPushButton("Onayla ve İçe Aktar")
+        btn_onayla.clicked.connect(self._onayla)
+        # Sadece hata yoksa onayla butonu aktif olur
+        if len(self.analysis_results.get('error_records', [])) > 0:
+            btn_onayla.setEnabled(False)
+        button_layout.addWidget(btn_onayla)
+        btn_iptal = QPushButton("İptal")
+        btn_iptal.clicked.connect(self.reject)
+        button_layout.addWidget(btn_iptal)
+
+    def _populate_preview_tree(self):
+        self.tree_preview.clear()
+        
+        # Yeni eklenecek kayıtları listele
+        try:
+            for record in self.analysis_results.get('new_records', []):
+                item = QTreeWidgetItem(self.tree_preview)
+                item.setText(0, "Yeni")
+                item.setForeground(0, QBrush(QColor("blue")))
+                item.setText(1, str(record.get('kod', '')))
+                item.setText(2, str(record.get('ad', '')))
+        except Exception as e:
+            logging.error(f"Yeni kayıtlar önizleme ağacına eklenirken hata oluştu: {e}", exc_info=True)
+            QMessageBox.critical(self, "Hata", f"Yeni kayıtlar işlenirken beklenmedik bir hata oluştu:\n{e}")
+
+        # Güncellenecek kayıtları listele
+        try:
+            for record in self.analysis_results.get('update_records', []):
+                item = QTreeWidgetItem(self.tree_preview)
+                item.setText(0, "Güncelle")
+                item.setForeground(0, QBrush(QColor("orange")))
+                item.setText(1, str(record.get('kod', '')))
+                item.setText(2, str(record.get('ad', '')))
+        except Exception as e:
+            logging.error(f"Güncellenecek kayıtlar önizleme ağacına eklenirken hata oluştu: {e}", exc_info=True)
+            QMessageBox.critical(self, "Hata", f"Güncellenecek kayıtlar işlenirken beklenmedik bir hata oluştu:\n{e}")
+
+        # Hata veren kayıtları listele
+        try:
+            for record in self.analysis_results.get('error_records', []):
+                item = QTreeWidgetItem(self.tree_preview)
+                item.setText(0, "Hata")
+                item.setForeground(0, QBrush(QColor("red")))
+                # Veri listesi 2'den kısa olabilir, IndexError almamak için güvenli erişim
+                veri_kod = str(record.get('veri', [''])[0] or '')
+                veri_ad = str(record.get('veri', ['', ''])[1] or '')
+                item.setText(1, veri_kod)
+                item.setText(2, veri_ad)
+                item.setText(3, record.get('hata', 'Bilinmeyen Hata'))
+        except Exception as e:
+            logging.error(f"Hatalı kayıtlar önizleme ağacına eklenirken hata oluştu: {e}", exc_info=True)
+            QMessageBox.critical(self, "Hata", f"Hatalı kayıtlar işlenirken beklenmedik bir hata oluştu:\n{e}")
+
+    def _onayla(self):
+        if self.callback_on_confirm:
+            self.callback_on_confirm(self.veri_tipi, self.analysis_results)
+        self.accept()
+
+    def _analiz_et_ve_onizle_threaded(self, dosya_yolu, veri_tipi, selected_update_fields):
+        analysis_results = {}
+        try:
+            workbook = openpyxl.load_workbook(dosya_yolu, data_only=True)
+            sheet = workbook.active
+            
+            raw_data_from_excel_list = []
+            for row_obj in sheet.iter_rows(min_row=2):
+                if any(cell.value is not None and str(cell.value).strip() != '' for cell in row_obj):
+                    row_values = [cell.value for cell in row_obj]
+                    raw_data_from_excel_list.append(row_values)
+
+            if not raw_data_from_excel_list:
+                raise ValueError("Excel dosyasında okunacak geçerli veri bulunamadı.")
+            
+            from hizmetler import TopluIslemService
+            local_db_manager = self.db.__class__(api_base_url=self.db.api_base_url)
+            local_toplu_islem_service = TopluIslemService(local_db_manager)
+
+            if veri_tipi == "Müşteri":
+                analysis_results = local_toplu_islem_service.toplu_musteri_analiz_et(raw_data_from_excel_list)
+            elif veri_tipi == "Tedarikçi":
+                analysis_results = local_toplu_islem_service.toplu_tedarikci_analiz_et(raw_data_from_excel_list)
+            elif veri_tipi == "Stok/Ürün Ekle/Güncelle":
+                analysis_results = local_toplu_islem_service.toplu_stok_analiz_et(raw_data_from_excel_list, selected_update_fields)
+            
+            # Ana iş parçacığında bekleme penceresini kapat ve önizlemeyi göster
+            QTimer.singleShot(0, self.bekleme_penceresi.close)
+            QTimer.singleShot(0, lambda: self._onizleme_penceresini_ac(veri_tipi, analysis_results))
+
+        except Exception as e:
+            # Ana iş parçacığında hata mesajını göster ve bekleme penceresini kapat
+            QTimer.singleShot(0, self.bekleme_penceresi.close)
+            QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Hata", f"Veri analizi başarısız oldu:\n{e}"))
+            logging.error(f"Toplu veri analizi thread'inde hata: {e}", exc_info=True)
+
+    def _onizleme_penceresini_ac(self, veri_tipi, analysis_results):
+        # Hatalı import satırı
+        # from pencereler import TopluVeriOnizlemePenceresi
+        dialog = TopluVeriOnizlemePenceresi(self.app, self.db, veri_tipi, analysis_results, 
+                                            callback_on_confirm=self._yazma_islemi_threaded_from_onizleme)
+        dialog.exec()
+
+    def _yazma_islemi_threaded_from_onizleme(self, veri_tipi, analysis_results):
+        from pencereler import BeklemePenceresi
+        self.bekleme_penceresi_yazma = BeklemePenceresi(self, message=f"Toplu {veri_tipi} veritabanına yazılıyor, lütfen bekleyiniz...")
+        self.bekleme_penceresi_yazma.show()
+
+        threading.Thread(target=self._yazma_islemi_threaded, args=(
+            veri_tipi, 
+            analysis_results
+        )).start()
+
+    def _yazma_islemi_threaded(self, veri_tipi, analysis_results):
+        success = False
+        message = ""
+        try:
+            from hizmetler import TopluIslemService
+            local_db_manager = self.db.__class__(api_base_url=self.db.api_base_url, app_ref=self.app)
+            local_toplu_islem_service = TopluIslemService(local_db_manager)
+
+            result = {"yeni_eklenen_sayisi": 0, "guncellenen_sayisi": 0, "hata_sayisi": 0, "hatalar": []}
+            data_to_import = analysis_results.get('all_processed_data', [])
+
+            if veri_tipi == "Müşteri":
+                result = local_toplu_islem_service.toplu_musteri_ice_aktar(data_to_import)
+            elif veri_tipi == "Tedarikçi":
+                result = local_toplu_islem_service.toplu_tedarikci_ice_aktar(data_to_import)
+            elif veri_tipi == "Stok/Ürün Ekle/Güncelle":
+                try:
+                    response = local_db_manager.bulk_stok_upsert(data_to_import)
+                    result = {
+                        "yeni_eklenen_sayisi": response.get("yeni_eklenen_sayisi", 0),
+                        "guncellenen_sayisi": response.get("guncellenen_sayisi", 0),
+                        "hata_sayisi": response.get("hata_sayisi", 0),
+                        "hatalar": response.get("hatalar", [])
+                    }
+                except Exception as e:
+                    result = {"yeni_eklenen_sayisi": 0, "guncellenen_sayisi": 0, "hata_sayisi": len(data_to_import), "hatalar": [f"Toplu işlem sırasında hata: {e}"]}
+
+            success = result["hata_sayisi"] == 0
+            if success:
+                message = f"{result['yeni_eklenen_sayisi']} yeni {veri_tipi} başarıyla eklendi, {result['guncellenen_sayisi']} güncellendi."
+            else:
+                message = f"Hata: {result['yeni_eklenen_sayisi']} yeni {veri_tipi} başarıyla eklendi, {result['guncellenen_sayisi']} güncellendi ancak {result['hata_sayisi']} kayıt hata verdi:\n" + "\n".join(result["hatalar"])
+
+            # UI güncellemelerini ana iş parçacığına taşı
+            QTimer.singleShot(0, lambda: self.bekleme_penceresi_yazma.close())
+            if success:
+                QTimer.singleShot(0, lambda: QMessageBox.information(self, "Başarılı", message))
+                QTimer.singleShot(0, lambda: self._refresh_related_lists(veri_tipi))
+                QTimer.singleShot(0, self.accept)
+            else:
+                QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Hata", f"Toplu {veri_tipi} işlemi başarısız oldu:\n{message}"))
+
+        except Exception as e:
+            QTimer.singleShot(0, lambda: self.bekleme_penceresi_yazma.close())
+            QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Kritik Hata", f"İşlem sırasında beklenmedik bir hata oluştu: {e}"))
+            logging.error(f"Toplu yazma işlemi thread'inde hata: {e}", exc_info=True)
+        finally:
+            pass
 
 class AciklamaDetayPenceresi(QDialog):
     def __init__(self, parent_app, title="Detaylı Bilgi", message_text=""):

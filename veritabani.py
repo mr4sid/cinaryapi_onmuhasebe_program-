@@ -420,9 +420,19 @@ class OnMuhasebe:
     def bulk_stok_upsert(self, stok_listesi: List[Dict[str, Any]]):
         """
         Stok verilerini toplu olarak API'ye gönderir.
+        
+        Args:
+            stok_listesi (List[Dict[str, Any]]): Toplu olarak işlenecek stok verilerini içeren liste.
+            
+        Returns:
+            dict: API'den gelen işlem sonuçlarını içeren yanıt.
+            
+        Raises:
+            ValueError: API'den gelen bir hata veya bağlantı sorunu olursa.
         """
+        endpoint = "/stoklar/bulk_upsert"
         try:
-            return self._make_api_request("POST", "/stoklar/bulk_upsert", json=stok_listesi)
+            return self._make_api_request("POST", endpoint, json=stok_listesi)
         except ValueError as e:
             logger.error(f"Toplu stok ekleme/güncelleme API'den hata döndü: {e}")
             raise

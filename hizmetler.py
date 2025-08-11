@@ -220,8 +220,6 @@ class TopluIslemService:
         """
         Ham müşteri listesini analiz eder ve önizleme için hazırlar.
         """
-        # Bu fonksiyon için Pydantic model doğrulama mantığı API tarafında olduğundan,
-        # burada sadece basit formatlama ve kontrol yapılır.
         processed_data = []
         new_records = []
         update_records = []
@@ -239,11 +237,10 @@ class TopluIslemService:
                     continue
 
                 # API'den mevcut müşteriyi kontrol et
-                mevcut_musteri_response = self.db._make_api_request("GET", f"/musteriler/", params={"arama": kod})
-                mevcut_musteri = mevcut_musteri_response.get("items")
+                mevcut_musteri_response = self.db.musteri_listesi_al(arama=kod) # Tam arama yerine ilike ile arar
+                mevcut_musteri = [m for m in mevcut_musteri_response.get("items") if m.get('kod') == kod] # Sadece tam eşleşme
                 
-                # Sadece kod ile tam eşleşme arıyoruz
-                if mevcut_musteri and mevcut_musteri[0].get('kod') == kod:
+                if mevcut_musteri:
                     # Güncelleme kaydı
                     update_records.append({"kod": kod, "ad": ad})
                 else:
@@ -286,10 +283,10 @@ class TopluIslemService:
                     error_records.append({"hata": "Kod veya Ad boş olamaz", "satir": row_index + 2, "veri": row})
                     continue
 
-                mevcut_tedarikci_response = self.db._make_api_request("GET", f"/tedarikciler/", params={"arama": kod})
-                mevcut_tedarikci = mevcut_tedarikci_response.get("items")
+                mevcut_tedarikci_response = self.db.tedarikci_listesi_al(arama=kod)
+                mevcut_tedarikci = [t for t in mevcut_tedarikci_response.get("items") if t.get('kod') == kod]
                 
-                if mevcut_tedarikci and mevcut_tedarikci[0].get('kod') == kod:
+                if mevcut_tedarikci:
                     update_records.append({"kod": kod, "ad": ad})
                 else:
                     new_records.append({"kod": kod, "ad": ad})
@@ -320,68 +317,74 @@ class TopluIslemService:
         new_records = []
         update_records = []
         error_records = []
-        
+
         for row_index, row in enumerate(raw_data):
             try:
-                kod = str(row[0]).strip() if len(row) > 0 and row[0] is not None else None
-                ad = str(row[1]).strip() if len(row) > 1 and row[1] is not None else None
+                # Excel'den gelen veriyi güvenli bir şekilde al ve temizle
+                kod_raw = row[0] if len(row) > 0 and row[0] is not None else None
+                ad_raw = row[1] if len(row) > 1 and row[1] is not None else None
+                
+                # Kod ve ad üzerinde daha agresif bir temizlik yap
+                kod = str(kod_raw).strip().replace('"', '').replace("'", '') if kod_raw is not None else None
+                ad = str(ad_raw).strip() if ad_raw is not None else None
 
-                if not kod or not ad:
-                    error_records.append({"hata": "Kod veya Ad boş olamaz", "satir": row_index + 2, "veri": row})
+                if not kod:
+                    error_records.append({"hata": "Ürün Kodu boş olamaz", "satir": row_index + 2, "veri": row})
                     continue
                 
+                if not ad:
+                    error_records.append({"hata": "Ürün Adı boş olamaz", "satir": row_index + 2, "veri": row})
+                    continue
+                    
                 # API'den mevcut stoku kontrol et
-                mevcut_stok_response = self.db._make_api_request("GET", f"/stoklar/", params={"arama": kod})
-                mevcut_stok = mevcut_stok_response.get("items")
-
-                # Sadece kod ile tam eşleşme arıyoruz
-                if mevcut_stok and mevcut_stok[0].get('kod') == kod:
-                    # Güncelleme kaydı
+                mevcut_stok_response = self.db.stok_listesi_al(arama=kod)
+                mevcut_stok = [m for m in mevcut_stok_response.get("items", []) if m.get('kod') == kod]
+                
+                if mevcut_stok:
                     update_records.append({"kod": kod, "ad": ad})
                 else:
-                    # Yeni kayıt
                     new_records.append({"kod": kod, "ad": ad})
                 
                 # Sınıflandırma adlarına göre ID'leri bul
-                kategori_id = None
-                if str(row[7]).strip() not in ["", "None", None]:
-                    kategori_response = self.db._make_api_request("GET", "/nitelikler/kategoriler/", params={"arama": str(row[7]).strip()})
-                    if kategori_response.get("items"):
-                        kategori_id = kategori_response.get("items")[0].get("id")
+                def get_nitelik_id(nitelik_tipi, nitelik_adi_raw):
+                    if not nitelik_adi_raw or str(nitelik_adi_raw).strip() == "" or str(nitelik_adi_raw).strip().lower() == "none":
+                        return None
+                    
+                    nitelik_adi = str(nitelik_adi_raw).strip()
 
-                marka_id = None
-                if str(row[8]).strip() not in ["", "None", None]:
-                    marka_response = self.db._make_api_request("GET", "/nitelikler/markalar/", params={"arama": str(row[8]).strip()})
-                    if marka_response.get("items"):
-                        marka_id = marka_response.get("items")[0].get("id")
-                
-                urun_grubu_id = None
-                if str(row[9]).strip() not in ["", "None", None]:
-                    urun_grubu_response = self.db._make_api_request("GET", "/nitelikler/urun_gruplari/", params={"arama": str(row[9]).strip()})
-                    if urun_grubu_response.get("items"):
-                        urun_grubu_id = urun_grubu_response.get("items")[0].get("id")
+                    try:
+                        # API endpoint'i: /nitelikler/{nitelik_tipi}
+                        response = self.db._make_api_request("GET", f"/nitelikler/{nitelik_tipi}", params={"arama": nitelik_adi, "limit": 2})
+                        items = response.get("items", [])
+                        
+                        # Tam eşleşme kontrolü
+                        exact_matches = [item for item in items if item.get("ad") == nitelik_adi]
+                        
+                        if len(exact_matches) == 1:
+                            return exact_matches[0].get("id")
+                        elif len(exact_matches) > 1:
+                            error_records.append({"hata": f"'{nitelik_adi}' için birden fazla eşleşme bulundu. Lütfen veriyi tekilleştirin.", "satir": row_index + 2, "veri": row})
+                        else:
+                            error_records.append({"hata": f"'{nitelik_adi}' ({nitelik_tipi}) bulunamadı.", "satir": row_index + 2, "veri": row})
+                        return None
+                    except Exception as e:
+                        error_records.append({"hata": f"API'den nitelik bilgisi çekilirken hata: {e}", "satir": row_index + 2, "veri": row})
+                        return None
 
-                birim_id = None
-                if str(row[10]).strip() not in ["", "None", None]:
-                    birim_response = self.db._make_api_request("GET", "/nitelikler/urun_birimleri/", params={"arama": str(row[10]).strip()})
-                    if birim_response.get("items"):
-                        birim_id = birim_response.get("items")[0].get("id")
-
-                mense_id = None
-                if str(row[11]).strip() not in ["", "None", None]:
-                    ulke_response = self.db._make_api_request("GET", "/nitelikler/ulkeler/", params={"arama": str(row[11]).strip()})
-                    if ulke_response.get("items"):
-                        mense_id = ulke_response.get("items")[0].get("id")
-
+                kategori_id = get_nitelik_id("kategoriler", str(row[7]))
+                marka_id = get_nitelik_id("markalar", str(row[8]))
+                urun_grubu_id = get_nitelik_id("urun_gruplari", str(row[9]))
+                birim_id = get_nitelik_id("urun_birimleri", str(row[10]))
+                mense_id = get_nitelik_id("ulkeler", str(row[11]))
 
                 processed_data.append({
                     "kod": kod,
                     "ad": ad,
-                    "miktar": float(str(row[2]).replace(",", ".")) if len(row) > 2 and row[2] is not None else None,
-                    "alis_fiyati": float(str(row[3]).replace(",", ".")) if len(row) > 3 and row[3] is not None else None,
-                    "satis_fiyati": float(str(row[4]).replace(",", ".")) if len(row) > 4 and row[4] is not None else None,
-                    "kdv_orani": float(str(row[5]).replace(",", ".")) if len(row) > 5 and row[5] is not None else None,
-                    "min_stok_seviyesi": float(str(row[6]).replace(",", ".")) if len(row) > 6 and row[6] is not None else None,
+                    "miktar": self.db.safe_float(row[2]) if len(row) > 2 and row[2] is not None else None,
+                    "alis_fiyati": self.db.safe_float(row[3]) if len(row) > 3 and row[3] is not None else None,
+                    "satis_fiyati": self.db.safe_float(row[4]) if len(row) > 4 and row[4] is not None else None,
+                    "kdv_orani": self.db.safe_float(row[5]) if len(row) > 5 and row[5] is not None else None,
+                    "min_stok_seviyesi": self.db.safe_float(row[6]) if len(row) > 6 and row[6] is not None else None,
                     "kategori_id": kategori_id,
                     "marka_id": marka_id,
                     "urun_grubu_id": urun_grubu_id,
@@ -391,7 +394,6 @@ class TopluIslemService:
                     "urun_resmi_yolu": str(row[13]).strip() if len(row) > 13 and row[13] is not None else None,
                     "selected_update_fields": selected_update_fields
                 })
-
             except Exception as e:
                 error_records.append({"hata": f"Analiz hatası: {e}", "satir": row_index + 2, "veri": row})
                 
