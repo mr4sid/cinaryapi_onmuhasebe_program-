@@ -171,3 +171,25 @@ def get_next_stok_code_endpoint(db: Session = Depends(get_db)):
 
     next_stok_code = f"{prefix}{next_sequence:09d}" # STK000000001 format
     return {"next_code": next_stok_code}
+
+@router.get("/next_siparis_kodu", response_model=modeller.NextSiparisKoduResponse)
+def get_next_siparis_kodu_endpoint(db: Session = Depends(get_db)):
+    """
+    API'den bir sonraki sipariş kodunu oluşturup döner.
+    Format: SIPARIS-000001 gibi.
+    """
+    son_siparis = db.query(semalar.Siparis).order_by(semalar.Siparis.id.desc()).first()
+    
+    prefix = "S-"
+    next_number = 1
+    
+    if son_siparis and son_siparis.siparis_no.startswith(prefix):
+        try:
+            last_number_str = son_siparis.siparis_no.split('-')[1]
+            last_number = int(last_number_str)
+            next_number = last_number + 1
+        except (ValueError, IndexError):
+            pass
+            
+    next_code = f"{prefix}{next_number:06d}"
+    return {"next_code": next_code}

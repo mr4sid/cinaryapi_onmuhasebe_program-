@@ -17,8 +17,9 @@ from .semalar import Musteri, KasaBanka, Tedarikci # EKLENDİ: Tedarikci modeli 
 # Mevcut rotaların içe aktarılması
 from .rotalar import (
     dogrulama, musteriler, tedarikciler, stoklar,
-    kasalar_bankalar, faturalar, siparisler, cari_hareketler,
-    gelir_gider, nitelikler, sistem, raporlar, yedekleme, kullanicilar
+    kasalar_bankalar, cari_hareketler,
+    gelir_gider, nitelikler, sistem, raporlar, yedekleme, kullanicilar,
+    siparis_faturalar
 )
 
 # Loglama ayarları
@@ -124,7 +125,6 @@ app.add_middleware(
 async def startup_event():
     logger.info("API başlangıcı algılandı.")
 
-    # VERİTABANI TABLOLARINI OLUŞTUR
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("Veritabanı tabloları başarıyla oluşturuldu/güncellendi.")
@@ -132,21 +132,21 @@ async def startup_event():
         logger.critical(f"Veritabanı tabloları oluşturulurken kritik hata: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Veritabanı başlatma hatası: {e}")
 
-    # VARSAYILAN VERİLERİ EKLE (Tablolar oluşturulduktan sonra çalışır)
     create_initial_data()
 
-# Router'ları ekle - İLGİLİ ROUTER DOSYALARI ZATEN PREFIX TANIMLADIĞI İÇİN BURADA PREFIX KULLANILMIYOR
 app.include_router(dogrulama.router, tags=["Doğrulama"])
 app.include_router(kullanicilar.router, tags=["Kullanıcılar"])
 app.include_router(musteriler.router, tags=["Müşteriler"])
 app.include_router(tedarikciler.router, tags=["Tedarikçiler"])
 app.include_router(stoklar.router, tags=["Stoklar"])
 app.include_router(kasalar_bankalar.router, tags=["Kasalar ve Bankalar"])
-app.include_router(faturalar.router, tags=["Faturalar"])
-app.include_router(siparisler.router, tags=["Siparişler"])
 app.include_router(cari_hareketler.router, tags=["Cari Hareketler"])
 app.include_router(gelir_gider.router, tags=["Gelir ve Giderler"])
 app.include_router(nitelikler.router, tags=["Nitelikler"])
 app.include_router(sistem.router, tags=["Sistem"])
 app.include_router(raporlar.router, tags=["Raporlar"])
 app.include_router(yedekleme.router, tags=["Yedekleme"])
+
+# Fatura ve Sipariş rotalarını ayrı ayrı ekle
+app.include_router(siparis_faturalar.siparisler_router)
+app.include_router(siparis_faturalar.faturalar_router)

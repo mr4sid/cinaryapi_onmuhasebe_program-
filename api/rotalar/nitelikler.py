@@ -16,8 +16,10 @@ def create_kategori(kategori: modeller.UrunKategoriCreate, db: Session = Depends
     return db_kategori
 
 @router.get("/kategoriler", response_model=modeller.NitelikListResponse)
-def read_kategoriler(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
+def read_kategoriler(skip: int = 0, limit: int = 1000, arama: str = Query(None), db: Session = Depends(get_db)):
     query = db.query(semalar.UrunKategori)
+    if arama:
+        query = query.filter(semalar.UrunKategori.ad.ilike(f"%{arama}%"))
     kategoriler = query.offset(skip).limit(limit).all()
     total_count = query.count()
     return {"items": [modeller.UrunKategoriRead.model_validate(k, from_attributes=True) for k in kategoriler], "total": total_count}
@@ -64,8 +66,10 @@ def create_marka(marka: modeller.UrunMarkaCreate, db: Session = Depends(get_db))
     return db_marka
 
 @router.get("/markalar", response_model=modeller.NitelikListResponse)
-def read_markalar(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
+def read_markalar(skip: int = 0, limit: int = 1000, arama: str = Query(None), db: Session = Depends(get_db)):
     query = db.query(semalar.UrunMarka)
+    if arama:
+        query = query.filter(semalar.UrunMarka.ad.ilike(f"%{arama}%"))
     markalar = query.offset(skip).limit(limit).all()
     total_count = query.count()
     return {"items": [modeller.UrunMarkaRead.model_validate(m, from_attributes=True) for m in markalar], "total": total_count}
@@ -112,8 +116,10 @@ def create_urun_grubu(urun_grubu: modeller.UrunGrubuCreate, db: Session = Depend
     return db_urun_grubu
 
 @router.get("/urun_gruplari", response_model=modeller.NitelikListResponse)
-def read_urun_gruplari(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
+def read_urun_gruplari(skip: int = 0, limit: int = 1000, arama: str = Query(None), db: Session = Depends(get_db)):
     query = db.query(semalar.UrunGrubu)
+    if arama:
+        query = query.filter(semalar.UrunGrubu.ad.ilike(f"%{arama}%"))
     urun_gruplari = query.offset(skip).limit(limit).all()
     total_count = query.count()
     return {"items": [modeller.UrunGrubuRead.model_validate(ug, from_attributes=True) for ug in urun_gruplari], "total": total_count}
@@ -160,8 +166,10 @@ def create_urun_birimi(urun_birimi: modeller.UrunBirimiCreate, db: Session = Dep
     return db_urun_birimi
 
 @router.get("/urun_birimleri", response_model=modeller.NitelikListResponse)
-def read_urun_birimleri(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
+def read_urun_birimleri(skip: int = 0, limit: int = 1000, arama: str = Query(None), db: Session = Depends(get_db)):
     query = db.query(semalar.UrunBirimi)
+    if arama:
+        query = query.filter(semalar.UrunBirimi.ad.ilike(f"%{arama}%"))
     urun_birimleri = query.offset(skip).limit(limit).all()
     total_count = query.count()
     return {"items": [modeller.UrunBirimiRead.model_validate(ub, from_attributes=True) for ub in urun_birimleri], "total": total_count}
@@ -208,8 +216,10 @@ def create_ulke(ulke: modeller.UlkeCreate, db: Session = Depends(get_db)):
     return db_ulke
 
 @router.get("/ulkeler", response_model=modeller.NitelikListResponse)
-def read_ulkeler(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
+def read_ulkeler(skip: int = 0, limit: int = 1000, arama: str = Query(None), db: Session = Depends(get_db)):
     query = db.query(semalar.Ulke)
+    if arama:
+        query = query.filter(semalar.Ulke.ad.ilike(f"%{arama}%"))
     ulkeler = query.offset(skip).limit(limit).all()
     total_count = query.count()
     return {"items": [modeller.UlkeRead.model_validate(u, from_attributes=True) for u in ulkeler], "total": total_count}
@@ -255,12 +265,17 @@ def create_gelir_siniflandirma(siniflandirma: modeller.GelirSiniflandirmaCreate,
     db.refresh(db_siniflandirma)
     return db_siniflandirma
 
-@router.get("/gelir_siniflandirmalari", response_model=modeller.NitelikListResponse)
-def read_gelir_siniflandirmalari(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
+@router.get("/gelir_siniflandirmalari", response_model=List[modeller.GelirSiniflandirmaRead])
+def read_gelir_siniflandirmalari(
+    skip: int = 0,
+    limit: int = 100,
+    id: Optional[int] = None, # YENİ PARAMETRE EKLENDİ
+    db: Session = Depends(get_db)
+):
     query = db.query(semalar.GelirSiniflandirma)
-    siniflandirmalar = query.offset(skip).limit(limit).all()
-    total_count = query.count()
-    return {"items": [modeller.GelirSiniflandirmaRead.model_validate(s, from_attributes=True) for s in siniflandirmalar], "total": total_count}
+    if id: # YENİ KOD: id'ye göre filtrele
+        query = query.filter(semalar.GelirSiniflandirma.id == id)
+    return query.offset(skip).limit(limit).all()
 
 @router.get("/gelir_siniflandirmalari/{siniflandirma_id}", response_model=modeller.GelirSiniflandirmaRead)
 def read_gelir_siniflandirma(siniflandirma_id: int, db: Session = Depends(get_db)):
@@ -303,12 +318,17 @@ def create_gider_siniflandirma(siniflandirma: modeller.GiderSiniflandirmaCreate,
     db.refresh(db_siniflandirma)
     return db_siniflandirma
 
-@router.get("/gider_siniflandirmalari", response_model=modeller.NitelikListResponse)
-def read_gider_siniflandirmalari(skip: int = 0, limit: int = 1000, db: Session = Depends(get_db)):
+@router.get("/gider_siniflandirmalari", response_model=List[modeller.GiderSiniflandirmaRead])
+def read_gider_siniflandirmalari(
+    skip: int = 0,
+    limit: int = 100,
+    id: Optional[int] = None, # YENİ PARAMETRE EKLENDİ
+    db: Session = Depends(get_db)
+):
     query = db.query(semalar.GiderSiniflandirma)
-    siniflandirmalar = query.offset(skip).limit(limit).all()
-    total_count = query.count()
-    return {"items": [modeller.GiderSiniflandirmaRead.model_validate(s, from_attributes=True) for s in siniflandirmalar], "total": total_count}
+    if id: # YENİ KOD: id'ye göre filtrele
+        query = query.filter(semalar.GiderSiniflandirma.id == id)
+    return query.offset(skip).limit(limit).all()
 
 @router.get("/gider_siniflandirmalari/{siniflandirma_id}", response_model=modeller.GiderSiniflandirmaRead)
 def read_gider_siniflandirma(siniflandirma_id: int, db: Session = Depends(get_db)):

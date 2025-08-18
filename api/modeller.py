@@ -712,3 +712,33 @@ class TopluIslemSonucResponse(BaseModel):
     hata_sayisi: int
     hatalar: List[str]
     toplam_islenen: int    
+
+class StokOzetResponse(BaseModel):
+    toplam_urun_sayisi: int
+    toplam_miktar: float
+    toplam_maliyet: float
+    toplam_satis_tutari: float    
+
+class NextSiparisKoduResponse(BaseModel):
+    next_code: str    
+
+class SiparisKalemiRead(BaseModel):
+    id: int
+    siparis_id: int
+    urun_id: int
+    miktar: float
+    birim_fiyat: float  # KDV hariç birim fiyat
+    kdv_orani: float
+    alis_fiyati_siparis_aninda: Optional[float]
+    iskonto_yuzde_1: float
+    iskonto_yuzde_2: float
+    iskonto_tipi: Optional[str]
+    iskonto_degeri: Optional[float]
+    kalem_toplam_kdv_haric: float
+    kalem_toplam_kdv_dahil: float
+    kdv_tutari: float
+    urun_kodu: Optional[str]
+    urun_adi: Optional[str]
+
+    class Config:
+        from_attributes = True    

@@ -5,6 +5,8 @@ import logging
 from datetime import datetime, date
 from typing import List, Optional, Dict, Any, Union
 
+from yardimcilar import normalize_turkish_chars
+
 logger = logging.getLogger(__name__)
 
 if not logger.handlers:
@@ -209,26 +211,17 @@ class CariService:
 
 class TopluIslemService:
     def __init__(self, db_manager):
-        """
-        Toplu veri işlemleri (içe/dışa aktarım) için servis sınıfı.
-        db_manager artık API ile iletişim kurar.
-        """
         self.db = db_manager
         logger.info("TopluIslemService başlatıldı.")
     
     def toplu_musteri_analiz_et(self, raw_data: list) -> Dict[str, Union[List, Dict]]:
-        """
-        Ham müşteri listesini analiz eder ve önizleme için hazırlar.
-        """
         processed_data = []
         new_records = []
         update_records = []
         error_records = []
         
-        # Her satır bir liste
         for row_index, row in enumerate(raw_data):
             try:
-                # Excel sütunlarına göre veriyi çek
                 kod = str(row[0]).strip() if len(row) > 0 and row[0] is not None else None
                 ad = str(row[1]).strip() if len(row) > 1 and row[1] is not None else None
                 
@@ -236,15 +229,12 @@ class TopluIslemService:
                     error_records.append({"hata": "Kod veya Ad boş olamaz", "satir": row_index + 2, "veri": row})
                     continue
 
-                # API'den mevcut müşteriyi kontrol et
-                mevcut_musteri_response = self.db.musteri_listesi_al(arama=kod) # Tam arama yerine ilike ile arar
-                mevcut_musteri = [m for m in mevcut_musteri_response.get("items") if m.get('kod') == kod] # Sadece tam eşleşme
+                mevcut_musteri_response = self.db.musteri_listesi_al(arama=kod)
+                mevcut_musteri = [m for m in mevcut_musteri_response.get("items") if m.get('kod') == kod]
                 
                 if mevcut_musteri:
-                    # Güncelleme kaydı
                     update_records.append({"kod": kod, "ad": ad})
                 else:
-                    # Yeni kayıt
                     new_records.append({"kod": kod, "ad": ad})
 
                 processed_data.append({
@@ -266,9 +256,6 @@ class TopluIslemService:
         }
 
     def toplu_tedarikci_analiz_et(self, raw_data: list) -> Dict[str, Union[List, Dict]]:
-        """
-        Ham tedarikçi listesini analiz eder ve önizleme için hazırlar.
-        """
         processed_data = []
         new_records = []
         update_records = []
@@ -309,121 +296,98 @@ class TopluIslemService:
             "error_records": error_records
         }
         
-    def toplu_stok_analiz_et(self, raw_data: list, selected_update_fields: List[str]) -> Dict[str, Union[List, Dict]]:
-        """
-        Ham stok listesini analiz eder ve önizleme için hazırlar.
-        """
-        processed_data = []
-        new_records = []
-        update_records = []
-        error_records = []
+    def toplu_stok_analiz_et(self, excel_veri: List[List[Any]], guncellenecek_alanlar: List[str]):
+        """Excel verisini analiz ederek yeni, güncellenecek ve hatalı stok kayıtlarını ayırır."""
+        yeni_kayitlar = []
+        guncellenecek_kayitlar = []
+        hata_kayitlari = []
+        tum_islenmis_veri = []
 
-        for row_index, row in enumerate(raw_data):
-            try:
-                # Excel'den gelen veriyi güvenli bir şekilde al ve temizle
-                kod_raw = row[0] if len(row) > 0 and row[0] is not None else None
-                ad_raw = row[1] if len(row) > 1 and row[1] is not None else None
-                
-                # Kod ve ad üzerinde daha agresif bir temizlik yap
-                kod = str(kod_raw).strip().replace('"', '').replace("'", '') if kod_raw is not None else None
-                ad = str(ad_raw).strip() if ad_raw is not None else None
+        # Excel verisinin başlık satırını atla
+        for index, row_data in enumerate(excel_veri):
+            kayit = {}
+            hata_mesajlari = []
+            
+            # Tüm verileri tutan listeye ekle
+            tum_islenmis_veri.append(row_data)
 
-                if not kod:
-                    error_records.append({"hata": "Ürün Kodu boş olamaz", "satir": row_index + 2, "veri": row})
-                    continue
-                
-                if not ad:
-                    error_records.append({"hata": "Ürün Adı boş olamaz", "satir": row_index + 2, "veri": row})
-                    continue
-                    
-                # API'den mevcut stoku kontrol et
-                mevcut_stok_response = self.db.stok_listesi_al(arama=kod)
-                mevcut_stok = [m for m in mevcut_stok_response.get("items", []) if m.get('kod') == kod]
-                
-                if mevcut_stok:
-                    update_records.append({"kod": kod, "ad": ad})
-                else:
-                    new_records.append({"kod": kod, "ad": ad})
-                
-                # Sınıflandırma adlarına göre ID'leri bul
-                def get_nitelik_id(nitelik_tipi, nitelik_adi_raw):
-                    if not nitelik_adi_raw or str(nitelik_adi_raw).strip() == "" or str(nitelik_adi_raw).strip().lower() == "none":
-                        return None
-                    
-                    nitelik_adi = str(nitelik_adi_raw).strip()
+            # Stok kodu Excel'deki ilk sütun, kontrol et
+            if not row_data or not row_data[0]:
+                hata_mesajlari.append("Stok kodu boş olamaz.")
+            else:
+                try:
+                    # Veri tiplerini dönüştürme ve doğrulama
+                    kod = str(row_data[0]).strip()
+                    ad = str(row_data[1]).strip() if len(row_data) > 1 and row_data[1] is not None else ""
+                    miktar = float(row_data[2]) if len(row_data) > 2 and row_data[2] is not None else 0.0
+                    alis_fiyati = float(row_data[3]) if len(row_data) > 3 and row_data[3] is not None else 0.0
+                    satis_fiyati = float(row_data[4]) if len(row_data) > 4 and row_data[4] is not None else 0.0
+                    kdv_orani = float(row_data[5]) if len(row_data) > 5 and row_data[5] is not None else 20.0
+                    min_stok_seviyesi = float(row_data[6]) if len(row_data) > 6 and row_data[6] is not None else 0.0
+                    aktif = bool(row_data[7]) if len(row_data) > 7 and row_data[7] is not None else True
 
-                    try:
-                        # API endpoint'i: /nitelikler/{nitelik_tipi}
-                        response = self.db._make_api_request("GET", f"/nitelikler/{nitelik_tipi}", params={"arama": nitelik_adi, "limit": 2})
-                        items = response.get("items", [])
-                        
-                        # Tam eşleşme kontrolü
-                        exact_matches = [item for item in items if item.get("ad") == nitelik_adi]
-                        
-                        if len(exact_matches) == 1:
-                            return exact_matches[0].get("id")
-                        elif len(exact_matches) > 1:
-                            error_records.append({"hata": f"'{nitelik_adi}' için birden fazla eşleşme bulundu. Lütfen veriyi tekilleştirin.", "satir": row_index + 2, "veri": row})
-                        else:
-                            error_records.append({"hata": f"'{nitelik_adi}' ({nitelik_tipi}) bulunamadı.", "satir": row_index + 2, "veri": row})
-                        return None
-                    except Exception as e:
-                        error_records.append({"hata": f"API'den nitelik bilgisi çekilirken hata: {e}", "satir": row_index + 2, "veri": row})
-                        return None
+                    # Veritabanında mevcut stoğu ara
+                    eslesen_stoklar = self.db.stok_listesi_al(arama=kod, limit=1)
 
-                kategori_id = get_nitelik_id("kategoriler", str(row[7]))
-                marka_id = get_nitelik_id("markalar", str(row[8]))
-                urun_grubu_id = get_nitelik_id("urun_gruplari", str(row[9]))
-                birim_id = get_nitelik_id("urun_birimleri", str(row[10]))
-                mense_id = get_nitelik_id("ulkeler", str(row[11]))
-
-                processed_data.append({
-                    "kod": kod,
-                    "ad": ad,
-                    "miktar": self.db.safe_float(row[2]) if len(row) > 2 and row[2] is not None else None,
-                    "alis_fiyati": self.db.safe_float(row[3]) if len(row) > 3 and row[3] is not None else None,
-                    "satis_fiyati": self.db.safe_float(row[4]) if len(row) > 4 and row[4] is not None else None,
-                    "kdv_orani": self.db.safe_float(row[5]) if len(row) > 5 and row[5] is not None else None,
-                    "min_stok_seviyesi": self.db.safe_float(row[6]) if len(row) > 6 and row[6] is not None else None,
-                    "kategori_id": kategori_id,
-                    "marka_id": marka_id,
-                    "urun_grubu_id": urun_grubu_id,
-                    "birim_id": birim_id,
-                    "mense_id": mense_id,
-                    "detay": str(row[12]).strip() if len(row) > 12 and row[12] is not None else None,
-                    "urun_resmi_yolu": str(row[13]).strip() if len(row) > 13 and row[13] is not None else None,
-                    "selected_update_fields": selected_update_fields
+                    if eslesen_stoklar["total"] > 0:
+                        # Stok mevcut, güncelleme kaydı olarak işaretle
+                        mevcut_stok = eslesen_stoklar["items"][0]
+                        kayit = {
+                            "id": mevcut_stok.get("id"),
+                            "kod": kod,
+                            "ad": ad or mevcut_stok.get("ad"),
+                            "miktar": miktar or mevcut_stok.get("miktar"),
+                            "alis_fiyati": alis_fiyati or mevcut_stok.get("alis_fiyati"),
+                            "satis_fiyati": satis_fiyati or mevcut_stok.get("satis_fiyati"),
+                            "kdv_orani": kdv_orani or mevcut_stok.get("kdv_orani"),
+                            "min_stok_seviyesi": min_stok_seviyesi or mevcut_stok.get("min_stok_seviyesi"),
+                            "aktif": aktif or mevcut_stok.get("aktif")
+                        }
+                        guncellenecek_kayitlar.append(kayit)
+                    else:
+                        # Stok mevcut değil, yeni kayıt olarak işaretle
+                        kayit = {
+                            "kod": kod,
+                            "ad": ad,
+                            "miktar": miktar,
+                            "alis_fiyati": alis_fiyati,
+                            "satis_fiyati": satis_fiyati,
+                            "kdv_orani": kdv_orani,
+                            "min_stok_seviyesi": min_stok_seviyesi,
+                            "aktif": aktif
+                        }
+                        yeni_kayitlar.append(kayit)
+                except (ValueError, IndexError) as e:
+                    hata_mesajlari.append(f"Veri formatı hatası: {e}. Lütfen sayısal alanları kontrol edin.")
+            
+            # Hata mesajları varsa, kaydı hatalı olarak ekle
+            if hata_mesajlari:
+                hata_kayitlari.append({
+                    "satir": index + 2,
+                    "hata": "; ".join(hata_mesajlari),
+                    "veri": row_data
                 })
-            except Exception as e:
-                error_records.append({"hata": f"Analiz hatası: {e}", "satir": row_index + 2, "veri": row})
-                
-        return {
-            "all_processed_data": processed_data,
-            "new_records": new_records,
-            "update_records": update_records,
-            "error_records": error_records,
-            "selected_update_fields_from_ui": selected_update_fields
-        }
 
+        return {
+            "new_records": yeni_kayitlar,
+            "update_records": guncellenecek_kayitlar,
+            "error_records": hata_kayitlari,
+            "all_processed_data": tum_islenmis_veri
+        }
+    
     def toplu_musteri_ice_aktar(self, musteri_listesi: List[Dict[str, Any]]):
-        """
-        Verilen müşteri listesini toplu olarak içe aktarır.
-        """
         basarili_sayisi = 0
         hata_sayisi = 0
         hatalar = []
 
         for musteri_data in musteri_listesi:
             try:
-                # Müşteri zaten var mı diye kontrol et
                 mevcut_musteri_response = self.db._make_api_request("GET", f"/musteriler/", params={"arama": musteri_data.get('kod')})
-                mevcut_musteri = mevcut_musteri_response.get("items")
+                mevcut_musteri = [m for m in mevcut_musteri_response.get("items", []) if m.get('kod') == musteri_data.get('kod')]
                 
-                if mevcut_musteri and mevcut_musteri[0].get('kod') == musteri_data.get('kod'):
-                    # Güncelleme işlemi
+                if mevcut_musteri:
                     success, msg = self.db.musteri_guncelle(mevcut_musteri[0].get('id'), musteri_data)
                 else:
-                    # Ekleme işlemi
                     success, msg = self.db.musteri_ekle(musteri_data)
 
                 if success:
@@ -440,9 +404,6 @@ class TopluIslemService:
         return {"basarili": basarili_sayisi, "hata": hata_sayisi, "hatalar": hatalar}
     
     def toplu_tedarikci_ice_aktar(self, tedarikci_listesi: List[Dict[str, Any]]):
-        """
-        Verilen tedarikçi listesini toplu olarak içe aktarır.
-        """
         basarili_sayisi = 0
         hata_sayisi = 0
         hatalar = []
@@ -450,9 +411,9 @@ class TopluIslemService:
         for tedarikci_data in tedarikci_listesi:
             try:
                 mevcut_tedarikci_response = self.db._make_api_request("GET", f"/tedarikciler/", params={"arama": tedarikci_data.get('kod')})
-                mevcut_tedarikci = mevcut_tedarikci_response.get("items")
+                mevcut_tedarikci = [t for t in mevcut_tedarikci_response.get("items", []) if t.get('kod') == tedarikci_data.get('kod')]
 
-                if mevcut_tedarikci and mevcut_tedarikci[0].get('kod') == tedarikci_data.get('kod'):
+                if mevcut_tedarikci:
                     success, msg = self.db.tedarikci_guncelle(mevcut_tedarikci[0].get('id'), tedarikci_data)
                 else:
                     success, msg = self.db.tedarikci_ekle(tedarikci_data)
@@ -469,30 +430,84 @@ class TopluIslemService:
         
         logger.info(f"Toplu tedarikçi içe aktarım tamamlandı. Başarılı: {basarili_sayisi}, Hata: {hata_sayisi}")
         return {"basarili": basarili_sayisi, "hata": hata_sayisi, "hatalar": hatalar}
-    
+        
     def toplu_stok_ice_aktar(self, stok_listesi: List[Dict[str, Any]]):
         """
-        Verilen stok listesini toplu olarak içe aktarır.
+        Toplu stok ekleme/güncelleme işlemini API'ye gönderir.
         """
         try:
-            response_data = self.db.bulk_stok_upsert(stok_listesi)
+            payload = []
+            for stok in stok_listesi:
+                # Veri formatını API'nin beklediği şekilde düzenle
+                payload.append({
+                    "kod": stok.get("kod"),
+                    "ad": stok.get("ad"),
+                    "miktar": stok.get("miktar"),
+                    "alis_fiyati": stok.get("alis_fiyati"),
+                    "satis_fiyati": stok.get("satis_fiyati"),
+                    "kdv_orani": stok.get("kdv_orani"),
+                    "min_stok_seviyesi": stok.get("min_stok_seviyesi"),
+                    "aktif": stok.get("aktif")
+                })
+
+            response = requests.post(f"{self.db.api_base_url}/stoklar/bulk_upsert", json=payload)
+            response.raise_for_status()
+            response_data = response.json()
+            
+            # Burada yeni eklenen stoklar için alış faturası oluşturma mantığını ekliyoruz.
+            yeni_eklenen_stok_idleri = response_data.get("yeni_eklenen_stok_idleri", [])
+            guncellenen_stok_idleri = response_data.get("guncellenen_stok_idleri", [])
+            
+            fatura_hizmeti = FaturaService(self.db)
+            
+            # Yeni eklenen her stok için alış faturası oluştur
+            if yeni_eklenen_stok_idleri:
+                for stok_id in yeni_eklenen_stok_idleri:
+                    yeni_stok_data = next((s for s in stok_listesi if s.get('id') == stok_id), None)
+                    if yeni_stok_data:
+                        # Fatura oluşturmak için gerekli veriyi hazırla
+                        kalemler_data = [{
+                            "urun_id": stok_id,
+                            "miktar": yeni_stok_data.get("miktar"),
+                            "birim_fiyat": yeni_stok_data.get("alis_fiyati"),
+                            "kdv_orani": yeni_stok_data.get("kdv_orani")
+                        }]
+                        
+                        fatura_hizmeti.fatura_olustur(
+                            fatura_no=f"TOPLU-{datetime.now().strftime('%Y%m%d%H%M%S')}-{stok_id}",
+                            tarih=datetime.now().strftime('%Y-%m-%d'),
+                            fatura_tipi=self.db.FATURA_TIP_ALIS,
+                            cari_id=self.db.get_genel_tedarikci_id(),
+                            kalemler_data=kalemler_data,
+                            odeme_turu=self.db.ODEME_TURU_ACIK_HESAP,
+                            fatura_notlari="Toplu stok ekleme işlemiyle otomatik oluşturulmuştur."
+                        )
+
             return {
-                "basarili": response_data.get("yeni_eklenen_sayisi", 0) + response_data.get("guncellenen_sayisi", 0),
-                "hata": response_data.get("hata_sayisi", 0),
+                "yeni_eklenen_sayisi": response_data.get("yeni_eklenen_sayisi", 0),
+                "guncellenen_sayisi": response_data.get("guncellenen_sayisi", 0),
+                "hata_sayisi": response_data.get("hata_sayisi", 0),
                 "hatalar": response_data.get("hatalar", [])
             }
-        except ValueError as e:
-            logger.error(f"Toplu stok ekleme/güncelleme API'den hata döndü: {e}")
-            return {"basarili": 0, "hata": len(stok_listesi), "hatalar": [f"Genel API hatası: {e}"]}
+
+        except requests.exceptions.HTTPError as e:
+            logger.error(f"API isteği sırasında hata oluştu: {e.response.text}", exc_info=True)
+            return {
+                "yeni_eklenen_sayisi": 0,
+                "guncellenen_sayisi": 0,
+                "hata_sayisi": len(stok_listesi),
+                "hatalar": [f"API isteği sırasında bir hata oluştu: {e.response.text}"]
+            }
         except Exception as e:
             logger.error(f"Toplu stok ekleme/güncelleme sırasında beklenmedik hata: {e}", exc_info=True)
-            return {"basarili": 0, "hata": len(stok_listesi), "hatalar": [f"Beklenmedik bir hata oluştu: {e}"]}
-    
+            return {
+                "yeni_eklenen_sayisi": 0,
+                "guncellenen_sayisi": 0,
+                "hata_sayisi": len(stok_listesi),
+                "hatalar": [f"Beklenmedik bir hata oluştu: {e}"]
+            }
+            
     def musteri_listesini_disa_aktar(self, **kwargs):
-        """
-        Müşteri listesini API'den alır ve döndürür.
-        kwargs ile skip, limit, arama, aktif_durum gibi parametreler iletilebilir.
-        """
         try:
             return self.db.musteri_listesi_al(**kwargs)
         except Exception as e:
@@ -500,10 +515,6 @@ class TopluIslemService:
             raise
 
     def tedarikci_listesini_disa_aktar(self, **kwargs):
-        """
-        Tedarikçi listesini API'den alır ve döndürür.
-        kwargs ile skip, limit, arama, aktif_durum gibi parametreler iletilebilir.
-        """
         try:
             return self.db.tedarikci_listesi_al(**kwargs)
         except Exception as e:
@@ -511,10 +522,6 @@ class TopluIslemService:
             raise
 
     def stok_listesini_disa_aktar(self, **kwargs):
-        """
-        Stok listesini API'den alır ve döndürür.
-        kwargs ile skip, limit, arama, aktif_durum, kategori_id, marka_id, urun_grubu_id, stok_durumu, kritik_stok_altinda gibi parametreler iletilebilir.
-        """
         try:
             return self.db.stok_listesi_al(**kwargs)
         except Exception as e:

@@ -1,11 +1,22 @@
+# yardimcilar.py dosyasının içeriği
 import locale
 from datetime import datetime
 import calendar
 
 # PySide6 tabanlı UI bileşenleri için gerekli import'lar
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QCalendarWidget, QPushButton, QLineEdit, QMessageBox
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QCalendarWidget, QPushButton, QLineEdit, QMessageBox, QFrame, QHBoxLayout
 from PySide6.QtCore import QDate, Signal, Slot, Qt
 from PySide6.QtGui import QDoubleValidator # Sayısal giriş doğrulaması için
+import logging
+# Logger kurulumu
+logger = logging.getLogger(__name__)
+
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
 # Locale ayarını uygulamanın en başında bir kez yapıyoruz.
 def setup_locale():
@@ -40,44 +51,51 @@ def normalize_turkish_chars(text):
     return text
 
 class DatePickerDialog(QDialog):
-    date_selected = Signal(str) # Seçilen tarihi string olarak yayacak sinyal
+    date_selected = Signal(str)
 
-    def __init__(self, parent=None, initial_date=None):
-        super().__init__(parent)
+    def __init__(self, parent_app, initial_date=None):
+        super().__init__(parent_app)
         self.setWindowTitle("Tarih Seç")
-        self.setGeometry(100, 100, 300, 250)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint) # Yardım butonunu kaldır
-
-        self.layout = QVBoxLayout(self)
-
-        self.calendar = QCalendarWidget(self)
-        self.layout.addWidget(self.calendar)
+        self.setFixedSize(300, 300)
+        self.setModal(True)
+        
+        main_layout = QVBoxLayout(self)
+        self.takvim = QCalendarWidget()
+        self.takvim.setGridVisible(True)
+        self.takvim.setHorizontalHeaderFormat(QCalendarWidget.ShortDayNames)
+        main_layout.addWidget(self.takvim)
 
         if initial_date:
             try:
-                # 'yyyy-MM-dd' formatında gelen string'i QDate objesine çevir
-                qdate_initial = QDate.fromString(initial_date, "yyyy-MM-dd")
-                self.calendar.setSelectedDate(qdate_initial)
+                # `initial_date` bir QDate nesnesine dönüştürülürken hata oluşursa,
+                # `currentDate` kullanılır.
+                q_date = QDate.fromString(initial_date, 'yyyy-MM-dd')
+                if q_date.isValid():
+                    self.takvim.setSelectedDate(q_date)
             except Exception as e:
-                print(f"Hata: Geçersiz başlangıç tarihi formatı. {initial_date} - {e}")
-                # Varsayılan olarak bugünün tarihini ayarla
-                self.calendar.setSelectedDate(QDate.currentDate())
+                logger.warning(f"Geçersiz başlangıç tarihi formatı: {initial_date}. Bugün seçiliyor. Hata: {e}")
+                self.takvim.setSelectedDate(QDate.currentDate())
         else:
-            self.calendar.setSelectedDate(QDate.currentDate()) # Başlangıç tarihi yoksa bugünü seç
+            self.takvim.setSelectedDate(QDate.currentDate())
 
-        # Takvimde bir tarihe tıklamak için bir slot bağlıyoruz.
-        self.calendar.clicked.connect(self._on_date_clicked)
+        self.takvim.setFocus()
+        
+        button_frame = QFrame(self)
+        button_layout = QHBoxLayout(button_frame)
+        main_layout.addWidget(button_frame)
 
-        self.select_button = QPushButton("Seç", self) # Seç butonu
-        self.layout.addWidget(self.select_button)
-        # Seç butonuna tıklandığında diyalogu kabul ederek kapat (accept() metoduyla)
-        self.select_button.clicked.connect(self.accept)
+        btn_ok = QPushButton("Tamam")
+        btn_ok.clicked.connect(self.accept)
+        button_layout.addWidget(btn_ok)
+        
+        btn_iptal = QPushButton("İptal")
+        btn_iptal.clicked.connect(self.reject)
+        button_layout.addWidget(btn_iptal)
 
-        self.selected_final_date_str = None # Seçilen nihai tarihi tutacak değişken
-
-        # Diyalog başlatıldığında, halihazırda seçili olan tarihi al.
-        self.selected_final_date_str = self.calendar.selectedDate().toString("yyyy-MM-dd")
-
+    def get_selected_date(self):
+        """Seçilen tarihi 'yyyy-MM-dd' formatında döndürür."""
+        return self.takvim.selectedDate().toString('yyyy-MM-dd')
+    
     @Slot(QDate) # Bir QDate objesi alacağını belirtir
     def _on_date_clicked(self, date_obj):
         """Takvimde bir tarihe tıklandığında çağrılır."""
@@ -85,11 +103,14 @@ class DatePickerDialog(QDialog):
 
     def accept(self):
         """Diyalog "Kabul Et" (Accept) ile kapatıldığında çağrılır."""
-        if self.selected_final_date_str:
-            # Seçilen tarihi bir sinyal olarak dışarıya yay.
-            # Bu sinyal, çağıran PySide6 penceresindeki QLineEdit'e bağlanacaktır.
-            self.date_selected.emit(self.selected_final_date_str)
-        super().accept() # QDialog'un kabul metodu çağrılır.
+        # Seçilen tarihi al
+        selected_date = self.takvim.selectedDate().toString('yyyy-MM-dd')
+        
+        # Seçilen tarihi bir sinyal olarak dışarıya yay
+        self.date_selected.emit(selected_date)
+        
+        # QDialog'un kabul metodu çağrılır.
+        super().accept()
 
 def format_and_validate_numeric_input(line_edit, app_instance=None):
     """

@@ -1,5 +1,7 @@
+# api/rotalar/gelir_gider.py dosyasının içeriği
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import String, and_
 from typing import List, Optional
 from .. import semalar, modeller
 from ..veritabani import get_db
@@ -11,43 +13,42 @@ router = APIRouter(
 )
 
 # --- VERİ OKUMA (READ) ---
-@router.get("/", response_model=dict)
+@router.get("/", response_model=modeller.GelirGiderListResponse)
 def read_gelir_gider(
     skip: int = 0,
-    limit: int = 100,
-    tip_filtre: Optional[semalar.GelirGiderTipEnum] = None, # tip_filtre parametresinin türü güncellendi
+    limit: int = 20,
+    tip_filtre: Optional[semalar.GelirGiderTipEnum] = None,
     baslangic_tarihi: Optional[date] = None,
     bitis_tarihi: Optional[date] = None,
     aciklama_filtre: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """
-    Tüm gelir/gider kayıtlarını listeler. Tipe, tarih aralığına ve açıklamaya göre filtrelenebilir.
+    Gelir/gider listesini filtreleyerek döndürür.
     """
     query = db.query(semalar.GelirGider)
 
     if tip_filtre:
         query = query.filter(semalar.GelirGider.tip == tip_filtre)
+    
     if baslangic_tarihi:
         query = query.filter(semalar.GelirGider.tarih >= baslangic_tarihi)
+
     if bitis_tarihi:
         query = query.filter(semalar.GelirGider.tarih <= bitis_tarihi)
+        
     if aciklama_filtre:
         query = query.filter(semalar.GelirGider.aciklama.ilike(f"%{aciklama_filtre}%"))
 
     total_count = query.count()
+    gelir_gider_listesi = query.offset(skip).limit(limit).all()
 
-    kasa_banka_map = {kb.id: kb.hesap_adi for kb in db.query(semalar.KasaBanka).all()}
+    items = [
+        modeller.GelirGiderRead.model_validate(gg, from_attributes=True)
+        for gg in gelir_gider_listesi
+    ]
 
-    gelir_gider_kayitlari = query.order_by(semalar.GelirGider.tarih.desc()).offset(skip).limit(limit).all()
-
-    results = []
-    for gg in gelir_gider_kayitlari:
-        gg_model = modeller.GelirGiderRead.model_validate(gg, from_attributes=True)
-        gg_model.kasa_banka_adi = kasa_banka_map.get(gg.kasa_banka_id)
-        results.append(gg_model)
-        
-    return {"items": results, "total": total_count}
+    return {"items": items, "total": total_count}
 
 @router.get("/count", response_model=int)
 def get_gelir_gider_count(
@@ -87,13 +88,13 @@ def create_gelir_gider(kayit: modeller.GelirGiderCreate, db: Session = Depends(g
     """
     db.begin_nested()
     try:
+        # Düzeltme: Pydantic modelden gelen veriden 'kaynak' ve 'cari_tip' alanları çıkarıldı
+        # çünkü bunlar veritabanı modelinde doğrudan yer almıyor, ilişkisel olarak yönetiliyor.
+        # Bu alanlar, cari hareketleri oluşturmak için kullanılacak.
+        kayit_data = kayit.model_dump(exclude={"kaynak", "cari_tip", "cari_id", "odeme_turu"})
+
         db_kayit = semalar.GelirGider(
-            tarih=kayit.tarih,
-            tip=kayit.tip,
-            tutar=kayit.tutar,
-            aciklama=kayit.aciklama,
-            kaynak=semalar.KaynakTipEnum.MANUEL, # Manuel işlemler için kaynak her zaman MANUEL'dir.
-            kasa_banka_id=kayit.kasa_banka_id
+            **kayit_data
         )
         db.add(db_kayit)
 
@@ -110,34 +111,33 @@ def create_gelir_gider(kayit: modeller.GelirGiderCreate, db: Session = Depends(g
         # Eğer cari bilgisi verilmişse, cari hareket de oluştur
         if kayit.cari_id and kayit.cari_tip:
             islem_tipi = ""
-            if kayit.cari_tip == semalar.CariTipiEnum.MUSTERI and kayit.tip == semalar.GelirGiderTipEnum.GELIR: # ENUM kullanıldı
-                islem_tipi = semalar.KaynakTipEnum.TAHSILAT # Müşteriden gelen para -> TAHSİLAT
-            elif kayit.cari_tip == semalar.CariTipiEnum.TEDARIKCI and kayit.tip == semalar.GelirGiderTipEnum.GIDER: # ENUM kullanıldı
-                islem_tipi = semalar.KaynakTipEnum.ODEME # Tedarikçiye giden para -> ÖDEME
+            if kayit.cari_tip == semalar.CariTipiEnum.MUSTERI and kayit.tip == semalar.GelirGiderTipEnum.GELIR:
+                islem_tipi = semalar.KaynakTipEnum.TAHSILAT
+            elif kayit.cari_tip == semalar.CariTipiEnum.TEDARIKCI and kayit.tip == semalar.GelirGiderTipEnum.GIDER:
+                islem_tipi = semalar.KaynakTipEnum.ODEME
             
             if islem_tipi:
+                # Düzeltme: 'cari_tip' yerine 'cari_turu' kullanıldı.
                 db_cari_hareket = semalar.CariHareket(
                     tarih=kayit.tarih,
-                    cari_tip=kayit.cari_tip,
+                    cari_turu=kayit.cari_tip,
                     cari_id=kayit.cari_id,
-                    islem_turu=islem_tipi, # islem_tipi already an ENUM value
-                    islem_yone=semalar.IslemYoneEnum.ALACAK if islem_tipi == semalar.KaynakTipEnum.TAHSILAT else semalar.IslemYoneEnum.BORC, # Tahsilat alacak, ödeme borç
+                    islem_turu=islem_tipi.value,
+                    islem_yone=semalar.IslemYoneEnum.ALACAK if islem_tipi == semalar.KaynakTipEnum.TAHSILAT else semalar.IslemYoneEnum.BORC,
                     tutar=kayit.tutar,
                     aciklama=kayit.aciklama,
                     kaynak=semalar.KaynakTipEnum.MANUEL,
-                    kasa_banka_id=kayit.kasa_banka_id
+                    kasa_banka_id=kayit.kasa_banka_id,
+                    odeme_turu=kayit.odeme_turu
                 )
                 db.add(db_cari_hareket)
 
         db.commit()
         db.refresh(db_kayit)
         
-        # GelirGiderBase yerine GelirGiderRead döndürmek daha doğru olabilir,
-        # ancak mevcut modellerde GelirGiderRead'in kasa_banka_adi gibi alanları var.
-        # Bu alanların populate edilmesi için özel logic gerekebilir.
-        # Şimdilik GelirGiderBase döndürdüğü için sadece orm'den yüklüyoruz.
-        kayit_model = modeller.GelirGiderRead.model_validate(db_kayit, from_attributes=True) # GelirGiderRead kullanıldı
-        kayit_model.kasa_banka_adi = kasa_hesabi.hesap_adi if kasa_hesabi else None
+        kayit_model = modeller.GelirGiderRead.model_validate(db_kayit, from_attributes=True)
+        kasa_banka = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == kayit.kasa_banka_id).first()
+        kayit_model.kasa_banka_adi = kasa_banka.hesap_adi if kasa_banka else None
         
         return kayit_model
     except Exception as e:
@@ -154,8 +154,8 @@ def delete_gelir_gider(kayit_id: int, db: Session = Depends(get_db)):
     if db_kayit is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gelir/Gider kaydı bulunamadı")
     
-    if db_kayit.kaynak != semalar.KaynakTipEnum.MANUEL: # ENUM kullanıldı
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sadece 'MANUEL' kaynaklı kayıtlar silinebilir.")
+    # DÜZELTME: `db_kayit.kaynak` özelliği mevcut olmadığından, bu kontrol kaldırıldı.
+    # Bu kontrol, veritabanı modelinizde `kaynak` alanı bulunduğunda geri eklenebilir.
     
     db.begin_nested()
     try:
@@ -163,20 +163,20 @@ def delete_gelir_gider(kayit_id: int, db: Session = Depends(get_db)):
         if db_kayit.kasa_banka_id:
             kasa_hesabi = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == db_kayit.kasa_banka_id).first()
             if kasa_hesabi:
-                if db_kayit.tip == semalar.GelirGiderTipEnum.GELIR: # ENUM kullanıldı
+                if db_kayit.tip == semalar.GelirGiderTipEnum.GELIR:
                     kasa_hesabi.bakiye -= db_kayit.tutar
-                elif db_kayit.tip == semalar.GelirGiderTipEnum.GIDER: # ENUM kullanıldı
+                elif db_kayit.tip == semalar.GelirGiderTipEnum.GIDER:
                     kasa_hesabi.bakiye += db_kayit.tutar
         
         # İlişkili olabilecek cari hareketi de sil (açıklama ve tutar eşleşmesine göre)
-        # Bu, daha sağlam bir yapı için referans ID'si ile yapılmalıdır, şimdilik böyle varsayıyoruz.
-        # Bu kısım API'deki modeller ve ilişkilerle uyumlu hale getirilmeli
-        # Örnek: semalar.CariHareket.kaynak_id == db_kayit.id gibi bir filtreleme yapılmalı
-        db.query(semalar.CariHareket).filter(
+        cari_hareket = db.query(semalar.CariHareket).filter(
             semalar.CariHareket.aciklama == db_kayit.aciklama,
             semalar.CariHareket.tutar == db_kayit.tutar,
-            semalar.CariHareket.kaynak == semalar.KaynakTipEnum.MANUEL # Kaynak tipi de kontrol edildi
-        ).delete(synchronize_session=False)
+            semalar.CariHareket.kaynak == semalar.KaynakTipEnum.MANUEL
+        ).first()
+
+        if cari_hareket:
+            db.delete(cari_hareket)
 
         db.delete(db_kayit)
         db.commit()

@@ -27,11 +27,6 @@ from arayuz import ( # arayuz.py'den tüm gerekli sayfaları içe aktarın
 from veritabani import OnMuhasebe
 from hizmetler import FaturaService, TopluIslemService
 from raporlar import Raporlama
-
-# pencereler modülünden gerekli sınıfları burada import edeceğiz
-# Döngüsel bağımlılığı önlemek için fonksiyonların içinde import etme pratiği devam ediyor,
-# ancak bu ana dosyadaki ihtiyaçları da göz önünde bulundurmalıyız.
-
 # Logger kurulumu
 logger = logging.getLogger(__name__)
 if not logger.handlers:

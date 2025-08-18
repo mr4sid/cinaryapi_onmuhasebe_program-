@@ -104,58 +104,51 @@ class OnMuhasebe:
         """
         url = f"{self.api_base_url}{path}"
         
-        # DEBUG: API isteğinin başlangıcını logla
-        print(f"DEBUG_MAKE_API_REQUEST: İstek Başladı - Metot: {method}, URL: {url}, Paramlar: {params}, JSON: {json}")
-
         try:
-            # method.upper() kullanıldı
             if method.upper() == "GET":
                 response = requests.get(url, params=params)
             elif method.upper() == "POST":
-                response = requests.post(url, json=json) # 'json' parametresi buraya iletildi
+                response = requests.post(url, json=json)
             elif method.upper() == "PUT":
-                response = requests.put(url, json=json)   # 'json' parametresi buraya iletildi
+                response = requests.put(url, json=json)
             elif method.upper() == "DELETE":
-                response = requests.delete(url, params=params) # DELETE için params da olabilir
+                response = requests.delete(url, params=params)
             else:
                 raise ValueError(f"Desteklenmeyen HTTP metodu: {method}")
 
-            response.raise_for_status() # HTTP 4xx veya 5xx durumları için hata fırlatır
+            response.raise_for_status()
 
-            # Yanıt boş değilse JSON'a çevir
             if response.text:
                 response_json = response.json()
-                # DEBUG: Başarılı API yanıtını logla
-                print(f"DEBUG_MAKE_API_REQUEST: İstek Başarılı - URL: {url}, Durum Kodu: {response.status_code}, Yanıt Uzunluğu: {len(str(response_json))}")
                 return response_json
             
-            # DEBUG: Boş başarılı yanıtı logla
-            print(f"DEBUG_MAKE_API_REQUEST: İstek Başarılı (Boş Yanıt) - URL: {url}, Durum Kodu: {response.status_code}")
-            return {} # Boş yanıtlar için boş sözlük döndür
+            return {}
 
         except requests.exceptions.RequestException as e:
             error_detail = str(e)
             if e.response is not None:
                 try:
                     error_detail = e.response.json().get('detail', error_detail)
-                except ValueError: # JSON decode hatası
+                except ValueError:
                     error_detail = f"API'den beklenen JSON yanıtı alınamadı. Yanıt: {e.response.text[:200]}..."
             
-            # DEBUG: API isteği hatasını logla
-            print(f"DEBUG_MAKE_API_REQUEST: İstek Hatası - URL: {url}, Hata: {error_detail}")
+            # 404 (Not Found) hatası için özel işlem
+            if e.response and e.response.status_code == 404:
+                # Bu durumun bekleniyor olabileceğini varsayarak daha düşük seviyede logla
+                logger.warning(f"API isteği sırasında 404 hatası oluştu. Kaynak bulunamadı: {url}. Detay: {error_detail}")
+                # ValueError fırlatmak yerine, boş bir yanıt dönebiliriz.
+                # Ancak `siparis_kalemleri_al` metodu bu hatayı yakaladığı için burada bir ValueError fırlatmak daha tutarlıdır.
+                raise ValueError(f"Kaynak bulunamadı: {error_detail}") from e
+            
             logger.error(f"API isteği sırasında genel hata oluştu: {url}. Hata: {error_detail}", exc_info=True)
             raise ValueError(f"API isteği sırasında bir hata oluştu: {error_detail}") from e
         except ValueError as e:
-            # Desteklenmeyen metod hatası veya JSON decode hatası
-            print(f"DEBUG_MAKE_API_REQUEST: Value Hata - Hata: {e}")
             logger.error(f"API isteği sırasında bir değer hatası oluştu: {e}", exc_info=True)
             raise e
         except Exception as e:
-            # DEBUG: Beklenmeyen API isteği hatasını logla
-            print(f"DEBUG_MAKE_API_REQUEST: Beklenmeyen Hata - URL: {url}, Hata: {e}")
             logger.error(f"API isteği sırasında beklenmeyen bir hata oluştu: {url}. Hata: {e}", exc_info=True)
             raise ValueError(f"API isteği sırasında beklenmeyen bir hata oluştu: {e}") from e
-            
+                
     # --- ŞİRKET BİLGİLERİ ---
     def sirket_bilgilerini_yukle(self):
         try:
@@ -417,6 +410,12 @@ class OnMuhasebe:
             logger.error(f"Stok eklenirken beklenmeyen hata: {e}", exc_info=True)
             return False, f"Ürün eklenirken beklenmeyen bir hata oluştu: {e}"
 
+    def stok_ozet_al(self):
+        """
+        API'den tüm stokların özet bilgilerini çeker.
+        """
+        return self._make_api_request("GET", "/stoklar/ozet")
+
     def bulk_stok_upsert(self, stok_listesi: List[Dict[str, Any]]):
         """
         Stok verilerini toplu olarak API'ye gönderir.
@@ -440,34 +439,26 @@ class OnMuhasebe:
             logger.error(f"Toplu stok ekleme/güncelleme sırasında beklenmedik hata: {e}", exc_info=True)
             raise
 
-    def stok_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, 
-                             kategori_id: int = None, marka_id: int = None, urun_grubu_id: int = None, 
-                             stok_durumu: str = None, kritik_stok_altinda: bool = None, aktif_durum: bool = None):
+    def stok_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None,
+                        aktif_durum: Optional[bool] = None, kritik_stok_altinda: Optional[bool] = None,
+                        kategori_id: Optional[int] = None, marka_id: Optional[int] = None,
+                        urun_grubu_id: Optional[int] = None, stokta_var: Optional[bool] = None):
+        """
+        API'den stok listesini çeker.
+        """
         params = {
             "skip": skip,
             "limit": limit,
             "arama": arama,
+            "aktif_durum": aktif_durum,
+            "kritik_stok_altinda": kritik_stok_altinda,
             "kategori_id": kategori_id,
             "marka_id": marka_id,
             "urun_grubu_id": urun_grubu_id,
-            "stok_durumu": stok_durumu,
-            "kritik_stok_altinda": kritik_stok_altinda,
-            "aktif_durum": aktif_durum
+            "stokta_var": stokta_var
         }
-        # None olan veya boş string olan parametreleri temizle (API'ye sadece geçerli filtreleri gönder)
-        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
-
-        # DEBUG: İstemci tarafından API çağrısını logla
-        print(f"DEBUG_CLIENT: stok_listesi_al API çağrısı yapılıyor. Params: {cleaned_params}")
-
-        try:
-            response = self._make_api_request("GET", "/stoklar/", params=cleaned_params)
-            # DEBUG: İstemciye dönen API yanıtını logla
-            print(f"DEBUG_CLIENT: stok_listesi_al API yanıtı alındı. Uzunluk: {len(response.get('items', []))}, Toplam: {response.get('total', 0)}")
-            return response
-        except Exception as e:
-            logger.error(f"Stok listesi alınırken hata: {e}", exc_info=True)
-            raise # Hatayı yukarı fırlat
+        cleaned_params = {k: v for k, v in params.items() if v is not None}
+        return self._make_api_request("GET", "/stoklar/", params=cleaned_params)
 
     def stok_hareketleri_listele(self, stok_id: int, islem_tipi: str = None, baslangic_tarih: str = None, bitis_tarihi: str = None):
         """
@@ -597,12 +588,14 @@ class OnMuhasebe:
             return 0.0
 
     # --- FATURALAR ---
-    def fatura_ekle(self, data: dict):
+    def fatura_ekle(self, fatura_data: Dict[str, Any]):
+        """
+        API'ye yeni fatura ekleme isteği gönderir.
+        """
         try:
-            return self._make_api_request("POST", "/faturalar/", json=data)
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Fatura eklenirken hata: {e}")
-            raise
+            return self._make_api_request("POST", "/faturalar/", json=fatura_data)
+        except Exception as e:
+            raise ValueError(f"API'den hata: {e}")
 
     def fatura_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, fatura_turu: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, cari_id: int = None, odeme_turu: str = None, kasa_banka_id: int = None):
         """Filtrelere göre fatura listesini API'den çeker."""
@@ -716,12 +709,30 @@ class OnMuhasebe:
     def siparis_kalemleri_al(self, siparis_id: int):
         try:
             return self._make_api_request("GET", f"/siparisler/{siparis_id}/kalemler")
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Sipariş ID {siparis_id} kalemleri çekilirken hata: {e}")
+        except ValueError as e:
+            # Hata mesajında "Kaynak bulunamadı" ifadesi geçiyorsa, bu beklenen bir durumdur.
+            # Bu mesaj, API'deki HttpException'dan geliyor.
+            if "bulunamadı" in str(e):
+                logger.warning(f"Sipariş ID {siparis_id} için sipariş kalemi bulunamadı.")
+                return [] # Boş liste dönerek akışı devam ettir.
+            else:
+                # Diğer hatalar için hatayı yeniden fırlat.
+                logger.error(f"Sipariş ID {siparis_id} kalemleri çekilirken beklenmeyen bir hata oluştu: {e}", exc_info=True)
+                return []
+        except Exception as e:
+            logger.error(f"Sipariş ID {siparis_id} kalemleri çekilirken beklenmeyen bir hata oluştu: {e}", exc_info=True)
             return []
 
-    def get_next_siparis_kodu(self): # API'den otomatik atandığı varsayıldı
-        return "OTOMATIK"
+    def get_next_siparis_kodu(self):
+        """
+        API'den bir sonraki sipariş kodunu alır.
+        """
+        try:
+            response_data = self._make_api_request("GET", "/sistem/next_siparis_kodu")
+            return response_data.get("next_code", "OTOMATIK")
+        except Exception as e:
+            logger.error(f"Bir sonraki sipariş kodu API'den alınamadı: {e}")
+            return "OTOMATIK"
 
     # --- GELİR/GİDER ---
     def gelir_gider_ekle(self, data: dict):
@@ -732,23 +743,22 @@ class OnMuhasebe:
             logger.error(f"Gelir/Gider eklenirken hata: {e}")
             return False, f"Gelir/Gider eklenirken hata: {e}"
 
-    def gelir_gider_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, tip_filtre: str = None, odeme_turu: str = None, kategori: str = None, cari_ad: str = None):
+    def gelir_gider_listesi_al(self, skip: int = 0, limit: int = 20, tip_filtre: str = None,
+                               baslangic_tarihi: str = None, bitis_tarihi: str = None,
+                               aciklama_filtre: str = None):
+        """
+        API'den gelir/gider listesini filtreleyerek çeker.
+        """
         params = {
             "skip": skip,
             "limit": limit,
-            "aciklama_filtre": arama,
+            "tip_filtre": tip_filtre,
             "baslangic_tarihi": baslangic_tarihi,
             "bitis_tarihi": bitis_tarihi,
-            "tip_filtre": tip_filtre,
+            "aciklama_filtre": aciklama_filtre
         }
-        # None olan veya boş string olan parametreleri temizle (API'ye sadece geçerli filtreleri gönder)
-        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
-
-        try:
-            return self._make_api_request("GET", "/gelir_gider/", params=cleaned_params)
-        except Exception as e:
-            logger.error(f"Gelir/Gider listesi alınırken hata: {e}")
-            raise # Hatayı yukarı fırlat
+        cleaned_params = {k: v for k, v in params.items() if v is not None}
+        return self._make_api_request("GET", "/gelir_gider/", params=cleaned_params)
 
     def gelir_gider_sil(self, gg_id: int):
         try:
@@ -797,7 +807,7 @@ class OnMuhasebe:
             logger.error(f"Cari hesap ekstresi API'den alınamadı: {e}")
             return [], 0.0, False, f"Ekstre alınırken hata: {e}"
         
-    def cari_hareketleri_listele(self, cari_id: int = None, baslangic_tarihi: Optional[str] = None, bitis_tarihi: Optional[str] = None, limit: int = 20, skip: int = 0):
+    def cari_hareketleri_listele(self, cari_id: int = None, islem_turu: str = None, baslangic_tarihi: Optional[str] = None, bitis_tarihi: Optional[str] = None, limit: int = 20, skip: int = 0):
         """
         API'den cari hareketleri listeler.
         Belirli bir cari_id verilirse, o cariye ait hareketleri filtreler.
@@ -808,7 +818,8 @@ class OnMuhasebe:
             "skip": skip,
             "limit": limit,
             "baslangic_tarihi": baslangic_tarihi,
-            "bitis_tarihi": bitis_tarihi
+            "bitis_tarihi": bitis_tarihi,
+            "islem_turu": islem_turu  # Yeni eklenen parametre
         }
         if cari_id is not None:
             params["cari_id"] = cari_id
@@ -862,12 +873,11 @@ class OnMuhasebe:
     def kategori_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
         try:
             response = self._make_api_request("GET", "/nitelikler/kategoriler", params={"skip": skip, "limit": limit})
-            # API'nin her zaman {"items": [], "total": 0} dönmesi beklenir
             if isinstance(response, dict) and "items" in response:
                 return response
-            elif isinstance(response, list): # Eğer API doğrudan bir liste döndürüyorsa
+            elif isinstance(response, list):
                 return {"items": response, "total": len(response)}
-            else: # Beklenmedik bir durumsa
+            else:
                 logger.warning(f"kategori_listele: API'den beklenmedik yanıt formatı. Yanıt: {response}")
                 return {"items": [], "total": 0}
         except (ValueError, ConnectionError, Exception) as e:
@@ -891,13 +901,11 @@ class OnMuhasebe:
     def urun_grubu_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
         try:
             response = self._make_api_request("GET", "/nitelikler/urun_gruplari", params={"skip": skip, "limit": limit})
-            # API'den gelen yanıtın doğrudan bir liste veya uygun bir sözlük olabileceğini varsayarak
-            # her zaman {"items": [], "total": 0} formatını sağlamak için kontrol ekliyoruz.
             if isinstance(response, dict) and "items" in response:
                 return response
-            elif isinstance(response, list): # Eğer API doğrudan bir liste döndürüyorsa
+            elif isinstance(response, list):
                 return {"items": response, "total": len(response)}
-            else: # Beklenmedik bir durumsa
+            else:
                 logger.warning(f"urun_grubu_listele: API'den beklenmedik yanıt formatı. Yanıt: {response}")
                 return {"items": [], "total": 0}
         except (ValueError, ConnectionError, Exception) as e:
@@ -932,33 +940,21 @@ class OnMuhasebe:
             logger.error(f"Ülke listesi API'den alınamadı: {e}")
             return {"items": [], "total": 0}
 
-    def gelir_siniflandirma_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
-        try:
-            response = self._make_api_request("GET", "/nitelikler/gelir_siniflandirmalari", params={"skip": skip, "limit": limit})
-            if isinstance(response, dict) and "items" in response:
-                return response
-            elif isinstance(response, list):
-                return {"items": response, "total": len(response)}
-            else:
-                logger.warning(f"gelir_siniflandirma_listele: API'den beklenmedik yanıt formatı. Yanıt: {response}")
-                return {"items": [], "total": 0}
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Gelir sınıflandırma listesi API'den alınamadı: {e}")
-            return {"items": [], "total": 0}
+    def gelir_siniflandirma_listele(self, skip: int = 0, limit: int = 1000, id: int = None):
+        """
+        API'den gelir sınıflandırma listesini çeker.
+        """
+        params = {"skip": skip, "limit": limit, "id": id}
+        cleaned_params = {k: v for k, v in params.items() if v is not None}
+        return self._make_api_request("GET", "/nitelikler/gelir_siniflandirmalari", params=cleaned_params)
 
-    def gider_siniflandirma_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
-        try:
-            response = self._make_api_request("GET", "/nitelikler/gider_siniflandirmalari", params={"skip": skip, "limit": limit})
-            if isinstance(response, dict) and "items" in response:
-                return response
-            elif isinstance(response, list):
-                return {"items": response, "total": len(response)}
-            else:
-                logger.warning(f"gider_siniflandirma_listele: API'den beklenmedik yanıt formatı. Yanıt: {response}")
-                return {"items": [], "total": 0}
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Gider sınıflandırma listesi API'den alınamadı: {e}")
-            return {"items": [], "total": 0}
+    def gider_siniflandirma_listele(self, skip: int = 0, limit: int = 1000, id: int = None):
+        """
+        API'den gider sınıflandırma listesini çeker.
+        """
+        params = {"skip": skip, "limit": limit, "id": id}
+        cleaned_params = {k: v for k, v in params.items() if v is not None}
+        return self._make_api_request("GET", "/nitelikler/gider_siniflandirmalari", params=cleaned_params)
     
     # --- RAPORLAR ---
     def get_dashboard_summary(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
@@ -1169,7 +1165,16 @@ class OnMuhasebe:
         try:
             if isinstance(value, (int, float)):
                 return float(value)
-            return float(str(value).replace(',', '.'))
+            
+            # DÜZELTME: Önce binlik ayıracını kaldır, sonra ondalık ayıracını noktaya çevir
+            cleaned_value = str(value).strip()
+            if cleaned_value:
+                # Binlik ayıracını kaldır (örn. 10.000 -> 10000)
+                cleaned_value = cleaned_value.replace(".", "")
+                # Ondalık ayıracını noktaya çevir (örn. 10000,00 -> 10000.00)
+                cleaned_value = cleaned_value.replace(",", ".")
+            
+            return float(cleaned_value)
         except (ValueError, TypeError):
             return 0.0
         
