@@ -21,8 +21,8 @@ from arayuz import ( # arayuz.py'den tüm gerekli sayfaları içe aktarın
     KasaBankaYonetimiSayfasi, FinansalIslemlerSayfasi,
     FaturaListesiSayfasi, SiparisListesiSayfasi,
     GelirGiderSayfasi, RaporlamaMerkeziSayfasi,
-    TedarikciYonetimiSayfasi, # Bu sınıf arayuz.py'de mevcut
-    UrunNitelikYonetimiSekmesi # Nitelik yönetimi için doğru sınıf
+    TedarikciYonetimiSayfasi,
+    UrunNitelikYonetimiSekmesi
 )
 from veritabani import OnMuhasebe
 from hizmetler import FaturaService, TopluIslemService

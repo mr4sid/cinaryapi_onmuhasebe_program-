@@ -321,7 +321,8 @@ class FaturaBase(BaseOrmModel):
 
 class FaturaCreate(FaturaBase):
     kalemler: List[FaturaKalemiCreate] = []
-    original_fatura_id: Optional[int] = None # İade faturaları için
+    original_fatura_id: Optional[int] = None 
+    olusturan_kullanici_id: int 
 
 class FaturaUpdate(FaturaBase):
     fatura_no: Optional[str] = None

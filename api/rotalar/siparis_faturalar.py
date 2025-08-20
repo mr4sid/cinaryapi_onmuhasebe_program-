@@ -192,7 +192,8 @@ def convert_siparis_to_fatura(
         kasa_banka_id=fatura_donusum.kasa_banka_id,
         fatura_notlari=f"Sipariş No: {db_siparis.siparis_no} üzerinden oluşturuldu.",
         genel_iskonto_tipi=db_siparis.genel_iskonto_tipi,
-        genel_iskonto_degeri=db_siparis.genel_iskonto_degeri
+        genel_iskonto_degeri=db_siparis.genel_iskonto_degeri,
+        olusturan_kullanici_id=fatura_donusum.olusturan_kullanici_id # <--- Bu satır eklendi
     )
     db.add(db_fatura)
     db.flush()
@@ -264,9 +265,9 @@ def convert_siparis_to_fatura(
             )
             db.add(db_stok_hareket)
 
-    if db_fatura.genel_iskonto_tipi == semalar.modeller.GenelIskontoTipiEnum.YUZDE and db_fatura.genel_iskonto_degeri > 0:
+    if db_fatura.genel_iskonto_tipi == "YUZDE" and db_fatura.genel_iskonto_degeri > 0:
         uygulanan_genel_iskonto_tutari = toplam_kdv_haric_temp * (db_fatura.genel_iskonto_degeri / 100)
-    elif db_fatura.genel_iskonto_tipi == semalar.modeller.GenelIskontoTipiEnum.TUTAR and db_fatura.genel_iskonto_degeri > 0:
+    elif db_fatura.genel_iskonto_tipi == "TUTAR" and db_fatura.genel_iskonto_degeri > 0:
         uygulanan_genel_iskonto_tutari = db_fatura.genel_iskonto_degeri
     else:
         uygulanan_genel_iskonto_tutari = 0.0
@@ -297,10 +298,10 @@ def convert_siparis_to_fatura(
                 cari_id=db_fatura.cari_id,
                 cari_turu=cari_turu,
                 tarih=db_fatura.tarih,
-                islem_turu=semalar.KaynakTipEnum.FATURA.value,
+                islem_turu=db_fatura.fatura_turu.value,
                 islem_yone=islem_yone_cari,
                 tutar=db_fatura.genel_toplam,
-                aciklama=f"{db_fatura.fatura_no} nolu fatura ({fatura_turu_olustur.value})",
+                aciklama=f"{db_fatura.fatura_no} nolu fatura ({db_fatura.fatura_turu.value})",
                 kaynak=semalar.KaynakTipEnum.FATURA,
                 kaynak_id=db_fatura.id,
                 odeme_turu=db_fatura.odeme_turu,
@@ -875,15 +876,16 @@ def delete_fatura(fatura_id: int, db: Session = Depends(get_db)):
         for hareket in stok_hareketleri:
             stok = db.query(semalar.Stok).filter(semalar.Stok.id == hareket.stok_id).first()
             if stok:
-                if db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIŞ:
+                # DÜZELTME: Enum değerlerinin string karşılıkları ile karşılaştırıldı
+                if db_fatura.fatura_turu.value == semalar.FaturaTuruEnum.SATIS.value:
                     stok.miktar += hareket.miktar
-                elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS:
+                elif db_fatura.fatura_turu.value == semalar.FaturaTuruEnum.ALIS.value:
                     stok.miktar -= hareket.miktar
-                elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS_IADE:
+                elif db_fatura.fatura_turu.value == semalar.FaturaTuruEnum.SATIS_IADE.value:
                     stok.miktar -= hareket.miktar
-                elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS_IADE:
+                elif db_fatura.fatura_turu.value == semalar.FaturaTuruEnum.ALIS_IADE.value:
                     stok.miktar += hareket.miktar
-                elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.DEVIR_GIRIS:
+                elif db_fatura.fatura_turu.value == semalar.FaturaTuruEnum.DEVIR_GIRIS.value:
                     stok.miktar -= hareket.miktar
                 db.add(stok)
             db.delete(hareket)
@@ -906,9 +908,9 @@ def delete_fatura(fatura_id: int, db: Session = Depends(get_db)):
         for hareket in kasa_banka_hareketleri:
             kasa_banka = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == hareket.kasa_banka_id).first()
             if kasa_banka:
-                if hareket.islem_yone == semalar.IslemYoneEnum.GIRIS:
+                if hareket.islem_yone.value == semalar.IslemYoneEnum.GIRIS.value:
                     kasa_banka.bakiye -= hareket.tutar
-                elif hareket.islem_yone == semalar.IslemYoneEnum.CIKIS:
+                elif hareket.islem_yone.value == semalar.IslemYoneEnum.CIKIS.value:
                     kasa_banka.bakiye += hareket.tutar
                 db.add(kasa_banka)
             db.delete(hareket)

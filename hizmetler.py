@@ -22,7 +22,7 @@ class FaturaService:
         logger.info("FaturaService başlatıldı.")
 
     def fatura_olustur(self, fatura_no, tarih, fatura_tipi, cari_id, kalemler_data, odeme_turu,
-                       kasa_banka_id=None, misafir_adi=None, fatura_notlari=None, vade_tarihi=None,
+                       olusturan_kullanici_id, kasa_banka_id=None, misafir_adi=None, fatura_notlari=None, vade_tarihi=None,
                        genel_iskonto_tipi=None, genel_iskonto_degeri=None, original_fatura_id=None):
         """
         Yeni bir fatura kaydı ve ilişkili kalemlerini API'ye gönderir.
@@ -32,6 +32,7 @@ class FaturaService:
             "tarih": tarih,
             "fatura_turu": fatura_tipi,
             "cari_id": cari_id,
+            "kalemler": kalemler_data,
             "odeme_turu": odeme_turu,
             "kasa_banka_id": kasa_banka_id,
             "misafir_adi": misafir_adi,
@@ -39,19 +40,32 @@ class FaturaService:
             "vade_tarihi": vade_tarihi,
             "genel_iskonto_tipi": genel_iskonto_tipi,
             "genel_iskonto_degeri": genel_iskonto_degeri,
-            "orijinal_fatura_id": original_fatura_id, # İade faturaları için
-            "kalemler": kalemler_data
+            "original_fatura_id": original_fatura_id,
+            "olusturan_kullanici_id": olusturan_kullanici_id
         }
+
         try:
-            # db_manager'daki _make_api_request metodu zaten hataları yükseltiyor.
-            # Burada sadece başarıyı ve mesajı döneceğiz.
-            response_data = self.db.fatura_ekle(fatura_data) # db.fatura_ekle'yi çağır
-            return True, response_data.get("message", "Fatura başarıyla kaydedildi.")
+            fatura_response = self.db._make_api_request("POST", "/faturalar/", json=fatura_data)
+            
+            # API'den dönen yanıtın bir sözlük olduğunu ve 'id' anahtarını içerdiğini kontrol et
+            if isinstance(fatura_response, dict) and "id" in fatura_response:
+                fatura_id = fatura_response.get("id")
+                return True, f"Fatura '{fatura_no}' başarıyla oluşturuldu. ID: {fatura_id}"
+            else:
+                # Başarılı bir yanıt alınamamışsa veya formatı yanlışsa
+                message = fatura_response.get("detail", "Fatura oluşturma isteği başarısız oldu. API'den beklenmeyen yanıt formatı.")
+                logger.error(f"Fatura oluşturma hatası: {message}. Tam yanıt: {fatura_response}")
+                return False, message
+        
         except ValueError as e:
-            logger.error(f"Fatura oluşturulurken API hatası: {e}")
-            return False, f"Fatura oluşturulamadı: {e}"
+            # _make_api_request metodundan gelen hataları yakala
+            message = str(e)
+            logger.error(f"Fatura oluşturma sırasında API hatası: {message}")
+            return False, f"Fatura oluşturulurken API hatası: {message}"
+
         except Exception as e:
-            logger.error(f"Fatura oluşturulurken beklenmeyen bir hata oluştu: {e}")
+            # Diğer tüm beklenmedik hataları yakala
+            logger.error(f"Fatura oluşturma sırasında beklenmeyen hata: {e}", exc_info=True)
             return False, f"Fatura oluşturulurken beklenmeyen bir hata oluştu: {e}"
 
     def fatura_guncelle(self, fatura_id, fatura_no, tarih, cari_id, odeme_turu, kalemler_data,

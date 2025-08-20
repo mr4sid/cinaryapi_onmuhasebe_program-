@@ -1321,7 +1321,7 @@ class FaturaDetayPenceresi(QDialog):
         
         try:
             kullanicilar_list = self.db.kullanici_listele()
-            kullanicilar_map = {k.get('id'): k.get('kullanici_adi') for k in kullanicilar_list}
+            kullanicilar_map = {k.get('id'): k.get('kullanici_adi') for k in kullanicilar_list.get('items', [])}
         except Exception as e:
             logger.error(f"Kullanıcı listesi API'den alınamadı: {e}")
             kullanicilar_map = {}
@@ -1345,93 +1345,123 @@ class FaturaDetayPenceresi(QDialog):
                     cari_adi_text = f"{cari_bilgi_db.get('ad')} (Kod: {cari_bilgi_db.get('kod')})"
 
         # --- Arayüz Oluşturma ---
-        font_label = QFont("Segoe UI", 9, QFont.Bold)
-        font_value = QFont("Segoe UI", 10)
-        font_header = QFont("Segoe UI", 11, QFont.Bold)
-        font_groupbox = QFont("Segoe UI", 10, QFont.Bold)
+        # Tutarlı yazı tipleri tanımlandı.
+        font_label = QFont("Segoe UI", 14, QFont.Bold)
+        font_value = QFont("Segoe UI", 13)
+        font_header = QFont("Segoe UI", 14, QFont.Bold)
+        font_groupbox = QFont("Segoe UI", 13, QFont.Bold)
         
         # Ana yatay layout: Üst bilgiler ve toplamlar bir arada
         self.ust_bilgiler_frame = QFrame(self)
         self.ust_bilgiler_layout = QHBoxLayout(self.ust_bilgiler_frame)
-        self.ust_bilgiler_layout.setContentsMargins(0, 0, 0, 0)
+        self.ust_bilgiler_layout.setContentsMargins(10, 10, 10, 10)
         self.ust_bilgiler_layout.setSpacing(15)
         self.main_layout.addWidget(self.ust_bilgiler_frame)
 
-        # Sol Panel: Fatura ve Cari Bilgileri
-        self.sol_panel_frame = QFrame(self.ust_bilgiler_frame)
-        self.sol_panel_layout = QGridLayout(self.sol_panel_frame)
-        self.sol_panel_layout.setContentsMargins(0, 0, 0, 0)
-        self.sol_panel_layout.setSpacing(5)
+        # Üç ana panel için çerçeveler oluşturuldu
+        self.sol_panel_frame = QGroupBox("Fatura Bilgileri", self.ust_bilgiler_frame)
+        self.orta_panel_frame = QGroupBox("Finansal Bilgiler", self.ust_bilgiler_frame)
+        self.sag_panel_frame = QGroupBox("Finansal Özet", self.ust_bilgiler_frame)
+        
         self.ust_bilgiler_layout.addWidget(self.sol_panel_frame)
+        self.ust_bilgiler_layout.addWidget(self.orta_panel_frame)
+        self.ust_bilgiler_layout.addWidget(self.sag_panel_frame)
+
+        # --- Sol Panel (Fatura Bilgileri) ---
+        sol_layout = QGridLayout(self.sol_panel_frame)
+        sol_layout.setContentsMargins(10, 15, 10, 10)
+        sol_layout.setSpacing(5)
 
         try: fatura_tarihi_formatted = datetime.strptime(str(tarih_db), '%Y-%m-%d').strftime('%d.%m.%Y')
         except: fatura_tarihi_formatted = str(tarih_db)
         
-        self.sol_panel_layout.addWidget(QLabel("Fatura No:", font=font_label), 0, 0)
-        self.sol_panel_layout.addWidget(QLabel(self.f_no, font=font_value), 0, 1)
-        self.sol_panel_layout.addWidget(QLabel("Tarih:", font=font_label), 0, 2)
-        self.sol_panel_layout.addWidget(QLabel(fatura_tarihi_formatted, font=font_value), 0, 3)
+        sol_layout.addWidget(QLabel("Fatura No:", font=font_label), 0, 0)
+        sol_layout.addWidget(QLabel(self.f_no, font=font_value), 0, 1)
+
+        sol_layout.addWidget(QLabel("Tarih:", font=font_label), 1, 0)
+        sol_layout.addWidget(QLabel(fatura_tarihi_formatted, font=font_value), 1, 1)
 
         cari_label_tipi = "Müşteri/Misafir:" if self.fatura_ana.get('fatura_turu') == self.db.FATURA_TIP_SATIS else "Tedarikçi:"
-        self.sol_panel_layout.addWidget(QLabel(cari_label_tipi, font=font_label), 1, 0)
-        self.sol_panel_layout.addWidget(QLabel(cari_adi_text, font=font_value), 1, 1, 1, 3)
+        sol_layout.addWidget(QLabel(cari_label_tipi, font=font_label), 2, 0)
+        sol_layout.addWidget(QLabel(cari_adi_text, font=font_value), 2, 1)
+
+        sol_layout.addWidget(QLabel("Oluşturan:", font=font_label), 3, 0)
+        sol_layout.addWidget(QLabel(olusturan_adi, font=font_value), 3, 1)
+        
+        sol_layout.addWidget(QLabel("Fatura Notları:", font=font_label), 4, 0, Qt.AlignTop)
+        fatura_notlari_display = QTextEdit(); fatura_notlari_display.setPlainText(fatura_notlari_db if fatura_notlari_db else ""); fatura_notlari_display.setReadOnly(True); fatura_notlari_display.setFixedHeight(60); fatura_notlari_display.setFont(font_value)
+        sol_layout.addWidget(fatura_notlari_display, 4, 1)
+
+        sol_layout.setColumnStretch(1, 1)
+        
+        # --- Orta Panel (Finansal Bilgiler) ---
+        orta_layout = QGridLayout(self.orta_panel_frame)
+        orta_layout.setContentsMargins(10, 15, 10, 10)
+        orta_layout.setSpacing(5)
+
+        orta_layout.addWidget(QLabel("Ödeme Türü:", font=font_label), 0, 0)
+        orta_layout.addWidget(QLabel(odeme_turu_db, font=font_value), 0, 1)
 
         if kasa_banka_id_db:
             try:
                 kb_bilgi = self.db.kasa_banka_getir_by_id(kasa_banka_id_db)
                 if kb_bilgi:
-                    self.sol_panel_layout.addWidget(QLabel("Kasa/Banka:", font=font_label), 2, 0)
-                    self.sol_panel_layout.addWidget(QLabel(kb_bilgi.get('hesap_adi', '-'), font=font_value), 2, 1)
-            except Exception as e:
-                logging.error(f"Kasa/Banka bilgisi çekilirken hata: {e}")
-        
-        if odeme_turu_db == self.db.ODEME_TURU_ACIK_HESAP and vade_tarihi_db:
-            self.sol_panel_layout.addWidget(QLabel("Vade Tarihi:", font=font_label), 2, 2)
-            self.sol_panel_layout.addWidget(QLabel(str(vade_tarihi_db), font=font_value), 2, 3)
-        
+                    orta_layout.addWidget(QLabel("Kasa/Banka:", font=font_label), 1, 0)
+                    orta_layout.addWidget(QLabel(kb_bilgi.get('hesap_adi', '-'), font=font_value), 1, 1)
+            except Exception as e: logging.error(f"Kasa/Banka bilgisi çekilirken hata: {e}")
+
         genel_iskonto_gosterim_text = "Uygulanmadı"
         if genel_iskonto_tipi_db == 'YUZDE' and genel_iskonto_degeri_db is not None and genel_iskonto_degeri_db > 0:
             genel_iskonto_gosterim_text = f"Yüzde %{genel_iskonto_degeri_db:.2f}".replace('.', ',').rstrip('0').rstrip(',')
         elif genel_iskonto_tipi_db == 'TUTAR' and genel_iskonto_degeri_db is not None and genel_iskonto_degeri_db > 0:
             genel_iskonto_gosterim_text = self.db._format_currency(genel_iskonto_degeri_db)
         
-        self.sol_panel_layout.addWidget(QLabel("Genel İsk:", font=font_label), 3, 0)
-        self.sol_panel_layout.addWidget(QLabel(genel_iskonto_gosterim_text, font=font_value), 3, 1)
+        orta_layout.addWidget(QLabel("Genel İskonto:", font=font_label), 2, 0)
+        orta_layout.addWidget(QLabel(genel_iskonto_gosterim_text, font=font_value), 2, 1)
+        
+        olusturma_tarihi_formatted = datetime.fromisoformat(str(olusturma_tarihi_saat)).strftime('%d.%m.%Y %H:%M:%S') if olusturma_tarihi_saat else "-"
+        orta_layout.addWidget(QLabel("Oluşturma Tarih/Saat:", font=font_label), 3, 0)
+        orta_layout.addWidget(QLabel(olusturma_tarihi_formatted, font=font_value), 3, 1)
+        
+        if odeme_turu_db == self.db.ODEME_TURU_ACIK_HESAP and vade_tarihi_db:
+            orta_layout.addWidget(QLabel("Vade Tarihi:", font=font_label), 4, 0)
+            orta_layout.addWidget(QLabel(str(vade_tarihi_db), font=font_value), 4, 1)
 
-        # Sağ Panel: Toplam Bilgileri
-        self.sag_panel_frame = QFrame(self.ust_bilgiler_frame)
-        self.sag_panel_layout = QGridLayout(self.sag_panel_frame)
-        self.sag_panel_layout.setContentsMargins(0, 0, 0, 0)
-        self.sag_panel_layout.setSpacing(5)
-        self.ust_bilgiler_layout.addWidget(self.sag_panel_frame)
-        self.ust_bilgiler_layout.setStretch(1, 1) # Sağ panelin yatayda daha çok esnemesi için
+        orta_layout.setColumnStretch(1, 1)
 
+        # --- Sağ Panel (Finansal Özet) ---
+        sag_layout = QGridLayout(self.sag_panel_frame)
+        sag_layout.setContentsMargins(10, 15, 10, 10)
+        sag_layout.setSpacing(5)
+        
         toplam_kdv_hesaplanan_detay = toplam_kdv_dahil_fatura_ana_db - toplam_kdv_haric_fatura_ana_db
         toplam_kdv_dahil_kalemler_genel_iskonto_oncesi = sum(self.db.safe_float(k.get('kalem_toplam_kdv_dahil')) for k in self.fatura_kalemleri_db if isinstance(k, dict))
         gercek_uygulanan_genel_iskonto = self.db.safe_float(toplam_kdv_dahil_kalemler_genel_iskonto_oncesi) - self.db.safe_float(toplam_kdv_dahil_fatura_ana_db)
         if gercek_uygulanan_genel_iskonto < 0: gercek_uygulanan_genel_iskonto = 0.0
 
-        self.sag_panel_layout.addWidget(QLabel("Toplam KDV Hariç:", font=font_label), 0, 0, Qt.AlignCenter)
+        sag_layout.addWidget(QLabel("Toplam KDV Hariç:", font=font_label), 0, 0)
         self.tkh_l = QLabel(self.db._format_currency(toplam_kdv_haric_fatura_ana_db), font=font_value)
-        self.sag_panel_layout.addWidget(self.tkh_l, 0, 1, Qt.AlignCenter)
+        sag_layout.addWidget(self.tkh_l, 0, 1)
         
-        self.sag_panel_layout.addWidget(QLabel("Toplam KDV:", font=font_label), 1, 0, Qt.AlignCenter)
+        sag_layout.addWidget(QLabel("Toplam KDV:", font=font_label), 1, 0)
         self.tkdv_l = QLabel(self.db._format_currency(toplam_kdv_hesaplanan_detay), font=font_value)
-        self.sag_panel_layout.addWidget(self.tkdv_l, 1, 1, Qt.AlignCenter)
+        sag_layout.addWidget(self.tkdv_l, 1, 1)
         
-        self.sag_panel_layout.addWidget(QLabel("Genel Toplam:", font=font_header), 2, 0, Qt.AlignCenter)
-        self.gt_l = QLabel(self.db._format_currency(toplam_kdv_dahil_fatura_ana_db), font=QFont("Segoe UI", 12, QFont.Bold))
-        self.sag_panel_layout.addWidget(self.gt_l, 2, 1, Qt.AlignCenter)
+        sag_layout.addWidget(QLabel("Genel Toplam:", font=font_header), 2, 0)
+        self.gt_l = QLabel(self.db._format_currency(toplam_kdv_dahil_fatura_ana_db), font=QFont("Segoe UI", 16, QFont.Bold))
+        sag_layout.addWidget(self.gt_l, 2, 1)
         
-        self.sag_panel_layout.addWidget(QLabel("Uygulanan Genel İsk:", font=font_label), 3, 0, Qt.AlignCenter)
+        sag_layout.addWidget(QLabel("Uygulanan Genel İsk:", font=font_label), 3, 0)
         self.lbl_uygulanan_genel_iskonto = QLabel(self.db._format_currency(gercek_uygulanan_genel_iskonto), font=font_value)
-        self.sag_panel_layout.addWidget(self.lbl_uygulanan_genel_iskonto, 3, 1, Qt.AlignCenter)
+        sag_layout.addWidget(self.lbl_uygulanan_genel_iskonto, 3, 1)
+        
+        sag_layout.setColumnStretch(1, 1)
 
         # Fatura Kalemleri GroupBox
         kalemler_frame = QGroupBox("Fatura Kalemleri", self)
         kalemler_frame.setFont(font_groupbox)
         kalemler_frame_layout = QVBoxLayout(kalemler_frame)
-        self.main_layout.addWidget(kalemler_frame)
+        self.main_layout.addWidget(kalemler_frame, stretch=1)
         
         cols_kalem = ("Sıra", "Ürün Kodu", "Ürün Adı", "Miktar", "Birim Fiyat", "KDV %", "İsk 1 (%)", "İsk 2 (%)", "Uyg. İsk. Tutarı", "Tutar (Dah.)", "Alış.F (Fatura Anı)")
         self.kalem_tree = QTreeWidget(kalemler_frame)
@@ -1439,14 +1469,13 @@ class FaturaDetayPenceresi(QDialog):
         self.kalem_tree.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.kalem_tree.setSortingEnabled(True)
 
-        # DEĞİŞİKLİK: Sütun başlıklarının hizalaması ve genişliği güncellendi
-        font_header = QFont("Segoe UI", 11, QFont.Bold)
+        font_header = QFont("Segoe UI", 13, QFont.Bold)
         col_defs_kalem = [
-            ("Sıra", 40, Qt.AlignCenter), ("Ürün Kodu", 120, Qt.AlignCenter), ("Ürün Adı", 190, Qt.AlignCenter),
+            ("Sıra", 50, Qt.AlignCenter), ("Ürün Kodu", 120, Qt.AlignCenter), ("Ürün Adı", 190, Qt.AlignCenter),
             ("Miktar", 80, Qt.AlignCenter), ("Birim Fiyat", 100, Qt.AlignCenter), ("KDV %", 60, Qt.AlignCenter),
             ("İsk 1 (%)", 90, Qt.AlignCenter), ("İsk 2 (%)", 90, Qt.AlignCenter),
             ("Uyg. İsk. Tutarı", 110, Qt.AlignCenter), ("Tutar (Dah.)", 120, Qt.AlignCenter),
-            ("Alış.F (Fatura Anı)", 130, Qt.AlignCenter)
+            ("Alış.F (Fatura Anı)", 150, Qt.AlignCenter)
         ]
         for i, (col_name, width, alignment) in enumerate(col_defs_kalem):
             self.kalem_tree.setColumnWidth(i, width)
@@ -1786,13 +1815,18 @@ class SiparisDetayPenceresi(QDialog):
             return
         
         # --- Veri Çekme ve Hazırlama ---
-        self.s_no = self.siparis_ana.get('siparis_no')
-        durum_db = self.siparis_ana.get('durum')
+        self.s_no = self.siparis_ana.get('siparis_no', '-')
+        durum_db = self.siparis_ana.get('durum', '-')
         self.setWindowTitle(f"Sipariş Detayları: {self.s_no} ({durum_db})")
         
         # Kullanıcı bilgileri
-        kullanicilar_list = self.db.kullanici_listele() 
-        kullanicilar_map = {k.get('id'): k.get('kullanici_adi') for k in kullanicilar_list}
+        try:
+            kullanicilar_list = self.db.kullanici_listele()
+            kullanicilar_map = {k.get('id'): k.get('kullanici_adi') for k in kullanicilar_list}
+        except Exception as e:
+            logger.error(f"Kullanıcı listesi API'den alınamadı: {e}")
+            kullanicilar_map = {}
+        
         olusturan_adi = kullanicilar_map.get(self.siparis_ana.get('olusturan_kullanici_id'), "Bilinmiyor")
         son_guncelleyen_adi = kullanicilar_map.get(self.siparis_ana.get('son_guncelleyen_kullanici_id'), "Bilinmiyor")
         
@@ -1800,10 +1834,10 @@ class SiparisDetayPenceresi(QDialog):
         cari_adi_text = "Bilinmiyor"
         if self.siparis_ana.get('cari_tip') == 'MUSTERI':
             cari_bilgi = self.db.musteri_getir_by_id(self.siparis_ana.get('cari_id'))
-            cari_adi_text = f"{cari_bilgi.get('ad')} (Kod: {cari_bilgi.get('kod')})" if cari_bilgi else "Bilinmiyor"
+            cari_adi_text = f"{cari_bilgi.get('ad')}" if cari_bilgi else "Bilinmiyor"
         elif self.siparis_ana.get('cari_tip') == 'TEDARIKCI':
             cari_bilgi = self.db.tedarikci_getir_by_id(self.siparis_ana.get('cari_id'))
-            cari_adi_text = f"{cari_bilgi.get('ad')} (Kod: {cari_bilgi.get('kod')})" if cari_bilgi else "Bilinmiyor"
+            cari_adi_text = f"{cari_bilgi.get('ad')}" if cari_bilgi else "Bilinmiyor"
 
         # --- Arayüz Oluşturma ---
         font_label = QFont("Segoe UI", 9, QFont.Bold)
@@ -1816,7 +1850,8 @@ class SiparisDetayPenceresi(QDialog):
         self.ust_bilgiler_layout.setContentsMargins(0, 0, 0, 0)
         self.ust_bilgiler_layout.setSpacing(15)
         self.main_layout.addWidget(self.ust_bilgiler_frame)
-        
+        self.ust_bilgiler_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
         self.sol_panel_frame = QFrame(self.ust_bilgiler_frame)
         self.sol_panel_layout = QGridLayout(self.sol_panel_frame)
         self.sol_panel_layout.setContentsMargins(0, 0, 0, 0)
@@ -1870,9 +1905,18 @@ class SiparisDetayPenceresi(QDialog):
         
         toplam_tutar = self.db.safe_float(self.siparis_ana.get('toplam_tutar'))
         
-        self.sag_panel_layout.addWidget(QLabel("Toplam Tutar:", font=font_header), 0, 0, Qt.AlignCenter)
+        self.sag_panel_layout.addWidget(QLabel("Genel Toplam:", font=font_header), 0, 0, Qt.AlignCenter)
         self.lbl_genel_toplam = QLabel(self.db._format_currency(toplam_tutar), font=QFont("Segoe UI", 20, QFont.Bold))
         self.sag_panel_layout.addWidget(self.lbl_genel_toplam, 0, 1, Qt.AlignCenter)
+        
+        self.sag_panel_layout.addWidget(QLabel("Oluşturan:", font=font_label), 1, 0, Qt.AlignCenter)
+        self.sag_panel_layout.addWidget(QLabel(olusturan_adi, font=font_value), 1, 1, Qt.AlignCenter)
+        
+        self.sag_panel_layout.addWidget(QLabel("Son Güncelleyen:", font=font_label), 2, 0, Qt.AlignCenter)
+        self.sag_panel_layout.addWidget(QLabel(son_guncelleyen_adi, font=font_value), 2, 1, Qt.AlignCenter)
+        
+        self.sag_panel_layout.addWidget(QLabel("Oluşturulma Tarihi:", font=font_label), 3, 0, Qt.AlignCenter)
+        self.sag_panel_layout.addWidget(QLabel(str(self.siparis_ana.get('olusturma_tarihi_saat', '-')), font=font_value), 3, 1, Qt.AlignCenter)
 
         # Sipariş Kalemleri GroupBox
         kalemler_frame = QGroupBox("Sipariş Kalemleri", self)
@@ -1880,7 +1924,7 @@ class SiparisDetayPenceresi(QDialog):
         kalemler_frame_layout = QVBoxLayout(kalemler_frame)
         self.main_layout.addWidget(kalemler_frame)
         
-        cols_kalem = ("Sıra", "Ürün Kodu", "Ürün Adı", "Miktar", "Birim Fiyat", "KDV %", "İsk 1 (%)", "İsk 2 (%)", "Uyg. İsk. Tutarı", "Tutar (Dah.)")
+        cols_kalem = ("Sıra", "Ürün Kodu", "Ürün Adı", "Miktar", "Birim Fiyat", "KDV %", "İsk 1 (%)", "İsk 2 (%)", "Uyg. İsk. Tutarı", "Tutar (Dah.)", "Alış.F (Sipariş Anı)")
         self.kalem_tree = QTreeWidget(kalemler_frame)
         self.kalem_tree.setHeaderLabels(cols_kalem)
         self.kalem_tree.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -1891,7 +1935,8 @@ class SiparisDetayPenceresi(QDialog):
             ("Sıra", 40, Qt.AlignCenter), ("Ürün Kodu", 120, Qt.AlignCenter), ("Ürün Adı", 190, Qt.AlignCenter),
             ("Miktar", 80, Qt.AlignCenter), ("Birim Fiyat", 100, Qt.AlignCenter), ("KDV %", 60, Qt.AlignCenter),
             ("İsk 1 (%)", 90, Qt.AlignCenter), ("İsk 2 (%)", 90, Qt.AlignCenter),
-            ("Uyg. İsk. Tutarı", 110, Qt.AlignCenter), ("Tutar (Dah.)", 120, Qt.AlignCenter)
+            ("Uyg. İsk. Tutarı", 110, Qt.AlignCenter), ("Tutar (Dah.)", 120, Qt.AlignCenter),
+            ("Alış.F (Sipariş Anı)", 130, Qt.AlignCenter)
         ]
         for i, (col_name, width, alignment) in enumerate(col_defs_kalem):
             self.kalem_tree.setColumnWidth(i, width)
@@ -1905,7 +1950,7 @@ class SiparisDetayPenceresi(QDialog):
 
         # Butonlar
         self._butonlari_olustur()
-        
+            
     def _load_siparis_kalemleri_to_treeview(self, kalemler_list):
         """API'den gelen sipariş kalemlerini QTreeWidget'a yükler."""
         self.kalem_tree.clear()
@@ -1950,6 +1995,7 @@ class SiparisDetayPenceresi(QDialog):
             item_qt.setText(7, iskonto_yuzde_2_display)
             item_qt.setText(8, self.db._format_currency(uygulanan_toplam_iskonto_tutari_detay))
             item_qt.setText(9, self.db._format_currency(k_db.get('kalem_toplam_kdv_dahil')))
+            item_qt.setText(10, self.db._format_currency(k_db.get('alis_fiyati_fatura_aninda', 0.0)))
             
             for i in range(self.kalem_tree.columnCount()):
                 item_qt.setTextAlignment(i, Qt.AlignCenter)

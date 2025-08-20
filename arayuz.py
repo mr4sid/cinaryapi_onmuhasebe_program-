@@ -2695,7 +2695,7 @@ class BaseFaturaListesi(QWidget):
     def secili_faturayi_sil(self):
         selected_items = self.fatura_tree.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "Uyarı", "Lütfen silmek için bir fatura seçin.")
+            self.app.set_status_message("Lütfen silmek istediğiniz ürünü seçin.", "orange")
             return
 
         selected_item = selected_items[0]
@@ -2713,31 +2713,8 @@ class BaseFaturaListesi(QWidget):
 
         if reply == QMessageBox.Yes:
             try:
-                # Silinecek faturanın verisini API'den alıyoruz.
-                fatura_data = self.db.fatura_getir_by_id(fatura_id)
-                if not fatura_data:
-                    QMessageBox.warning(self, "Hata", "Fatura bilgileri alınamadı, silme işlemi iptal edildi.")
-                    self.app.set_status_message("Hata: Fatura bilgileri alınamadığı için silme işlemi iptal edildi.")
-                    return
-
-                # API'nin beklediği 'fatura_turu' alanını, veritabanından gelen değeriyle uyumlu hale getiriyoruz.
-                # API, 'SATIŞ' gibi Türkçe karakterli stringler bekliyor.
-                fatura_tipi_guncel = fatura_data.get('fatura_turu')
-                
-                # Güncelleme için sadece faturanın tipini içeren bir veri paketi oluşturuyoruz.
-                # Bu, API'nin zorunlu alanları eksik olduğu için hata vermesini engeller.
-                temiz_fatura_data = {
-                    "fatura_turu": fatura_tipi_guncel
-                }
-
-                # Faturayı bu sade veri paketiyle güncelliyoruz.
-                # Bu adım, API'nin veritabanındaki eski formatlı veriyi işlemesini ve
-                # ardından silme işlemini yapmasını mümkün kılar.
-                self.db.fatura_guncelle(fatura_id, temiz_fatura_data)
-                
-                # Güncelleme başarılı olursa, silme işlemini güvenle yapabiliriz.
+                # Silme işlemi öncesindeki hata veren güncelleme adımı kaldırıldı.
                 success, message = self.db.fatura_sil(fatura_id)
-
                 if success:
                     QMessageBox.information(self, "Başarılı", f"'{fatura_no}' numaralı fatura başarıyla silindi.")
                     self.fatura_listesini_yukle()
@@ -2756,7 +2733,7 @@ class BaseFaturaListesi(QWidget):
                 self.app.set_status_message(f"Fatura silme başarısız: {e}")
         else:
             self.app.set_status_message("Fatura silme işlemi kullanıcı tarafından iptal edildi.")
-                        
+            
     def onceki_sayfa(self):
         if self.mevcut_sayfa > 1:
             self.mevcut_sayfa -= 1
@@ -4677,6 +4654,9 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
             elif self.islem_tipi == self.db.FATURA_TIP_ALIS: fatura_tip_to_save = self.db.FATURA_TIP_ALIS_IADE
 
         try:
+            # Düzeltildi: olusturan_kullanici_id değeri self.app.current_user'dan alınıyor
+            olusturan_kullanici_id = self.app.current_user[0] if self.app and hasattr(self.app, 'current_user') and self.app.current_user else 1
+
             if self.duzenleme_id:
                 success, message = self.fatura_service.fatura_guncelle(
                     self.duzenleme_id,
@@ -4694,18 +4674,19 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
                 )
             else:
                 success, message = self.fatura_service.fatura_olustur(
-                    fatura_no,
-                    fatura_tarihi,
-                    fatura_tip_to_save,
-                    self.secili_cari_id,
-                    kalemler_to_send_to_api,
-                    odeme_turu,
-                    kasa_banka_id,
-                    misafir_adi,
-                    fatura_notlari,
-                    vade_tarihi,
-                    genel_iskonto_tipi,
-                    genel_iskonto_degeri,
+                    fatura_no=fatura_no,
+                    tarih=fatura_tarihi,
+                    fatura_tipi=fatura_tip_to_save,
+                    cari_id=self.secili_cari_id,
+                    kalemler_data=kalemler_to_send_to_api,
+                    odeme_turu=odeme_turu,
+                    olusturan_kullanici_id=olusturan_kullanici_id, # <--- Bu satır güncellendi
+                    kasa_banka_id=kasa_banka_id,
+                    misafir_adi=misafir_adi,
+                    fatura_notlari=fatura_notlari,
+                    vade_tarihi=vade_tarihi,
+                    genel_iskonto_tipi=genel_iskonto_tipi,
+                    genel_iskonto_degeri=genel_iskonto_degeri,
                     original_fatura_id=self.original_fatura_id_for_iade if self.iade_modu_aktif else None
                 )
 
@@ -4731,72 +4712,81 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
             self.app.set_status_message(f"Hata: Fatura kaydedilemedi - {e}")
 
     def _mevcut_faturayi_yukle(self):
-        fatura_ana = self.db.fatura_getir_by_id(self.duzenleme_id)
-        if not fatura_ana:
-            QMessageBox.critical(self.app, "Hata", "Düzenlenecek fatura bilgileri alınamadı.")
-            self.parent().close()
-            return
+        """Mevcut bir faturayı API'den çeker ve formdaki alanları doldurur."""
+        logging.info(f"Fatura ID: {self.duzenleme_id} için mevcut fatura verisi yükleniyor.")
+        try:
+            fatura_ana = self.db.fatura_getir_by_id(self.duzenleme_id)
+            if not fatura_ana:
+                QMessageBox.critical(self.app, "Hata", "Düzenlenecek fatura bilgileri alınamadı.")
+                self.parent().close()
+                return
 
-        self._loaded_fatura_data_for_edit = fatura_ana
-        
-        f_no = fatura_ana['fatura_no']
-        tarih_db = fatura_ana['tarih']
-        _tip = fatura_ana['fatura_turu']
-        c_id_db = fatura_ana['cari_id']
-        odeme_turu_db = fatura_ana['odeme_turu']
-        misafir_adi_db = fatura_ana['misafir_adi']
-        fatura_notlari_db = fatura_ana['fatura_notlari']
-        vade_tarihi_db = fatura_ana['vade_tarihi']
-        genel_iskonto_tipi_db = fatura_ana['genel_iskonto_tipi']
-        genel_iskonto_degeri_db = fatura_ana['genel_iskonto_degeri']
-        kasa_banka_id_db = fatura_ana['kasa_banka_id']
+            self._loaded_fatura_data_for_edit = fatura_ana
 
-        self.f_no_e.setEnabled(True)
-        self.f_no_e.setText(f_no)
-        self.fatura_tarihi_entry.setText(tarih_db)
+            f_no = fatura_ana.get('fatura_no', '')
+            tarih_db = fatura_ana.get('tarih', '')
+            c_id_db = fatura_ana.get('cari_id')
+            odeme_turu_db = fatura_ana.get('odeme_turu', 'NAKİT')
+            misafir_adi_db = fatura_ana.get('misafir_adi', '')
+            fatura_notlari_db = fatura_ana.get('fatura_notlari', '')
+            vade_tarihi_db = fatura_ana.get('vade_tarihi', '')
+            genel_iskonto_tipi_db = fatura_ana.get('genel_iskonto_tipi', 'YOK')
+            genel_iskonto_degeri_db = fatura_ana.get('genel_iskonto_degeri', 0.0)
+            kasa_banka_id_db = fatura_ana.get('kasa_banka_id')
 
-        if self.fatura_notlari_text:
-            self.fatura_notlari_text.setPlainText(fatura_notlari_db if fatura_notlari_db else "")
-            
-        self.entry_vade_tarihi.setText(vade_tarihi_db if vade_tarihi_db else "")
+            self.f_no_e.setText(f_no)
+            self.fatura_tarihi_entry.setText(tarih_db)
+            self.fatura_notlari_text.setPlainText(fatura_notlari_db)
+            self.entry_vade_tarihi.setText(vade_tarihi_db if vade_tarihi_db else "")
+            self.genel_iskonto_tipi_cb.setCurrentText(genel_iskonto_tipi_db)
+            self.genel_iskonto_degeri_e.setText(f"{genel_iskonto_degeri_db:.2f}".replace('.', ','))
+            self._on_genel_iskonto_tipi_changed()
 
-        self.genel_iskonto_tipi_cb.setCurrentText(genel_iskonto_tipi_db if genel_iskonto_tipi_db else "YOK")
-        self.genel_iskonto_degeri_e.setText(f"{genel_iskonto_degeri_db:.2f}".replace('.', ',') if genel_iskonto_degeri_db else "0,00")
-        self._on_genel_iskonto_tipi_changed()
-        
-        self.odeme_turu_cb.setCurrentText(odeme_turu_db if odeme_turu_db else "NAKİT")
-        
-        display_text_for_cari = self.cari_id_to_display_map.get(str(c_id_db), "Bilinmeyen Cari")
-        self._on_cari_secildi_callback(c_id_db, display_text_for_cari)
+            # Ödeme türünü ayarla ve ilgili combobox'ı güncelle
+            self.odeme_turu_cb.setCurrentText(odeme_turu_db)
+            self._odeme_turu_degisince_event_handler()
 
-        if str(c_id_db) == str(self.db.get_perakende_musteri_id()) and misafir_adi_db:
-            self.entry_misafir_adi.setText(misafir_adi_db)
+            # Cari bilgisini ayarla
+            display_text_for_cari = self.cari_id_to_display_map.get(str(c_id_db), "Bilinmeyen Cari")
+            self._on_cari_secildi_callback(c_id_db, display_text_for_cari)
 
-        self._odeme_turu_degisince_hesap_combobox_ayarla()
-        
-        if kasa_banka_id_db is not None:
-            for text, kb_id in self.kasa_banka_map.items():
-                if kb_id == kasa_banka_id_db:
-                    self.islem_hesap_cb.setCurrentText(text)
-                    break
+            # Perakende satışlar için misafir adını ayarla
+            if str(c_id_db) == str(self.db.get_perakende_musteri_id()) and misafir_adi_db:
+                self.entry_misafir_adi.setText(misafir_adi_db)
 
-        fatura_kalemleri_db = self.db.fatura_kalemleri_al(self.duzenleme_id)
-        self.fatura_kalemleri_ui.clear()
-        for k_db in fatura_kalemleri_db:
-            iskontolu_birim_fiyat_kdv_dahil = (k_db['kalem_toplam_kdv_dahil'] / k_db['miktar']) if k_db['miktar'] != 0 else 0.0
-            self.fatura_kalemleri_ui.append((
-                k_db['urun_id'], k_db['urun_adi'], k_db['miktar'],
-                k_db['birim_fiyat'], k_db['kdv_orani'], k_db['kdv_tutari'],
-                k_db['kalem_toplam_kdv_haric'], k_db['kalem_toplam_kdv_dahil'],
-                k_db['alis_fiyati_fatura_aninda'], k_db['kdv_orani_fatura_aninda'],
-                k_db['iskonto_yuzde_1'], k_db['iskonto_yuzde_2'],
-                k_db['iskonto_tipi'], k_db['iskonto_degeri'],
-                iskontolu_birim_fiyat_kdv_dahil
-            ))
+            # Kasa/Banka combobox'ını ayarla
+            if kasa_banka_id_db is not None:
+                kb_text_to_set = ""
+                for text, kb_id in self.kasa_banka_map.items():
+                    if kb_id == kasa_banka_id_db:
+                        kb_text_to_set = text
+                        break
+                if kb_text_to_set:
+                    self.islem_hesap_cb.setCurrentText(kb_text_to_set)
 
-        self.sepeti_guncelle_ui()
-        self.toplamlari_hesapla_ui()
-        self.urun_arama_entry.setFocus()
+            # Fatura kalemlerini yükle
+            fatura_kalemleri_db = self.db.fatura_kalemleri_al(self.duzenleme_id)
+            self.fatura_kalemleri_ui.clear()
+            for k_db in fatura_kalemleri_db:
+                iskontolu_birim_fiyat_kdv_dahil = (k_db.get('kalem_toplam_kdv_dahil', 0.0) / k_db.get('miktar', 1.0)) if k_db.get('miktar', 1.0) != 0 else 0.0
+                self.fatura_kalemleri_ui.append((
+                    k_db.get('urun_id'), k_db.get('urun_adi'), k_db.get('miktar'),
+                    k_db.get('birim_fiyat'), k_db.get('kdv_orani'), k_db.get('kdv_tutari'),
+                    k_db.get('kalem_toplam_kdv_haric'), k_db.get('kalem_toplam_kdv_dahil'),
+                    k_db.get('alis_fiyati_fatura_aninda'), k_db.get('kdv_orani'),
+                    k_db.get('iskonto_yuzde_1'), k_db.get('iskonto_yuzde_2'),
+                    k_db.get('iskonto_tipi'), k_db.get('iskonto_degeri'),
+                    iskontolu_birim_fiyat_kdv_dahil
+                ))
+
+            self.sepeti_guncelle_ui()
+            self.toplamlari_hesapla_ui()
+            self.urun_arama_entry.setFocus()
+            logging.info(f"Fatura ID: {self.duzenleme_id} verileri başarıyla yüklendi.")
+
+        except Exception as e:
+            logging.error(f"Mevcut fatura verileri yüklenirken hata oluştu: {e}", exc_info=True)
+            QMessageBox.critical(self.app, "Hata", f"Mevcut fatura verileri yüklenirken bir hata oluştu: {e}")
 
     def _reset_form_for_new_invoice(self, ask_confirmation=True, skip_default_cari_selection=False):
         self.duzenleme_id = None
