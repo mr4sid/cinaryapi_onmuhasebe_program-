@@ -742,4 +742,4 @@ class SiparisKalemiRead(BaseModel):
     urun_adi: Optional[str]
 
     class Config:
-        from_attributes = True    
+        from_attributes = True

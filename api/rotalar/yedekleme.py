@@ -1,10 +1,10 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
-from ..veritabani import get_db
+from ..veritabani import get_db, reset_db_connection
 from datetime import datetime
 import subprocess # PostgreSQL komutlarını çalıştırmak için
-
+from sqlalchemy import text 
 router = APIRouter(prefix="/yedekleme", tags=["Veritabanı Yedekleme"])
 
 # Ortam değişkenlerinden veritabanı bağlantı bilgilerini al
@@ -67,7 +67,7 @@ def create_db_backup(db: Session = Depends(get_db)):
 
 
 @router.post("/restore", summary="Veritabanını Geri Yükle", status_code=status.HTTP_200_OK)
-def restore_db_backup(backup_file: UploadFile = File(...), db: Session = Depends(get_db)):
+def restore_db_backup(backup_file: UploadFile = File(...)):
     """
     Yüklenen yedek dosyasını kullanarak PostgreSQL veritabanını geri yükler.
     UYARI: Bu işlem mevcut veritabanı içeriğini SİLECEKTİR!
@@ -75,15 +75,11 @@ def restore_db_backup(backup_file: UploadFile = File(...), db: Session = Depends
     if not backup_file.filename.endswith(".sql"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sadece .sql uzantılı dosyalar kabul edilir.")
 
-    # Yüklenen dosyayı geçici bir konuma kaydet
     temp_filepath = os.path.join(BACKUP_DIR, f"restore_temp_{backup_file.filename}")
     try:
         with open(temp_filepath, "wb") as buffer:
             buffer.write(backup_file.file.read())
 
-        # pg_restore veya psql komutu ile geri yükleme yap
-        # Not: psql -f ile SQL dosyası çalıştırıyoruz.
-        # Güvenlik Notu: Şifreyi doğrudan komutta geçmek yerine PGPASSWORD ortam değişkeni kullanılmalıdır.
         os.environ['PGPASSWORD'] = DB_PASSWORD
         command = [
             "psql",
@@ -94,12 +90,26 @@ def restore_db_backup(backup_file: UploadFile = File(...), db: Session = Depends
             "-f", temp_filepath
         ]
 
-        # subprocess.run ile komutu çalıştır
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         
-        if result.stderr and "SET" not in result.stderr: # SET komutları normalde stderr'a yazılır, onları yoksay
-             # Sadece gerçek hata mesajlarını döndür
+        if result.stderr and "SET" not in result.stderr:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Geri yükleme sırasında hata oluştu: {result.stderr}")
+        
+        # Geri yükleme başarılı olduktan sonra bağlantı havuzunu sıfırla
+        reset_db_connection()
+
+        # Bağlantı havuzunun yeniden oluşturulduğundan emin olmak için
+        # dummy bir sorgu çalıştırarak yeni bir bağlantı kurmayı zorla
+        try:
+            db_test = next(get_db())
+            db_test.execute(text("SELECT 1"))
+            db_test.close()
+        except Exception as e:
+            # Eğer test bağlantısı başarısız olursa, istemciye hata gönder
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Geri yükleme başarılı, ancak veritabanı bağlantısı tekrar kurulamadı: {e}"
+            ) from e
 
         return {"message": f"Veritabanı başarıyla geri yüklendi: {backup_file.filename}"}
     except FileNotFoundError:
@@ -109,7 +119,6 @@ def restore_db_backup(backup_file: UploadFile = File(...), db: Session = Depends
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Beklenmedik bir hata oluştu: {e}")
     finally:
-        # Geçici dosyayı ve ortam değişkenini temizle
         if os.path.exists(temp_filepath):
             os.remove(temp_filepath)
         if 'PGPASSWORD' in os.environ:

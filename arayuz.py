@@ -2852,41 +2852,7 @@ class BaseIslemSayfasi(QWidget):
         raise NotImplementedError("Bu metot alt sınıf tarafından ezilmelidir.")
 
     def _load_initial_data(self):
-        """
-        SiparisOlusturmaSayfasi'na özel başlangıç veri yükleme mantığı.
-        """
-        if self.duzenleme_id:
-            self._mevcut_siparisi_yukle()
-            logging.debug("SiparisOlusturmaSayfasi - Düzenleme modunda, mevcut sipariş yüklendi.")
-        elif self.initial_data:
-            self._load_temp_form_data(forced_temp_data=self.initial_data)
-            logging.debug("SiparisOlusturmaSayfasi - initial_data ile taslak veri yüklendi.")
-        else:
-            # Yeni bir sipariş oluşturuluyor. Önce formu sıfırla.
-            self._reset_form_explicitly(ask_confirmation=False) # Sormadan sıfırla
-            logging.debug("SiparisOlusturmaSayfasi - Yeni sipariş için form sıfırlandı.")
-
-            # Şimdi varsayılan carileri ata.
-            if self.islem_tipi == self.db.SIPARIS_TIP_SATIS:
-                if self.db.perakende_musteri_id is not None:
-                    perakende_data = self.db.musteri_getir_by_id(self.db.perakende_musteri_id)
-                    if perakende_data:
-                        # API'den dönen veri dictionary olduğu için 'ad_soyad' kullanıyoruz
-                        display_text = f"{perakende_data.get('ad_soyad')} (Kod: {perakende_data.get('kod')})"
-                        self._on_cari_secildi_callback(perakende_data['id'], display_text)
-            elif self.islem_tipi == self.db.SIPARIS_TIP_ALIS:
-                if self.db.genel_tedarikci_id is not None:
-                    genel_tedarikci_data = self.db.tedarikci_getir_by_id(self.db.genel_tedarikci_id)
-                    if genel_tedarikci_data:
-                        # API'den dönen veri dictionary olduğu için 'ad_soyad' kullanıyoruz
-                        display_text = f"{genel_tedarikci_data.get('ad_soyad')} (Kod: {genel_tedarikci_data.get('tedarikci_kodu')})"
-                        self._on_cari_secildi_callback(genel_tedarikci_data['id'], display_text)
-
-        # UI elemanları kurulduktan sonra ürünleri yükle (PySide6'da QTimer.singleShot ile)
-        QTimer.singleShot(0, self._urunleri_yukle_ve_cachele_ve_goster)
-
-        if hasattr(self, 'urun_arama_entry'):
-            self.urun_arama_entry.setFocus()
+        raise NotImplementedError("Bu metodun her alt sınıfta özel olarak uygulanması gerekmektedir.")
 
     def kaydet(self):
         """
@@ -3494,16 +3460,28 @@ class BaseIslemSayfasi(QWidget):
         bakiye_color = "black"
         if self.secili_cari_id:
             cari_id = int(self.secili_cari_id)
-            if self.islem_tipi in ['SATIŞ', 'SATIŞ_SIPARIS', self.db.FATURA_TIP_SATIS_IADE]:
-                net_bakiye = self.db.get_musteri_net_bakiye(cari_id)
-                if net_bakiye > 0: bakiye_text, bakiye_color = f"Borç: {self.db._format_currency(net_bakiye)}", "red"
-                elif net_bakiye < 0: bakiye_text, bakiye_color = f"Alacak: {self.db._format_currency(abs(net_bakiye))}", "green"
-                else: bakiye_text = "Bakiye: 0,00 TL"
-            elif self.islem_tipi in ['ALIŞ', 'ALIŞ_SIPARIS', self.db.FATURA_TIP_ALIS_IADE]:
-                net_bakiye = self.db.get_tedarikci_net_bakiye(cari_id)
-                if net_bakiye > 0: bakiye_text, bakiye_color = f"Borç: {self.db._format_currency(net_bakiye)}", "red"
-                elif net_bakiye < 0: bakiye_text, bakiye_color = f"Alacak: {self.db._format_currency(abs(net_bakiye))}", "green"
-                else: bakiye_text = "Bakiye: 0,00 TL"
+            
+            # Değişiklik: Bakiye, API çağrısından gelen devreden bakiye ve hareketlerle hesaplanıyor.
+            hareketler, devreden_bakiye, _, _ = self.db.cari_hesap_ekstresi_al(
+                cari_id, 
+                self.db.CARI_TIP_MUSTERI if self.islem_tipi in ['SATIŞ', 'SATIŞ_SIPARIS'] else self.db.CARI_TIP_TEDARIKCI,
+                "1900-01-01", 
+                datetime.now().strftime('%Y-%m-%d')
+            )
+            
+            net_bakiye = devreden_bakiye
+            for h in hareketler:
+                # Sadece açık hesap hareketlerini dikkate al
+                if h.get('odeme_turu') == self.db.ODEME_TURU_ACIK_HESAP:
+                    if h.get('islem_yone') == 'BORC':
+                        net_bakiye -= h.get('tutar')
+                    elif h.get('islem_yone') == 'ALACAK':
+                        net_bakiye += h.get('tutar')
+
+            if net_bakiye > 0: bakiye_text, bakiye_color = f"Borç: {self.db._format_currency(net_bakiye)}", "red"
+            elif net_bakiye < 0: bakiye_text, bakiye_color = f"Alacak: {self.db._format_currency(abs(net_bakiye))}", "green"
+            else: bakiye_text = "Bakiye: 0,00 TL"
+                
             self.lbl_cari_bakiye.setText(bakiye_text)
             self.lbl_cari_bakiye.setStyleSheet(f"color: {bakiye_color};")
         else:
@@ -4227,6 +4205,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         self.sv_fatura_notlari = ""
         self.sv_genel_iskonto_tipi = "YOK"
         self.sv_genel_iskonto_degeri = "0,00"
+        self.form_entries_order = [] # Bu listeyi burada tanımlamalıyız
 
         if initial_data and initial_data.get('iade_modu'):
             self.iade_modu_aktif = True
@@ -4240,11 +4219,8 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         from hizmetler import FaturaService
         self.fatura_service = FaturaService(self.db)
 
-        # DEĞİŞİKLİK: Fatura numarası alma ve diğer başlangıç verilerini yükleme işlemini
-        # form oluşturulduktan sonra doğrudan başlatıyoruz.
-        if not self.duzenleme_id and not self.initial_data:
-            self._reset_form_for_new_invoice(ask_confirmation=False)
-            
+        # Veri yükleme ve UI'ı güncelleme işlemlerini burada çağırıyoruz.
+        self._load_initial_data()
         QTimer.singleShot(0, self._on_iade_modu_changed)
 
     def _setup_sol_panel(self, parent_frame):
@@ -4596,9 +4572,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
 
     def _load_initial_data(self):
         """
-        Başlangıç verilerini (düzenleme modu, dışarıdan gelen veri veya taslak) forma yükler.
-        Bu metod BaseIslemSayfasi'nda genel kontrolü yapar, alt sınıflar kendi spesifik
-        doldurma mantıklarını içerebilir.
+        FaturaOlusturmaSayfasi'na özel başlangıç veri yükleme mantığı.
         """
         if self.duzenleme_id:
             self._mevcut_faturayi_yukle()
@@ -4610,7 +4584,11 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
             self._reset_form_for_new_invoice(ask_confirmation=False)
             logging.debug("FaturaOlusturmaSayfasi - Yeni fatura için form sıfırlandı.")
             
-        QTimer.singleShot(0, self._on_iade_modu_changed)
+        # UI elemanları kurulduktan sonra ürünleri yükle
+        QTimer.singleShot(0, self._urunleri_yukle_ve_cachele_ve_goster)
+        
+        if hasattr(self, 'urun_arama_entry'):
+            self.urun_arama_entry.setFocus()
 
     def kaydet(self):
         fatura_no = self.f_no_e.text().strip()
@@ -4787,7 +4765,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         except Exception as e:
             logging.error(f"Mevcut fatura verileri yüklenirken hata oluştu: {e}", exc_info=True)
             QMessageBox.critical(self.app, "Hata", f"Mevcut fatura verileri yüklenirken bir hata oluştu: {e}")
-
+            
     def _reset_form_for_new_invoice(self, ask_confirmation=True, skip_default_cari_selection=False):
         self.duzenleme_id = None
         self.fatura_kalemleri_ui = []

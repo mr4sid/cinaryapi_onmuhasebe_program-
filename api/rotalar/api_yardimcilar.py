@@ -1,7 +1,7 @@
 # api.zip/rotalar/api_yardimcilar.py
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from .. import semalar # semalar modülünü doğru seviyeden içe aktarın
+from api import semalar
 import logging
 from sqlalchemy.exc import SQLAlchemyError
 from ..semalar import CariHareket, Musteri, Tedarikci, GelirGider

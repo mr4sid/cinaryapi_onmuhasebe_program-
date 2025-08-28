@@ -1,4 +1,4 @@
-# api/veritabani.py Dosyasının içeriği.
+# api/veritabani.py Dosyasının GÜNCELLENMİŞ TAM İÇERİĞİ
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
@@ -10,52 +10,74 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # .env dosyasındaki ortam değişkenlerini yükle
-# Bu çağrı, projenizin ana dizinindeki .env dosyasını bulacaktır.
 load_dotenv()
 
-# PostgreSQL bağlantı bilgileri ortam değişkenlerinden alınır
-# Eğer .env dosyasında bu değişkenler bulunamazsa None döner.
-# Bu durumda varsayılan değerler veya hata yönetimi ekleyebilirsiniz.
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
 DB_NAME = os.getenv("DB_NAME")
 
-# Veritabanı URL'si oluşturma
-# Ortam değişkenlerinin gelip gelmediğini kontrol edin
 if not all([DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME]):
     logger.error("Veritabanı bağlantı bilgileri .env dosyasından eksik veya hatalı. Lütfen .env dosyasını kontrol edin.")
-    # Uygulamanın başlamasını engellemek için hata fırlatılabilir
     raise ValueError("Veritabanı bağlantı bilgileri eksik.")
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-# SQLAlchemy motoru oluşturma
-# NOT: Bağlantı testi burada yapılmaz, çünkü 'veritabani.py' içe aktarılırken
-# anında veritabanı bağlantısı kurulmasını önlemek istiyoruz (döngüsel bağımlılıkları önlemek için).
-# Bağlantı hataları, ilk veritabanı işlemi sırasında ortaya çıkacaktır.
-engine = create_engine(DATABASE_URL)
+# SQLAlchemy motoru için global değişken
+engine_instance = None
+SessionLocal = None
 
-# Veritabanı oturumunu yapılandırma
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def get_engine():
+    """
+    Motorun mevcut bir örneğini döndürür, yoksa yeni bir tane oluşturur.
+    """
+    global engine_instance
+    if engine_instance is None:
+        engine_instance = create_engine(DATABASE_URL)
+        logger.info("Yeni bir veritabanı motoru ve bağlantı havuzu oluşturuldu.")
+    return engine_instance
 
+def reset_db_connection():
+    """
+    Mevcut veritabanı bağlantısını ve havuzunu sıfırlayan fonksiyon.
+    """
+    global engine_instance, SessionLocal
+    if engine_instance:
+        engine_instance.dispose()
+        logger.info("Mevcut veritabanı bağlantı havuzu kapatıldı (disposed).")
+    engine_instance = None
+    SessionLocal = None
+    
 # Deklaratif taban sınıfı
-# SQLAlchemy modelleri (api/semalar.py'de tanımlananlar gibi) bu Base sınıfını kullanır.
 Base = declarative_base()
 
 # Veritabanı oturumu almak için bağımlılık fonksiyonu
-# Bu fonksiyon FastAPI rotaları tarafından kullanılacaktır.
 def get_db():
+    """
+    Veritabanı oturumu almak için bağımlılık fonksiyonu.
+    Bağlantı havuzunda hata oluşursa otomatik olarak yeniden dener.
+    """
+    global SessionLocal
+    
+    # SessionLocal henüz oluşturulmadıysa yeni bir tane oluştur
+    if SessionLocal is None:
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
+        logger.info("Yeni bir veritabanı oturumu sınıfı (SessionLocal) oluşturuldu.")
+    
     db = SessionLocal()
     try:
-        # Bağlantıyı test etmek için basit bir sorgu (sadece get_db() çağrıldığında çalışır)
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1")) # Bağlantı testi buraya taşındı
-        logger.info(f"PostgreSQL veritabanı bağlantısı başarılı: {DB_NAME}@{DB_HOST}:{DB_PORT}")
         yield db
-    except Exception as e:
-        logger.critical(f"Veritabanı bağlantısı kurulamadı! Lütfen PostgreSQL sunucusunun çalıştığından ve .env bilgilerinin doğru olduğundan emin olun. Hata: {e}")
-        raise
+    except OperationalError as e:
+        logger.warning(f"Bağlantı hatası alındı, yeniden deneme yapılıyor. Hata: {e}")
+        # Bağlantı havuzunu sıfırla ve yeniden dene
+        reset_db_connection()
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
     finally:
-        db.close()
+        # Hata durumunda yeniden denemede oluşan oturumu da kapat
+        if 'db' in locals():
+            db.close()

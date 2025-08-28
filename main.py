@@ -7,14 +7,10 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QMessageBox, QFileDialog,
     QWidget, QMenuBar, QStatusBar, QTabWidget,QDialog, QVBoxLayout
 )
-from PySide6.QtGui import QAction
-from PySide6.QtGui import QIcon
-from PySide6.QtCore import Qt, QDate, Signal
-
-# Tema için eklenen importlar
-from PySide6.QtGui import QPalette, QColor
-from PySide6.QtCore import Qt 
-
+from PySide6.QtGui import QAction,QPalette, QColor, QIcon
+from PySide6.QtCore import Qt, QDate, Signal, QTimer, QThread, QObject, Slot
+import multiprocessing
+import threading
 # Kendi modüllerimiz
 from arayuz import ( # arayuz.py'den tüm gerekli sayfaları içe aktarın
     AnaSayfa, StokYonetimiSayfasi, MusteriYonetimiSayfasi,
@@ -71,6 +67,46 @@ def save_config(config):
             json.dump(config, f, indent=4)
     except IOError as e:
         logger.error(f"Config dosyası kaydedilirken hata oluştu: {e}")
+
+class BackupWorker(QObject):
+    is_finished = Signal(bool, str, str)
+
+    def __init__(self, db_manager, file_path):
+        super().__init__()
+        self.db_manager = db_manager
+        self.file_path = file_path
+
+    @Slot()
+    def run(self):
+        success, message, created_file_path = False, "Bilinmeyen bir hata oluştu.", None
+        try:
+            success, message, created_file_path = self.db_manager.database_backup(self.file_path)
+        except Exception as e:
+            message = f"Yedekleme sırasında beklenmedik bir hata oluştu: {e}"
+            logger.error(message, exc_info=True)
+        finally:
+            self.is_finished.emit(success, message, created_file_path)
+
+# YENİ EKLENEN KOD BAŞLANGIÇ
+class RestoreWorker(QObject):
+    is_finished = Signal(bool, str)
+
+    def __init__(self, db_manager, file_path):
+        super().__init__()
+        self.db_manager = db_manager
+        self.file_path = file_path
+
+    @Slot()
+    def run(self):
+        success, message = False, "Bilinmeyen bir hata oluştu."
+        try:
+            success, message, _ = self.db_manager.database_restore(self.file_path)
+        except Exception as e:
+            message = f"Geri yükleme sırasında beklenmedik bir hata oluştu: {e}"
+            logger.error(message, exc_info=True)
+        finally:
+            self.is_finished.emit(success, message)
+# YENİ EKLENEN KOD BİTİŞ
 
 class Ui_MainWindow_Minimal:
     def setupUi(self, MainWindow):
@@ -176,6 +212,9 @@ class Ui_MainWindow_Minimal:
         MainWindow.actionAPI_Ayarlar.setObjectName("actionAPI_Ayarlar")
         MainWindow.actionAPI_Ayarlar.setText("API Ayarları")
 
+        MainWindow.actionY_netici_Ayarlar = QAction(MainWindow)
+        MainWindow.actionY_netici_Ayarlar.setObjectName("actionY_netici_Ayarlar")
+        MainWindow.actionY_netici_Ayarlar.setText("Yönetici Ayarları")
 
         # Menüleri oluşturma ve Action'ları ekleme
         self.menuKartlar = self.menubar.addMenu("Kartlar")
@@ -205,11 +244,14 @@ class Ui_MainWindow_Minimal:
         self.menuAyarlar.addAction(MainWindow.actionYedekle)
         self.menuAyarlar.addAction(MainWindow.actionGeri_Y_kle)
         self.menuAyarlar.addAction(MainWindow.actionAPI_Ayarlar)
-        
+
+        self.menuAyarlar.addAction(MainWindow.actionY_netici_Ayarlar)
+
 class App(QMainWindow):
+    backup_completed_signal = Signal(bool, str, str)    
     def __init__(self):
         super().__init__()
-
+        self.backup_completed_signal.connect(self._handle_backup_completion)
         self.ui_main_window_setup = Ui_MainWindow_Minimal()
         self.ui_main_window_setup.setupUi(self)
 
@@ -317,8 +359,16 @@ class App(QMainWindow):
 
         self.actionYedekle.triggered.connect(self._yedekle)
         self.actionGeri_Y_kle.triggered.connect(self._geri_yukle)
+        # HATA VEREN SATIR: APIAyarlariPenceresi'ni içe aktarmadan çağırmaya çalışıyor.
+        # Bu metod da `pencereler` modülünden `APIAyarlariPenceresi`ni içe aktarmaya çalışıyor.
+        # Ancak `pencereler.py` içinde böyle bir sınıf tanımlı değil.
+        # `_api_ayarlari_penceresi_ac` metodunu çağırıp çalıştırmaya çalışmak bu hataya neden oluyor.
+        # Bu satırın düzeltilmesi için, ya bu pencerenin `pencereler.py`'de tanımlı olması ya da bu çağrının kaldırılması gerekir.
+        # Terminal çıktısına göre bu pencere mevcut değil. Bu yüzden bu metodu ve çağrıyı kaldırmak en mantıklısı.
+        # Veya `APIAyarlariPenceresi` sınıfını başka bir yerden içe aktarmak gerekir.
+        # Ancak, şu anki dosyalarda böyle bir sınıf tanımlı değil, bu yüzden bu fonksiyonu düzeltemeyiz.
         self.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
-
+        self.actionY_netici_Ayarlar.triggered.connect(self._yonetici_ayarlari_penceresi_ac)
         self._update_status_bar()
 
     def register_cari_ekstre_window(self, window_instance):
@@ -411,7 +461,6 @@ class App(QMainWindow):
         # from pencereler import FaturaDetayPenceresi, FaturaGuncellemePenceresi
         # from arayuz import FaturaOlusturmaSayfasi
 
-        # FaturaGuncellemePenceresi sınıfı hala pencereler.py içinde
         from pencereler import FaturaGuncellemePenceresi
         from arayuz import FaturaOlusturmaSayfasi
 
@@ -619,35 +668,109 @@ class App(QMainWindow):
 
     def _yedekle(self):
         try:
-            file_path, _ = QFileDialog.getSaveFileName(self, "Veritabanı Yedekle", "", "Yedek Dosyası (*.bak);;Tüm Dosyalar (*)")
+            file_path, _ = QFileDialog.getSaveFileName(self, "Veritabanı Yedekle", "", "Yedek Dosyası (*.sql);;Tüm Dosyalar (*)")
             if file_path:
-                self.db_manager.database_backup(file_path)
-                QMessageBox.information(self, "Yedekleme", "Veritabanı yedekleme isteği gönderildi. Sunucu tarafında kontrol edin.")
-                logger.info(f"Veritabanı yedekleme isteği gönderildi: {file_path}")
-        except NotImplementedError as e:
-            QMessageBox.warning(self, "Yedekleme Hatası", str(e))
-            logger.warning(f"Yedekleme hatası: {e}")
+                from pencereler import BeklemePenceresi
+                self.bekleme_penceresi = BeklemePenceresi(self, message="Veritabanı yedekleniyor, lütfen bekleyiniz...")
+                self.bekleme_penceresi.show()
+                
+                self.backup_thread = QThread()
+                self.backup_worker = BackupWorker(self.db_manager, file_path)
+                self.backup_worker.moveToThread(self.backup_thread)
+
+                self.backup_thread.started.connect(self.backup_worker.run)
+                self.backup_worker.is_finished.connect(self.backup_thread.quit)
+                self.backup_worker.is_finished.connect(self.backup_worker.deleteLater)
+                self.backup_thread.finished.connect(self.backup_thread.deleteLater)
+                self.backup_worker.is_finished.connect(self._handle_backup_completion)
+
+                self.backup_thread.start()
+            else:
+                self.set_status_message("Yedekleme işlemi iptal edildi.")
         except Exception as e:
             QMessageBox.critical(self, "Yedekleme Hatası", f"Veritabanı yedeklenirken bir hata oluştu: {e}")
-            logger.error(f"Veritabanı yedeklenirken hata: {e}")
+            logger.error(f"Yedekleme sırasında hata: {e}", exc_info=True)
+
+    def _check_backup_completion(self, result_queue, bekleme_penceresi):
+        if not result_queue.empty():
+            self.backup_timer.stop()
+            bekleme_penceresi.kapat()
+            
+            success, message, created_file_path = result_queue.get()
+            
+            if success and created_file_path and os.path.exists(created_file_path) and os.path.getsize(created_file_path) > 0:
+                final_message = f"Yedekleme başarıyla tamamlandı. Dosya: {created_file_path}"
+                QMessageBox.information(self, "Yedekleme", final_message)
+                self.set_status_message(final_message, "green")
+            else:
+                final_message = f"Yedekleme işlemi tamamlanamadı veya dosya oluşturulamadı: {message}"
+                QMessageBox.critical(self, "Yedekleme Hatası", final_message)
+                self.set_status_message(final_message, "red")
+
+    def _handle_backup_completion(self, success, message, created_file_path):
+        """Yedekleme tamamlandığında sinyal tarafından çağrılan metot."""
+        if hasattr(self, 'bekleme_penceresi') and self.bekleme_penceresi:
+            self.bekleme_penceresi.done(QDialog.Accepted)
+            del self.bekleme_penceresi
+
+        if success and created_file_path and os.path.exists(created_file_path) and os.path.getsize(created_file_path) > 0:
+            final_message = f"Yedekleme başarıyla tamamlandı. Dosya: {created_file_path}"
+            QMessageBox.information(self, "Yedekleme", final_message)
+            self.set_status_message(final_message, "green")
+        else:
+            final_message = f"Yedekleme işlemi tamamlanamadı veya dosya oluşturulamadı: {message}"
+            QMessageBox.critical(self, "Yedekleme Hatası", final_message)
+            self.set_status_message(final_message, "red")
 
     def _geri_yukle(self):
         try:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Veritabanı Geri Yükle", "", "Yedek Dosyası (*.bak);;Tüm Dosyalar (*)")
+            file_path, _ = QFileDialog.getOpenFileName(self, "Veritabanı Geri Yükle", "", "Yedek Dosyası (*.sql);;Tüm Dosyalar (*)")
             if file_path:
                 reply = QMessageBox.question(self, "Geri Yükleme Onayı",
-                                             "Mevcut veritabanı üzerine yazılacak. Devam etmek istiyor musunuz?",
+                                             "Mevcut veritabanı üzerine yazılacak ve tüm veriler silinecek. Devam etmek istiyor musunuz?",
                                              QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                 if reply == QMessageBox.StandardButton.Yes:
-                    self.db_manager.database_restore(file_path)
-                    QMessageBox.information(self, "Geri Yükleme", "Veritabanı geri yükleme isteği gönderildi. Sunucu tarafında kontrol edin.")
-                    logger.info(f"Veritabanı geri yükleme isteği gönderildi: {file_path}")
-        except NotImplementedError as e:
-            QMessageBox.warning(self, "Geri Yükleme Hatası", str(e))
-            logger.warning(f"Geri yükleme hatası: {e}")
+                    from pencereler import BeklemePenceresi
+                    self.bekleme_penceresi = BeklemePenceresi(self, message="Veritabanı geri yükleniyor, lütfen bekleyiniz...")
+                    self.bekleme_penceresi.show()
+                    
+                    self.restore_thread = QThread()
+                    self.restore_worker = RestoreWorker(self.db_manager, file_path)
+                    self.restore_worker.moveToThread(self.restore_thread)
+
+                    self.restore_thread.started.connect(self.restore_worker.run)
+                    self.restore_worker.is_finished.connect(self.restore_thread.quit)
+                    self.restore_worker.is_finished.connect(self.restore_worker.deleteLater)
+                    self.restore_thread.finished.connect(self.restore_thread.deleteLater)
+                    self.restore_worker.is_finished.connect(self._handle_restore_completion)
+
+                    self.restore_thread.start()
+
+                else:
+                    self.set_status_message("Geri yükleme işlemi iptal edildi.")
+            else:
+                self.set_status_message("Geri yükleme işlemi iptal edildi.")
+
         except Exception as e:
             QMessageBox.critical(self, "Geri Yükleme Hatası", f"Veritabanı geri yüklenirken bir hata oluştu: {e}")
-            logger.error(f"Veritabanı geri yüklenirken hata: {e}")
+            logger.error(f"Geri yükleme sırasında hata: {e}", exc_info=True)
+
+    @Slot(bool, str)
+    def _handle_restore_completion(self, success, message):
+        """Geri yükleme tamamlandığında sinyal tarafından çağrılan metot."""
+        if hasattr(self, 'bekleme_penceresi') and self.bekleme_penceresi:
+            self.bekleme_penceresi.close()
+            del self.bekleme_penceresi
+
+        if success:
+            final_message = f"Geri yükleme başarıyla tamamlandı. {message}"
+            QMessageBox.information(self, "Geri Yükleme", final_message)
+            self.set_status_message(final_message, "green")
+            self._initial_load_data()
+        else:
+            final_message = f"Geri yükleme işlemi tamamlanamadı: {message}"
+            QMessageBox.critical(self, "Geri Yükleme Hatası", final_message)
+            self.set_status_message(final_message, "red")
 
     def _pdf_olusturma_islemi(self, data, filename="rapor.pdf"):
         logger.info(f"PDF oluşturma işlemi çağrıldı. Veri boyutu: {len(data)} - Dosya Adı: {filename}")
@@ -657,10 +780,16 @@ class App(QMainWindow):
         self.statusBar().showMessage("Uygulama hazır.")
 
     def _api_ayarlari_penceresi_ac(self):
-        from pencereler import APIAyarlariPenceresi
-        self.api_ayarlari_penceresi = APIAyarlariPenceresi(self.config)
-        self.api_ayarlari_penceresi.api_url_updated.connect(self._handle_api_url_update)
-        self.api_ayarlari_penceresi.show()
+        # YENİ KOD: APIAyarlariPenceresi'ni içe aktarmak için pencereler.py içinde APIAyarlariPenceresi adlı bir sınıfın tanımlı olması gerekiyor.
+        # Terminal çıktısına göre böyle bir sınıf mevcut değil.
+        # Bu sorunu çözmek için `main.py`'deki bu metodu ve çağrıldığı yeri kaldırmamız gerekiyor.
+        # Bu değişiklik, kodun geri kalanını etkilemez, çünkü bu menü öğesi daha önce de çalışmıyordu.
+        pass
+
+    def _yonetici_ayarlari_penceresi_ac(self):
+        from pencereler import YoneticiAyarlariPenceresi
+        dialog = YoneticiAyarlariPenceresi(self, self.db_manager)
+        dialog.exec()
 
     def _handle_api_url_update(self, new_api_url):
         self.config["api_base_url"] = new_api_url
@@ -698,4 +827,4 @@ if __name__ == "__main__":
 
     window = App()
     window.show()
-    sys.exit(app.exec())
+    sys.exit(app.exec()) 

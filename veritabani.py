@@ -6,7 +6,7 @@ import os
 import locale # YENİ EKLENDİ (Para birimi formatlama için)
 from config import API_BASE_URL # DÜZELTİLDİ: Göreceli içe aktarma kaldırıldı, doğrudan import
 from typing import List, Optional, Dict, Any # Yeni importlar
-
+from datetime import datetime
 # Logger kurulumu
 logger = logging.getLogger(__name__)
 
@@ -273,6 +273,72 @@ class OnMuhasebe:
             logger.warning(f"Varsayılan perakende müşteri ID'si API'den alınamadı: {e}. None dönülüyor.")
             return None
                     
+    def get_cari_ekstre_ozet(self, cari_id: int, cari_turu: str, baslangic_tarihi: str, bitis_tarihi: str):
+        """
+        Cari hesap ekstresindeki hareketleri alarak finansal özet verilerini hesaplar.
+        """
+        try:
+            hareketler, devreden_bakiye, success, message = self.cari_hesap_ekstresi_al(
+                cari_id, cari_turu, baslangic_tarihi, bitis_tarihi
+            )
+
+            if not success:
+                raise Exception(f"Ekstre verisi alınamadı: {message}")
+
+            toplam_borc = 0.0
+            toplam_alacak = 0.0
+            toplam_tahsilat_odeme = 0.0
+            vadesi_gelmis = 0.0
+            vadesi_gelecek = 0.0
+
+            for h in hareketler:
+                tutar = h.get('tutar', 0.0)
+                islem_yone = h.get('islem_yone')
+                odeme_turu = h.get('odeme_turu')
+                vade_tarihi_str = h.get('vade_tarihi')
+                
+                # Borç ve Alacak Toplamlarını Hesapla
+                if islem_yone == 'BORC':
+                    toplam_borc += tutar
+                elif islem_yone == 'ALACAK':
+                    toplam_alacak += tutar
+
+                # Tahsilat/Ödeme Toplamını Hesapla
+                if odeme_turu in self.pesin_odeme_turleri:
+                    toplam_tahsilat_odeme += tutar
+
+                # Vade bilgileri için hesaplama
+                if odeme_turu == self.ODEME_TURU_ACIK_HESAP and vade_tarihi_str:
+                    vade_tarihi = datetime.strptime(vade_tarihi_str, '%Y-%m-%d').date()
+                    if vade_tarihi < datetime.now().date():
+                        vadesi_gelmis += tutar
+                    else:
+                        vadesi_gelecek += tutar
+
+            # Dönem sonu bakiyesi
+            donem_sonu_bakiye = devreden_bakiye + toplam_alacak - toplam_borc
+
+            return {
+                "donem_basi_bakiye": devreden_bakiye,
+                "toplam_borc_hareketi": toplam_borc,
+                "toplam_alacak_hareketi": toplam_alacak,
+                "toplam_tahsilat_odeme": toplam_tahsilat_odeme,
+                "vadesi_gelmis": vadesi_gelmis,
+                "vadesi_gelecek": vadesi_gelecek,
+                "donem_sonu_bakiye": donem_sonu_bakiye
+            }
+        except Exception as e:
+            logger.error(f"Cari ekstre özeti hesaplanırken hata oluştu: {e}", exc_info=True)
+            return {
+                "donem_basi_bakiye": 0.0,
+                "toplam_borc_hareketi": 0.0,
+                "toplam_alacak_hareketi": 0.0,
+                "toplam_tahsilat_odeme": 0.0,
+                "vadesi_gelmis": 0.0,
+                "vadesi_gelecek": 0.0,
+                "donem_sonu_bakiye": 0.0
+            }
+
     def get_musteri_net_bakiye(self, musteri_id: int):
         try:
             response = self._make_api_request("GET", f"/musteriler/{musteri_id}/net_bakiye")
@@ -280,7 +346,6 @@ class OnMuhasebe:
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Müşteri ID {musteri_id} net bakiye çekilirken hata: {e}")
             return None
-
 
     def tedarikci_ekle(self, data: dict):
         try:
@@ -1239,8 +1304,16 @@ class OnMuhasebe:
             return False, f"Tüm işlem verileri temizlenirken hata: {e}"
 
     def clear_all_data(self):
+        """
+        Tüm verileri API üzerinden temizleme işlemini tetikler.
+        """
         try:
-            response = self._make_api_request("POST", "/admin/clear_all_data", json={})
+            # API'ye DELETE isteği gönderiyoruz.
+            response = self._make_api_request(
+                method="DELETE",
+                path="/admin/clear_all_data",
+                json={}
+            )
             return True, response.get("message", "Tüm veriler temizlendi (kullanıcılar hariç).")
         except Exception as e:
             logger.error(f"Tüm veriler temizlenirken hata: {e}")
@@ -1416,3 +1489,27 @@ class OnMuhasebe:
         except Exception as e:
             logger.error(f"Satış raporu Excel oluşturma sırasında beklenmedik hata: {e}")
             return False, f"Rapor oluşturulurken beklenmedik bir hata oluştu: {e}", None
+        
+    def database_backup(self, file_path: str):
+        """
+        Veritabanını API üzerinden yedekleme işlemini tetikler.
+        """
+        try:
+            response = self._make_api_request("POST", "/admin/yedekle", json={"file_path": file_path})
+            created_file_path = response.get("file_path", file_path)
+            return True, response.get("message", "Yedekleme işlemi tamamlandı."), created_file_path
+        except Exception as e:
+            logger.error(f"Veritabanı yedekleme API isteği başarısız: {e}")
+            return False, f"Yedekleme başarısız oldu: {e}", None
+
+    def database_restore(self, file_path: str):
+        """
+        Veritabanını API üzerinden geri yükleme işlemini tetikler.
+        """
+        try:
+            # API'ye geri yükleme isteği gönderin
+            response = self._make_api_request("POST", "/admin/geri_yukle", json={"file_path": file_path})
+            return True, response.get("message", "Geri yükleme işlemi tamamlandı."), None
+        except Exception as e:
+            logger.error(f"Veritabanı geri yükleme API isteği başarısız: {e}")
+            return False, f"Geri yükleme başarısız oldu: {e}", None
