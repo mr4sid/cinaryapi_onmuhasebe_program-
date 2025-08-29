@@ -56,28 +56,19 @@ Base = declarative_base()
 def get_db():
     """
     Veritabanı oturumu almak için bağımlılık fonksiyonu.
-    Bağlantı havuzunda hata oluşursa otomatik olarak yeniden dener.
     """
     global SessionLocal
-    
-    # SessionLocal henüz oluşturulmadıysa yeni bir tane oluştur
     if SessionLocal is None:
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
         logger.info("Yeni bir veritabanı oturumu sınıfı (SessionLocal) oluşturuldu.")
     
     db = SessionLocal()
     try:
+        # Bağlantı testi kaldırıldı. İlk sorgu bağlantıyı otomatik olarak test edecektir.
         yield db
-    except OperationalError as e:
-        logger.warning(f"Bağlantı hatası alındı, yeniden deneme yapılıyor. Hata: {e}")
-        # Bağlantı havuzunu sıfırla ve yeniden dene
+    except Exception as e:
+        logger.critical(f"Veritabanı bağlantısı kurulamadı! Hata: {e}")
         reset_db_connection()
-        db = SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
+        raise
     finally:
-        # Hata durumunda yeniden denemede oluşan oturumu da kapat
-        if 'db' in locals():
-            db.close()
+        db.close()
