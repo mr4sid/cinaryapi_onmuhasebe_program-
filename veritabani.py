@@ -935,19 +935,20 @@ class OnMuhasebe:
             logger.error(f"Nitelik tipi {nitelik_tipi} ID {nitelik_id} silinirken hata: {e}")
             raise # Hatayı yukarı fırlat
 
-    def kategori_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
+    def kategori_listele(self, skip: int = 0, limit: int = 1000) -> List[dict]:
         try:
             response = self._make_api_request("GET", "/nitelikler/kategoriler", params={"skip": skip, "limit": limit})
             if isinstance(response, dict) and "items" in response:
-                return response
+                return response["items"]
             elif isinstance(response, list):
-                return {"items": response, "total": len(response)}
+                # Bu durum, API'nin beklenen format dışında yanıt verdiğini gösterir.
+                return response
             else:
                 logger.warning(f"kategori_listele: API'den beklenmedik yanıt formatı. Yanıt: {response}")
-                return {"items": [], "total": 0}
+                return []
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Kategori listesi API'den alınamadı: {e}")
-            return {"items": [], "total": 0}
+            return []
 
     def marka_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
         try:

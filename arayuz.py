@@ -1158,7 +1158,7 @@ class MusteriYonetimiSayfasi(QWidget):
 
             self.app.set_status_message(f"Müşteri listesi başarıyla güncellendi. Toplam {toplam_kayit} müşteri.")
             self.guncelle_toplam_ozet_bilgiler()
-            self._sayfalama_butonlarini_guncelle() # <-- BU SATIR EKLENDİ
+            self._sayfalama_butonlarini_guncelle()
 
         except Exception as e:
             logger.error(f"Müşteri listesi yüklenirken hata oluştu: {e}", exc_info=True)

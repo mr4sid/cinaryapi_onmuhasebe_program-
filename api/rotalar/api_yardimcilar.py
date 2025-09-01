@@ -45,22 +45,3 @@ def _cari_bakiyesini_guncelle(db: Session, cari_id: int, cari_tipi: str):
     except Exception as e:
         logger.error(f"Cari bakiye güncellenirken beklenmeyen bir hata oluştu: {e}", exc_info=True)
         raise e
-
-def calculate_cari_net_bakiye(db: Session, cari_id: int, cari_turu: str) -> float:
-    """
-    Belirli bir cari (Müşteri veya Tedarikçi) için net bakiyeyi hesaplar.
-    """
-    alacak_toplami = db.query(func.sum(semalar.CariHareket.tutar)).filter(
-        semalar.CariHareket.cari_id == cari_id,
-        semalar.CariHareket.cari_turu == cari_turu,
-        semalar.CariHareket.islem_yone == "ALACAK"
-    ).scalar() or 0.0
-
-    borc_toplami = db.query(func.sum(semalar.CariHareket.tutar)).filter(
-        semalar.CariHareket.cari_id == cari_id,
-        semalar.CariHareket.cari_turu == cari_turu,
-        semalar.CariHareket.islem_yone == "BORC"
-    ).scalar() or 0.0
-
-    net_bakiye = alacak_toplami - borc_toplami
-    return net_bakiye

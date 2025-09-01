@@ -4,8 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from .. import modeller, semalar
 from ..veritabani import get_db
-from .api_yardimcilar import calculate_cari_net_bakiye # Yeni eklenen satır
-
+from ..api_servisler import CariHesaplamaService
 router = APIRouter(prefix="/tedarikciler", tags=["Tedarikçiler"])
 
 @router.post("/", response_model=modeller.TedarikciRead)
@@ -40,10 +39,11 @@ def read_tedarikciler(
     total_count = query.count()
     tedarikciler = query.offset(skip).limit(limit).all()
 
-    # Her tedarikçi için net bakiyeyi hesapla ve ekle
+    # Yeni hizmet sınıfını kullanarak her tedarikçi için net bakiyeyi hesapla
+    cari_hizmeti = CariHesaplamaService(db)
     tedarikciler_with_balance = []
     for tedarikci in tedarikciler:
-        net_bakiye = calculate_cari_net_bakiye(db, tedarikci.id, "TEDARIKCI")
+        net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(tedarikci.id, "TEDARIKCI")
         tedarikci_dict = modeller.TedarikciRead.model_validate(tedarikci).model_dump()
         tedarikci_dict["net_bakiye"] = net_bakiye
         tedarikciler_with_balance.append(tedarikci_dict)
@@ -56,8 +56,9 @@ def read_tedarikci(tedarikci_id: int, db: Session = Depends(get_db)):
     if not tedarikci:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
 
-    # Tedarikçi detayını dönerken net bakiyeyi de ekleyelim
-    net_bakiye = calculate_cari_net_bakiye(db, tedarikci_id, "TEDARIKCI")
+    # Yeni hizmet sınıfını kullanarak tedarikçinin net bakiyesini hesapla
+    cari_hizmeti = CariHesaplamaService(db)
+    net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(tedarikci_id, "TEDARIKCI")
     tedarikci_dict = modeller.TedarikciRead.model_validate(tedarikci).model_dump()
     tedarikci_dict["net_bakiye"] = net_bakiye
     return tedarikci_dict
@@ -88,5 +89,6 @@ def get_net_bakiye_endpoint(tedarikci_id: int, db: Session = Depends(get_db)):
     if not tedarikci:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
 
-    net_bakiye = calculate_cari_net_bakiye(db, tedarikci_id, "TEDARIKCI")
+    cari_hizmeti = CariHesaplamaService(db)
+    net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(tedarikci_id, "TEDARIKCI")
     return {"net_bakiye": net_bakiye}

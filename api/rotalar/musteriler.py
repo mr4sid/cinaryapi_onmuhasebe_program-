@@ -4,8 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from .. import modeller, semalar
 from ..veritabani import get_db
-from .api_yardimcilar import calculate_cari_net_bakiye # Yeni eklenen satır
-
+from ..api_servisler import CariHesaplamaService
 router = APIRouter(prefix="/musteriler", tags=["Müşteriler"])
 
 @router.post("/", response_model=modeller.MusteriRead)
@@ -40,16 +39,16 @@ def read_musteriler(
     total_count = query.count()
     musteriler = query.offset(skip).limit(limit).all()
 
-    # Her müşteri için net bakiyeyi hesapla ve ekle
+    # Yeni hizmet sınıfını kullanarak her müşteri için net bakiyeyi hesapla
+    cari_hizmeti = CariHesaplamaService(db)
     musteriler_with_balance = []
     for musteri in musteriler:
-        net_bakiye = calculate_cari_net_bakiye(db, musteri.id, "MUSTERI")
+        net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(musteri.id, "MUSTERI")
         musteri_dict = modeller.MusteriRead.model_validate(musteri).model_dump()
         musteri_dict["net_bakiye"] = net_bakiye
         musteriler_with_balance.append(musteri_dict)
 
     return {"items": musteriler_with_balance, "total": total_count}
-
 
 @router.get("/{musteri_id}", response_model=modeller.MusteriRead)
 def read_musteri(musteri_id: int, db: Session = Depends(get_db)):
@@ -57,8 +56,9 @@ def read_musteri(musteri_id: int, db: Session = Depends(get_db)):
     if not musteri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müşteri bulunamadı")
 
-    # Müşteri detayını dönerken net bakiyeyi de ekleyelim
-    net_bakiye = calculate_cari_net_bakiye(db, musteri_id, "MUSTERI")
+    # Yeni hizmet sınıfını kullanarak müşterinin net bakiyesini hesapla
+    cari_hizmeti = CariHesaplamaService(db)
+    net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(musteri_id, "MUSTERI")
     musteri_dict = modeller.MusteriRead.model_validate(musteri).model_dump()
     musteri_dict["net_bakiye"] = net_bakiye
     return musteri_dict
@@ -89,5 +89,6 @@ def get_net_bakiye_endpoint(musteri_id: int, db: Session = Depends(get_db)):
     if not musteri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müşteri bulunamadı")
 
-    net_bakiye = calculate_cari_net_bakiye(db, musteri_id, "MUSTERI")
+    cari_hizmeti = CariHesaplamaService(db)
+    net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(musteri_id, "MUSTERI")
     return {"net_bakiye": net_bakiye}

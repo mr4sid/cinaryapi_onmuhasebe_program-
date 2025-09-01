@@ -6,8 +6,7 @@ from typing import Optional
 from fastapi.responses import FileResponse
 from .. import modeller, semalar
 from ..veritabani import get_db
-from .musteriler import calculate_cari_net_bakiye
-from .tedarikciler import calculate_cari_net_bakiye as calculate_tedarikci_net_bakiye
+from ..api_servisler import CariHesaplamaService
 import openpyxl
 import os
 
@@ -274,13 +273,15 @@ def get_nakit_akisi_raporu_endpoint(
 @router.get("/cari_yaslandirma_raporu", response_model=modeller.CariYaslandirmaResponse)
 def get_cari_yaslandirma_verileri_endpoint(db: Session = Depends(get_db)):
     today = date.today()
-    
+
     musteri_alacaklar = []
     tedarikci_borclar = []
 
+    cari_hizmeti = CariHesaplamaService(db)
+
     musteriler = db.query(semalar.Musteri).filter(semalar.Musteri.aktif == True).all()
     for musteri in musteriler:
-        net_bakiye = calculate_cari_net_bakiye(db, musteri.id, semalar.CariTipiEnum.MUSTERI)
+        net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(musteri.id, semalar.CariTipiEnum.MUSTERI)
         if net_bakiye > 0:
             musteri_alacaklar.append({
                 "cari_id": musteri.id,
@@ -288,10 +289,10 @@ def get_cari_yaslandirma_verileri_endpoint(db: Session = Depends(get_db)):
                 "bakiye": net_bakiye,
                 "vade_tarihi": None
             })
-    
+
     tedarikciler = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.aktif == True).all()
     for tedarikci in tedarikciler:
-        net_bakiye = calculate_tedarikci_net_bakiye(db, tedarikci.id, semalar.CariTipiEnum.TEDARIKCI)
+        net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(tedarikci.id, semalar.CariTipiEnum.TEDARIKCI)
         if net_bakiye < 0:
             tedarikci_borclar.append({
                 "cari_id": tedarikci.id,
@@ -299,12 +300,12 @@ def get_cari_yaslandirma_verileri_endpoint(db: Session = Depends(get_db)):
                 "bakiye": abs(net_bakiye),
                 "vade_tarihi": None
             })
-    
+
     return {
         "musteri_alacaklar": musteri_alacaklar,
         "tedarikci_borclar": tedarikci_borclar
     }
-
+    
 @router.get("/cari_hesap_ekstresi", response_model=modeller.CariHareketListResponse)
 def get_cari_hesap_ekstresi_endpoint(
     cari_id: int = Query(..., description="Cari ID"),
