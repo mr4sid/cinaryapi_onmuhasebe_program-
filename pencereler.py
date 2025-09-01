@@ -398,6 +398,45 @@ class CariHesapEkstresiPenceresi(QDialog):
         btn_update_cari.clicked.connect(self._cari_bilgileri_guncelle)
         cari_detay_cerceve.layout().addWidget(btn_update_cari, row_idx_cari, 0, 1, 2)
 
+        btn_cari_sil = QPushButton("Cariyi Sil")
+        btn_cari_sil.clicked.connect(self._cari_sil)
+        btn_cari_sil.setStyleSheet("background-color: #f44336; color: white;")
+        export_buttons_frame.layout().addWidget(btn_cari_sil)
+
+    def _cari_sil(self):
+        """Cariyi siler, varsayılan carilerin silinmesini engeller."""
+        # Varsayılan carilerin ID'lerini kontrol et
+        perakende_musteri_id = self.db.get_perakende_musteri_id()
+        genel_tedarikci_id = self.db.get_genel_tedarikci_id()
+        
+        if (self.cari_tip == self.db.CARI_TIP_MUSTERI and self.cari_id == perakende_musteri_id) or \
+           (self.cari_tip == self.db.CARI_TIP_TEDARIKCI and self.cari_id == genel_tedarikci_id):
+            QMessageBox.warning(self, "Silme Engellendi", "Varsayılan cari hesaplar silinemez, sadece düzenlenebilir.")
+            return
+
+        reply = QMessageBox.question(self, 'Cariyi Sil Onayı',
+                                     f"'{self.cari_ad_gosterim}' adlı cariyi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            try:
+                success, message = False, "Bilinmeyen hata."
+                if self.cari_tip == self.db.CARI_TIP_MUSTERI:
+                    success, message = self.db.musteri_sil(self.cari_id)
+                elif self.cari_tip == self.db.CARI_TIP_TEDARIKCI:
+                    success, message = self.db.tedarikci_sil(self.cari_id)
+                
+                if success:
+                    QMessageBox.information(self, "Başarılı", message)
+                    self.close() # Pencereyi kapat
+                    if self.parent_list_refresh_func: # Ana listeyi yenile
+                        self.parent_list_refresh_func()
+                else:
+                    QMessageBox.critical(self, "Hata", message)
+            except Exception as e:
+                logger.error(f"Cari silinirken hata oluştu: {e}", exc_info=True)
+                QMessageBox.critical(self, "Hata", f"Cari silinirken bir hata oluştu:\n{e}")
+
     def _create_filter_alani(self, filter_frame):
         filter_frame.setLayout(QHBoxLayout(filter_frame))
         

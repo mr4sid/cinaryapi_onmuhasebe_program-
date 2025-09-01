@@ -856,53 +856,75 @@ class KasaBankaYonetimiSayfasi(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Hata", f"Yeni hesap ekleme penceresi açılırken bir hata oluştu:\n{e}")
 
-    def hesap_duzenle_event(self, item, column): # item itemDoubleClicked sinyalinden gelir
-        selected_item_id = item.text(0) # İlk sütun olan ID'yi al
-        self.secili_hesap_duzenle(hesap_id=selected_item_id)
+    def hesap_duzenle_event(self, item, column):
+        """QTreeWidget'ta bir hesaba çift tıklandığında düzenleme penceresini açar."""
+        hesap_id = item.data(0, Qt.UserRole)
+        if hesap_id:
+            self.secili_hesap_duzenle_penceresi_ac(hesap_id=int(hesap_id))
 
-    def secili_hesap_duzenle(self):
-        selected_items = self.hesap_table_widget.selectedItems()
-        if not selected_items:
-            self.app.set_status_message("Lütfen düzenlemek istediğiniz hesabı seçin.", "orange")
+    def secili_hesap_duzenle_penceresi_ac(self, hesap_id=None):
+        """Seçili hesabı düzenleme penceresinde açar."""
+        if hesap_id is None:
+            selected_items = self.tree_kb.selectedItems()
+            if not selected_items:
+                self.app.set_status_message("Lütfen düzenlemek istediğiniz hesabı seçin.", "orange")
+                return
+            
+            hesap_id = selected_items[0].data(0, Qt.UserRole)
+
+        if not hesap_id:
+            self.app.set_status_message("Geçersiz bir hesap seçimi yapıldı. Lütfen tekrar deneyin.", "red")
             return
 
-        row = selected_items[0].row()
-        hesap_id = int(self.hesap_table_widget.item(row, 0).text())
-
-        # Eski Kod:
-        # try:
-        #     response = requests.get(f"{API_BASE_URL}/kasalar_bankalar/{hesap_id}")
-        #     response.raise_for_status()
-        #     hesap_data = response.json()
-        # except requests.exceptions.RequestException as e:
-        #     logger.error(f"Kasa/Banka hesap bilgileri çekilirken hata oluştu: {e}")
-        #     self.app.set_status_message(f"Hata: Hesap bilgileri yüklenemedi. {e}", "red")
-        #     return
-
-        # Yeni Kod: self.db.kasa_banka_getir_by_id metodunu kullanıyoruz
         try:
-            hesap_data = self.db.kasa_banka_getir_by_id(hesap_id)
+            hesap_data = self.db.kasa_banka_getir_by_id(int(hesap_id))
             if not hesap_data:
                 self.app.set_status_message(f"Hata: ID {hesap_id} olan hesap bulunamadı.", "red")
                 return
+
+            if hesap_data.get("kod") == "NAKİT_KASA":
+                QMessageBox.information(self.app, "Bilgi", "Bu varsayılan bir hesaptır. Sadece düzenlenebilir, silinemez.")
+
         except Exception as e:
             logger.error(f"Kasa/Banka hesap bilgileri çekilirken hata oluştu: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Hesap bilgileri yüklenemedi. {e}", "red")
             return
 
-        # YeniKasaBankaEklePenceresini aç ve verileri yükle
-        self.app._kasa_banka_karti_penceresi_ac(self.db, hesap_data)
-        self.hesap_listesini_yenile() # Güncelleme sonrası listeyi yenile
+        dialog = YeniKasaBankaEklePenceresi(
+            self.app,
+            self.db,
+            self.hesap_listesini_yenile,
+            hesap_duzenle=hesap_data,
+            app_ref=self.app
+        )
+        dialog.exec()
+
+    def secili_hesap_duzenle(self):
+        self.secili_hesap_duzenle_penceresi_ac()
 
     def secili_hesap_sil(self):
-        selected_items = self.hesap_table_widget.selectedItems()
+        selected_items = self.tree_kb.selectedItems()
         if not selected_items:
             self.app.set_status_message("Lütfen silmek istediğiniz hesabı seçin.", "orange")
             return
 
-        row = selected_items[0].row()
-        hesap_id = int(self.hesap_table_widget.item(row, 0).text())
-        hesap_adi = self.hesap_table_widget.item(row, 1).text()
+        hesap_id = selected_items[0].data(0, Qt.UserRole)
+        hesap_adi = selected_items[0].text(1)
+
+        if not hesap_id:
+            self.app.set_status_message("Geçersiz bir hesap seçimi yapıldı. Lütfen tekrar deneyin.", "red")
+            return
+
+        try:
+            hesap_data = self.db.kasa_banka_getir_by_id(int(hesap_id))
+            if hesap_data and hesap_data.get("kod") == "NAKİT_KASA":
+                QMessageBox.critical(self.app, "Silme Hatası", "Varsayılan 'Nakit Kasa' hesabı silinemez. Sadece düzenlenebilir.")
+                self.app.set_status_message("Varsayılan hesap silme işlemi engellendi.", "red")
+                return
+        except Exception as e:
+            logger.error(f"Hesap verileri çekilirken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Hesap verileri yüklenemedi. Silme işlemi durduruldu.", "red")
+            return
 
         reply = QMessageBox.question(self, 'Hesap Sil Onayı',
                                      f"'{hesap_adi}' adlı hesabı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
@@ -910,7 +932,7 @@ class KasaBankaYonetimiSayfasi(QWidget):
 
         if reply == QMessageBox.Yes:
             try:
-                success = self.db.kasa_banka_sil(hesap_id)
+                success, message = self.db.kasa_banka_sil(int(hesap_id))
                 if success:
                     self.app.set_status_message(f"'{hesap_adi}' başarıyla silindi.", "green")
                     self.hesap_listesini_yenile()
@@ -919,7 +941,7 @@ class KasaBankaYonetimiSayfasi(QWidget):
             except Exception as e:
                 logger.error(f"Hesap silinirken hata oluştu: {e}", exc_info=True)
                 self.app.set_status_message(f"Hata: Hesap silinemedi. {e}", "red")
-
+                
     def onceki_sayfa_kb(self):
         if self.mevcut_sayfa > 1:
             self.mevcut_sayfa -= 1
@@ -1106,7 +1128,7 @@ class MusteriYonetimiSayfasi(QWidget):
             sira_no = (self.mevcut_sayfa - 1) * self.kayit_sayisi_per_sayfa + 1
             for musteri in musteri_verileri:
                 item_qt = QTreeWidgetItem(self.tree)
-                item_qt.setText(0, str(sira_no)) # SIRA NUMARASI OLARAK DEĞİŞTİRİLDİ
+                item_qt.setText(0, str(sira_no))
                 item_qt.setText(1, musteri.get("ad", ""))
                 
                 son_odeme_tarihi_str = "-"
@@ -1130,17 +1152,25 @@ class MusteriYonetimiSayfasi(QWidget):
                 for col_idx in range(self.tree.columnCount()):
                     item_qt.setTextAlignment(col_idx, Qt.AlignCenter)
 
-                item_qt.setData(0, Qt.UserRole, musteri.get("id", 0)) # Sıralama için hala ID'yi kullanıyoruz
+                item_qt.setData(0, Qt.UserRole, musteri.get("id", 0))
 
                 sira_no += 1
 
             self.app.set_status_message(f"Müşteri listesi başarıyla güncellendi. Toplam {toplam_kayit} müşteri.")
             self.guncelle_toplam_ozet_bilgiler()
+            self._sayfalama_butonlarini_guncelle() # <-- BU SATIR EKLENDİ
 
         except Exception as e:
             logger.error(f"Müşteri listesi yüklenirken hata oluştu: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Müşteri listesi yüklenemedi. {e}")
-            
+                
+    def _sayfalama_butonlarini_guncelle(self):
+        # Sadece sayfalama butonlarının durumunu yönetir.
+        self.btn_ilk_sayfa.setEnabled(self.mevcut_sayfa > 1)
+        self.btn_onceki_sayfa.setEnabled(self.mevcut_sayfa > 1)
+        self.btn_sonraki_sayfa.setEnabled(self.mevcut_sayfa < self.total_pages)
+        self.btn_son_sayfa.setEnabled(self.mevcut_sayfa < self.total_pages)
+                
     def secili_musteri_sil(self):
         selected_items = self.musteri_table_widget.selectedItems()
         if not selected_items:
@@ -1182,13 +1212,12 @@ class MusteriYonetimiSayfasi(QWidget):
     def _on_item_selection_changed(self):
         selected_items = self.tree.selectedItems()
         is_item_selected = bool(selected_items)
-        # Sadece bir öğe seçildiğinde ilgili butonları aktif hale getir
+        
+        # Seçim durumuna göre "Yeni müşteri" ve "Ara" butonlarını yönet.
         self.btn_yeni_musteri.setEnabled(not is_item_selected)
         self.btn_ara.setEnabled(not is_item_selected)
-        self.btn_ilk_sayfa.setEnabled(not is_item_selected)
-        self.btn_onceki_sayfa.setEnabled(not is_item_selected)
-        self.btn_sonraki_sayfa.setEnabled(not is_item_selected)
-        self.btn_son_sayfa.setEnabled(not is_item_selected)
+        
+        # Sayfalama butonları artık bu metot tarafından yönetilmiyor.
 
     def ilk_sayfa(self):
         if self.mevcut_sayfa != 1:
@@ -1270,37 +1299,28 @@ class MusteriYonetimiSayfasi(QWidget):
             return
 
         selected_item = selected_items[0]
-        # Müşteri ID'si QTreeWidgetItem'ın data(0, Qt.UserRole) kısmında saklı.
+        # Müşteri Adı, 1. sütun (indeks 1)
+        musteri_adi = selected_item.text(1) 
         musteri_id = selected_item.data(0, Qt.UserRole)
-        musteri_adi = selected_item.text(2) # Müşteri Adı
-
-        if musteri_id == -1: # Eğer ID placeholder ise
+        
+        if musteri_id == -1: 
              QMessageBox.warning(self, "Uyarı", "Geçersiz bir müşteri seçimi yaptınız.")
              return
         
-        # NOT: pencereler.py dosyasındaki CariHesapEkstresiPenceresi'nin PySide6'ya dönüştürülmüş olması gerekmektedir.
-        # Bu fonksiyon, CariHesapEkstresiPenceresi'nin PySide6 versiyonu hazır olduğunda aktif olarak çalışacaktır.
-
-        # Geçici olarak, pencereler modülünü bu fonksiyon içinde import edelim
         try:
-            from pencereler import CariHesapEkstresiPenceresi # PySide6 CariHesapEkstresiPenceresi varsayılıyor
+            from pencereler import CariHesapEkstresiPenceresi 
             
-            # Cari Hesap Ekstresi penceresini başlat
             cari_ekstre_penceresi = CariHesapEkstresiPenceresi(
-                self.app, # Ana uygulama penceresi (parent)
-                self.db, # Veritabanı yöneticisi
-                musteri_id, # Müşteri ID'si
-                self.db.CARI_TIP_MUSTERI, # Cari tipi
-                musteri_adi, # Pencere başlığı için cari adı
-                parent_list_refresh_func=self.musteri_listesini_yenile # Ekstre kapatıldığında ana listeyi yenile
+                self.app, 
+                self.db, 
+                musteri_id, 
+                self.db.CARI_TIP_MUSTERI, 
+                musteri_adi, 
+                parent_list_refresh_func=self.musteri_listesini_yenile
             )
-            # Pencereyi göster
             cari_ekstre_penceresi.show()
             self.app.set_status_message(f"'{musteri_adi}' için cari hesap ekstresi açıldı.")
 
-        except ImportError:
-            QMessageBox.critical(self, "Hata", "CariHesapEkstresiPenceresi modülü veya PySide6 uyumlu versiyonu bulunamadı.")
-            self.app.set_status_message("Hata: Cari Hesap Ekstresi penceresi açılamadı.")
         except Exception as e:
             QMessageBox.critical(self, "Hata", f"Cari Hesap Ekstresi penceresi açılırken bir hata oluştu:\n{e}")
             self.app.set_status_message(f"Hata: Cari Hesap Ekstresi penceresi açılamadı - {e}")
@@ -1477,7 +1497,7 @@ class TedarikciYonetimiSayfasi(QWidget):
             sira_no = (self.mevcut_sayfa - 1) * self.kayit_sayisi_per_sayfa + 1
             for tedarikci in tedarikci_verileri:
                 item_qt = QTreeWidgetItem(self.tree)
-                item_qt.setText(0, str(sira_no)) # SIRA NUMARASI OLARAK DEĞİŞTİRİLDİ
+                item_qt.setText(0, str(sira_no))
                 item_qt.setText(1, tedarikci.get("ad", ""))
 
                 son_odeme_tarihi_str = "-"
@@ -1507,10 +1527,18 @@ class TedarikciYonetimiSayfasi(QWidget):
 
             self.app.set_status_message(f"Tedarikçi listesi başarıyla güncellendi. Toplam {toplam_kayit} tedarikçi.")
             self.guncelle_toplam_ozet_bilgiler()
+            self._sayfalama_butonlarini_guncelle() # <-- BU SATIR EKLENDİ
 
         except Exception as e:
             logger.error(f"Tedarikçi listesi yüklenirken hata oluştu: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Tedarikçi listesi yüklenemedi. {e}")
+
+    def _sayfalama_butonlarini_guncelle(self):
+        # Sadece sayfalama butonlarının durumunu yönetir.
+        self.btn_ilk_sayfa.setEnabled(self.mevcut_sayfa > 1)
+        self.btn_onceki_sayfa.setEnabled(self.mevcut_sayfa > 1)
+        self.btn_sonraki_sayfa.setEnabled(self.mevcut_sayfa < self.total_pages)
+        self.btn_son_sayfa.setEnabled(self.mevcut_sayfa < self.total_pages)
 
     def secili_tedarikci_sil(self):
         selected_items = self.tedarikci_table_widget.selectedItems()
@@ -1553,14 +1581,12 @@ class TedarikciYonetimiSayfasi(QWidget):
     def _on_item_selection_changed(self):
         selected_items = self.tree.selectedItems()
         is_item_selected = bool(selected_items)
-        # Sadece bir öğe seçildiğinde ilgili butonları aktif hale getir
+        
+        # Seçim durumuna göre "Yeni tedarikçi" ve "Ara" butonlarını yönet.
         self.btn_yeni_tedarikci.setEnabled(not is_item_selected)
         self.btn_ara.setEnabled(not is_item_selected)
-        self.btn_ilk_sayfa.setEnabled(not is_item_selected)
-        self.btn_onceki_sayfa.setEnabled(not is_item_selected)
-        self.btn_sonraki_sayfa.setEnabled(not is_item_selected)
-        self.btn_son_sayfa.setEnabled(not is_item_selected)
 
+        # Sayfalama butonları artık bu metot tarafından yönetilmiyor.
 
     def ilk_sayfa(self):
         if self.mevcut_sayfa != 1:
@@ -1640,37 +1666,28 @@ class TedarikciYonetimiSayfasi(QWidget):
             return
 
         selected_item = selected_items[0]
-        # Tedarikçi ID'si QTreeWidgetItem'ın data(0, Qt.UserRole) kısmında saklı.
+        # Tedarikçi Adı, 1. sütun (indeks 1)
+        tedarikci_adi = selected_item.text(1) 
         tedarikci_id = selected_item.data(0, Qt.UserRole)
-        tedarikci_adi = selected_item.text(2) # Tedarikçi Adı
 
-        if tedarikci_id == -1: # Eğer ID placeholder ise
+        if tedarikci_id == -1: 
              QMessageBox.warning(self, "Uyarı", "Geçersiz bir tedarikçi seçimi yaptınız.")
              return
         
-        # NOT: pencereler.py dosyasındaki CariHesapEkstresiPenceresi'nin PySide6'ya dönüştürülmüş olması gerekmektedir.
-        # Bu fonksiyon, CariHesapEkstresiPenceresi'nin PySide6 versiyonu hazır olduğunda aktif olarak çalışacaktır.
-
-        # Geçici olarak, pencereler modülünü bu fonksiyon içinde import edelim
         try:
-            from pencereler import CariHesapEkstresiPenceresi # PySide6 CariHesapEkstresiPenceresi varsayılıyor
+            from pencereler import CariHesapEkstresiPenceresi 
             
-            # Cari Hesap Ekstresi penceresini başlat
             cari_ekstre_penceresi = CariHesapEkstresiPenceresi(
-                self.app, # Ana uygulama penceresi (parent)
-                self.db, # Veritabanı yöneticisi
-                tedarikci_id, # Tedarikçi ID'si
-                self.db.CARI_TIP_TEDARIKCI, # Cari tipi
-                tedarikci_adi, # Pencere başlığı için tedarikçi adı
-                parent_list_refresh_func=self.tedarikci_listesini_yenile # Ekstre kapatıldığında ana listeyi yenile
+                self.app, 
+                self.db, 
+                tedarikci_id, 
+                self.db.CARI_TIP_TEDARIKCI, 
+                tedarikci_adi, 
+                parent_list_refresh_func=self.tedarikci_listesini_yenile 
             )
-            # Pencereyi göster
             cari_ekstre_penceresi.show()
             self.app.set_status_message(f"'{tedarikci_adi}' için cari hesap ekstresi açıldı.")
 
-        except ImportError:
-            QMessageBox.critical(self, "Hata", "CariHesapEkstresiPenceresi modülü veya PySide6 uyumlu versiyonu bulunamadı.")
-            self.app.set_status_message("Hata: Cari Hesap Ekstresi penceresi açılamadı.")
         except Exception as e:
             QMessageBox.critical(self, "Hata", f"Cari Hesap Ekstresi penceresi açılırken bir hata oluştu:\n{e}")
             self.app.set_status_message(f"Hata: Cari Hesap Ekstresi penceresi açılamadı - {e}")
@@ -2873,13 +2890,11 @@ class BaseIslemSayfasi(QWidget):
             elif hasattr(self.app, 'temp_purchase_order_data') and self.islem_tipi == 'ALIŞ_SIPARIS': self.app.temp_purchase_order_data = None
 
             self.app.set_status_message(f"{self.islem_tipi} işlemi iptal edildi ve taslak temizlendi.")
-            if isinstance(self.parent, QDialog): # Eğer parent bir dialog ise
-                 self.parent.reject() # Dialog'u kapat
-            elif hasattr(self.parent, 'close'): # Diğer widget türleri için genel kapatma
+            if isinstance(self.parent, QDialog):
+                 self.parent.reject()
+            elif hasattr(self.parent, 'close'):
                 self.parent.close()
             else:
-                # Eğer parent direkt ana penceredeki bir sekme ise, sadece içeriği temizle.
-                # Bu durum, sekmenin kendisini yok etmez, sadece içini sıfırlar.
                 logging.warning("BaseIslemSayfasi: _iptal_et metodu parent'ı kapatamadı. Muhtemelen bir sekme.")
                 self._reset_form_explicitly(ask_confirmation=False)
 
@@ -2893,15 +2908,12 @@ class BaseIslemSayfasi(QWidget):
             reply = QMessageBox.question(self.app, "Sıfırlama Onayı", "Sayfadaki tüm bilgileri temizlemek istediğinizden emin misiniz?",
                                          QMessageBox.Yes | QMessageBox.No)
             if reply == QMessageBox.No:
-                return False # Sıfırlama iptal edildi
+                return False
 
-        # Ortak alanları temizle/sıfırla
-        self.fatura_kalemleri_ui = [] # Sepeti temizle
-        self.sepeti_guncelle_ui() # UI'daki sepeti güncelle
-        self.toplamlari_hesapla_ui() # Toplamları sıfırla
+        self.fatura_kalemleri_ui = []
+        self.sepeti_guncelle_ui()
+        self.toplamlari_hesapla_ui()
 
-        # Formdaki QLineEdit ve QTextEdit'leri temizle
-        # hasattr kontrolü, bu widget'ların alt sınıflarda mevcut olup olmadığını kontrol eder.
         if hasattr(self, 'f_no_e'): self.f_no_e.clear()
         if hasattr(self, 'fatura_tarihi_entry'): self.fatura_tarihi_entry.setText(datetime.now().strftime('%Y-%m-%d'))
         if hasattr(self, 'entry_misafir_adi'): self.entry_misafir_adi.clear()
@@ -2914,46 +2926,40 @@ class BaseIslemSayfasi(QWidget):
         if hasattr(self, 'stk_l'): self.stk_l.setText("-")
         if hasattr(self, 'iskonto_yuzde_1_e'): self.iskonto_yuzde_1_e.setText("0,00")
         if hasattr(self, 'iskonto_yuzde_2_e'): self.iskonto_yuzde_2_e.setText("0,00")
-        if hasattr(self, 's_no_e'): self.s_no_e.clear() # Sipariş no
+        if hasattr(self, 's_no_e'): self.s_no_e.clear()
         if hasattr(self, 'siparis_tarihi_entry'): self.siparis_tarihi_entry.setText(datetime.now().strftime('%Y-%m-%d'))
         if hasattr(self, 'teslimat_tarihi_entry'): self.teslimat_tarihi_entry.setText((datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d'))
         if hasattr(self, 'siparis_notlari_text'): self.siparis_notlari_text.clear()
         
-        # QComboBox'ları varsayılan değerlerine döndür
         if hasattr(self, 'odeme_turu_cb'): self.odeme_turu_cb.setCurrentText(self.db.ODEME_TURU_NAKIT)
-        if hasattr(self, 'islem_hesap_cb'): self.islem_hesap_cb.clear() # Temizle
+        if hasattr(self, 'islem_hesap_cb'): self.islem_hesap_cb.clear()
         if hasattr(self, 'genel_iskonto_tipi_cb'): self.genel_iskonto_tipi_cb.setCurrentText("YOK")
         if hasattr(self, 'durum_combo'): self.durum_combo.setCurrentText(self.db.SIPARIS_DURUM_BEKLEMEDE)
         
-        # Cari seçimi temizle
         self._temizle_cari_secimi()
 
         if self.islem_tipi == self.db.FATURA_TIP_SATIS or self.islem_tipi == self.db.FATURA_TIP_ALIS:
             if hasattr(self, '_reset_form_for_new_invoice'):
-                self._reset_form_for_new_invoice(ask_confirmation=False, skip_default_cari_selection=True) # Varsayılan cariyi atamadan sıfırla
+                self._reset_form_for_new_invoice(ask_confirmation=False, skip_default_cari_selection=True)
 
         elif self.islem_tipi == self.db.SIPARIS_TIP_SATIS or self.islem_tipi == self.db.SIPARIS_TIP_ALIS:
             if hasattr(self, '_reset_form_for_new_siparis'):
-                self._reset_form_for_new_siparis(ask_confirmation=False, skip_default_cari_selection=True) # Varsayılan cariyi atamadan sıfırla
+                self._reset_form_for_new_siparis(ask_confirmation=False, skip_default_cari_selection=True)
 
-        # Diğer dinamik durumları sıfırla
-        if hasattr(self, '_on_genel_iskonto_tipi_changed'): self._on_genel_iskonto_tipi_changed() # Genel iskonto alanını güncelle
-        if hasattr(self, '_odeme_turu_degisince_event_handler'): self._odeme_turu_degisince_event_handler() # Ödeme türü bağlı alanları güncelle
+        if hasattr(self, '_on_genel_iskonto_tipi_changed'): self._on_genel_iskonto_tipi_changed()
+        if hasattr(self, '_odeme_turu_degisince_event_handler'): self._odeme_turu_degisince_event_handler()
 
-        # API'den ürünleri tekrar yükle (önbelleği yenile)
         QTimer.singleShot(0, self._urunleri_yukle_ve_cachele_ve_goster)
         
         self.app.set_status_message("Form başarıyla sıfırlandı.")
-        self.urun_arama_entry.setFocus() # Genellikle ilk odaklanılacak alan
+        self.urun_arama_entry.setFocus()
 
-        return True # Sıfırlama başarılı
+        return True
 
     def _setup_paneller(self):
-        # Ana layout'un kenar boşluklarını sıfırlama
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
 
-        # Başlık ve "Sayfayı Yenile" butonu için üst çubuk
         header_frame = QFrame(self)
         header_layout = QHBoxLayout(header_frame)
         baslik_label = QLabel(self._get_baslik())
@@ -2965,34 +2971,27 @@ class BaseIslemSayfasi(QWidget):
         self.btn_sayfa_yenile.clicked.connect(self._reset_form_explicitly)
         header_layout.addWidget(self.btn_sayfa_yenile)
         
-        # Üst çerçeveyi 0. satıra ekle
         self.main_layout.addWidget(header_frame, 0, 0, 1, 2)
 
-        # Ana içerik çerçevesi (sol, sağ ve sepet panellerini içerir)
         content_frame = QFrame(self)
         content_layout = QGridLayout(content_frame)
         
-        # content_frame'i main_layout'un 1. satırına ekliyoruz.
         self.main_layout.addWidget(content_frame, 1, 0, 1, 2)
         content_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
-        # content_frame'in marjlarını da sıfırlayalım
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(10) # Paneller arası boşluk için
+        content_layout.setSpacing(10)
 
-        # Sol panel için ayrı bir çerçeve oluşturup düzenleyici atıyoruz.
         left_panel_frame = QFrame(content_frame)
         self.left_panel_layout = QVBoxLayout(left_panel_frame)
         content_layout.addWidget(left_panel_frame, 0, 0)
         left_panel_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        # Sağ panel için ayrı bir çerçeve oluşturup düzenleyici atıyoruz.
         right_panel_frame = QFrame(content_frame)
         self.right_panel_layout = QVBoxLayout(right_panel_frame)
         content_layout.addWidget(right_panel_frame, 0, 1)
         right_panel_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        # Sepet paneli için ayrı bir çerçeve oluşturup düzenleyici atıyoruz.
         sepet_panel_frame = QFrame(content_frame)
         self.sepet_panel_layout = QVBoxLayout(sepet_panel_frame)
         content_layout.addWidget(sepet_panel_frame, 1, 0, 1, 2)
@@ -3002,16 +3001,12 @@ class BaseIslemSayfasi(QWidget):
         content_layout.setColumnStretch(1, 1)
         content_layout.setRowStretch(1, 1)
 
-        # Sol panelin içeriğini oluştururken artık 'left_panel_frame'i parent olarak veriyoruz.
         self._setup_sol_panel(left_panel_frame)
 
-        # Sağ panelin içeriğini oluştururken artık 'right_panel_frame'i parent olarak veriyoruz.
         self._setup_sag_panel(right_panel_frame)
 
-        # Sepet panelinin içeriğini oluştururken artık 'sepet_panel_frame'i parent olarak veriyoruz.
         self._setup_sepet_paneli(sepet_panel_frame)
 
-        # DEĞİŞİKLİK BURADA: Alt barı oluşturup ana düzenleyiciye ekliyoruz.
         self.alt_f = QFrame(self)
         self.main_layout.addWidget(self.alt_f, 2, 0, 1, 2)
         
@@ -3019,32 +3014,29 @@ class BaseIslemSayfasi(QWidget):
 
     def _yukle_kasa_banka_hesaplarini(self):
         """Kasa/Banka hesaplarını API'den çeker ve ilgili combobox'ı doldurur."""
-        # API'den kasa/banka hesaplarını çek
         try:
-            # Düzeltildi: Doğrudan requests yerine db_manager metodu kullanıldı
-            hesaplar_response = self.db.kasa_banka_listesi_al(limit=10000) # Tümünü çekmek için yüksek limit
+            hesaplar_response = self.db.kasa_banka_listesi_al(limit=10000)
 
             hesaplar = []
             if isinstance(hesaplar_response, dict) and "items" in hesaplar_response:
                 hesaplar = hesaplar_response["items"]
-            elif isinstance(hesaplar_response, list): # Eğer API doğrudan liste dönüyorsa
+            elif isinstance(hesaplar_response, list):
                 hesaplar = hesaplar_response
                 self.app.set_status_message("Uyarı: Kasa/Banka listesi API yanıtı beklenen formatta değil. Doğrudan liste olarak işleniyor.", "orange")
-            else: # Beklenmeyen bir format gelirse
+            else:
                 self.app.set_status_message("Hata: Kasa/Banka listesi API'den alınamadı veya formatı geçersiz.", "red")
                 logging.error(f"Kasa/Banka listesi API'den beklenen formatta gelmedi: {type(hesaplar_response)} - {hesaplar_response}")
-                # Hata durumunda fonksiyonu sonlandır
-                self.kasa_banka_combo.clear() # Temizle
-                self.kasa_banka_combo.setPlaceholderText("Hesap Yok")
-                self.kasa_banka_combo.setEnabled(False)
+                self.islem_hesap_cb.clear()
+                self.islem_hesap_cb.setPlaceholderText("Hesap Yok")
+                self.islem_hesap_cb.setEnabled(False)
                 return
 
-            self.kasa_banka_combo.clear() # Mevcut öğeleri temizle
-            self.kasa_banka_map.clear() # Map'i temizle
+            self.islem_hesap_cb.clear()
+            self.kasa_banka_map.clear()
 
             display_values = []
             if hesaplar:
-                for h in hesaplar: # h: KasaBankaBase Pydantic modeline göre JSON objesi
+                for h in hesaplar:
                     display_text = f"{h.get('hesap_adi')} ({h.get('tip')})"
                     if h.get('tip') == "BANKA" and h.get('banka_adi'):
                         display_text += f" - {h.get('banka_adi')}"
@@ -3054,17 +3046,17 @@ class BaseIslemSayfasi(QWidget):
                     self.kasa_banka_map[display_text] = h.get('id')
                     display_values.append(display_text)
 
-                self.kasa_banka_combo.addItems(display_values)
-                self.kasa_banka_combo.setCurrentIndex(0) # İlk öğeyi seç
-                self.kasa_banka_combo.setEnabled(True) # Aktif yap
+                self.islem_hesap_cb.addItems(display_values)
+                self.islem_hesap_cb.setCurrentIndex(0)
+                self.islem_hesap_cb.setEnabled(True)
             else:
-                self.kasa_banka_combo.clear() # Temizle
-                self.kasa_banka_combo.setPlaceholderText("Hesap Yok")
-                self.kasa_banka_combo.setEnabled(False) # Pasif yap
+                self.islem_hesap_cb.clear()
+                self.islem_hesap_cb.setPlaceholderText("Hesap Yok")
+                self.islem_hesap_cb.setEnabled(False)
 
             self.app.set_status_message(f"{len(hesaplar)} kasa/banka hesabı API'den yüklendi.")
 
-        except Exception as e: # Düzeltildi: requests.exceptions.RequestException yerine daha genel hata yakalandı
+        except Exception as e:
             QMessageBox.critical(self.app, "API Bağlantı Hatası", f"Kasa/Banka hesapları API'den alınamadı:\n{e}")
             self.app.set_status_message(f"Hata: Kasa/Banka hesapları yüklenemedi - {e}")
 
@@ -4227,7 +4219,6 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         """Faturaya özel UI bileşenlerini sol panele yerleştirir."""
         parent_layout = parent_frame.layout()
 
-        # Form elemanlarını tutacak ana grup kutusunu oluşturuyoruz
         form_groupbox = QGroupBox("Fatura Bilgileri", parent_frame)
         form_layout = QGridLayout(form_groupbox)
         form_layout.setSpacing(10)
@@ -4236,12 +4227,11 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         # 1. Satır: Fatura No ve Tarih
         form_layout.addWidget(QLabel("Fatura No:"), 0, 0, Qt.AlignVCenter)
         self.f_no_e = QLineEdit()
-        self.f_no_e.setText(self.sv_fatura_no)
         form_layout.addWidget(self.f_no_e, 0, 1, Qt.AlignVCenter)
 
         form_layout.addWidget(QLabel("Tarih:"), 0, 2, Qt.AlignVCenter)
         self.fatura_tarihi_entry = QLineEdit()
-        self.fatura_tarihi_entry.setText(self.sv_tarih)
+        self.fatura_tarihi_entry.setText(datetime.now().strftime('%Y-%m-%d'))
         form_layout.addWidget(self.fatura_tarihi_entry, 0, 3, Qt.AlignVCenter)
         takvim_button_tarih = QPushButton("🗓️")
         takvim_button_tarih.setFixedWidth(30)
@@ -4252,13 +4242,12 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         cari_btn_label_text = "Müşteri (*):" if self.islem_tipi == self.db.FATURA_TIP_SATIS else "Tedarikçi (*):"
         form_layout.addWidget(QLabel(cari_btn_label_text), 1, 0, Qt.AlignVCenter)
         
-        # Cari bilgileri için tek bir QHBoxLayout kullanarak aynı satırda hizalayacağız
         cari_bilgi_container = QFrame(parent_frame)
         cari_bilgi_layout = QHBoxLayout(cari_bilgi_container)
         cari_bilgi_layout.setContentsMargins(0, 0, 0, 0)
         cari_bilgi_layout.setSpacing(5)
         
-        self.btn_cari_sec = QPushButton("")
+        self.btn_cari_sec = QPushButton("Cari Seç...")
         self.btn_cari_sec.clicked.connect(self._cari_secim_penceresi_ac)
         self.btn_cari_sec.setMinimumWidth(250)
         cari_bilgi_layout.addWidget(self.btn_cari_sec, 2)
@@ -4318,7 +4307,6 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         form_layout.addWidget(QLabel("Fatura Notları:"), 4, 0, Qt.AlignTop)
         self.fatura_notlari_text = QTextEdit()
         self.fatura_notlari_text.setFixedHeight(80)
-        self.fatura_notlari_text.setPlainText(self.sv_fatura_notlari)
         form_layout.addWidget(self.fatura_notlari_text, 4, 1, 1, 4)
 
         # 6. Satır: Genel İsk

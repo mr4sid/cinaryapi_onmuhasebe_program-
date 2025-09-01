@@ -250,7 +250,7 @@ class Ui_MainWindow_Minimal:
 class App(QMainWindow):
     backup_completed_signal = Signal(bool, str, str)    
     def __init__(self):
-        super().__init__()
+        super().__init__()  
         self.backup_completed_signal.connect(self._handle_backup_completion)
         self.ui_main_window_setup = Ui_MainWindow_Minimal()
         self.ui_main_window_setup.setupUi(self)
