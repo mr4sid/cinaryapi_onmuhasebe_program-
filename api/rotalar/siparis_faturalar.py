@@ -409,9 +409,11 @@ def create_fatura(fatura_data: modeller.FaturaCreate, db: Session = Depends(get_
     """
     db.begin_nested()
     try:
+        # Fatura numarası kontrolü
         if db.query(semalar.Fatura).filter(semalar.Fatura.fatura_no == fatura_data.fatura_no).first():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bu fatura numarası zaten mevcut.")
             
+        # Toplam tutarları hesapla
         toplam_kdv_haric = 0.0
         toplam_kdv_dahil = 0.0
         
@@ -426,11 +428,15 @@ def create_fatura(fatura_data: modeller.FaturaCreate, db: Session = Depends(get_
             toplam_kdv_dahil += kalem_toplam_kdv_dahil_temp
             
         if fatura_data.genel_iskonto_tipi == "YUZDE" and fatura_data.genel_iskonto_degeri > 0:
-            genel_iskonto_tutari = toplam_kdv_dahil * (fatura_data.genel_iskonto_degeri / 100)
-            toplam_kdv_dahil -= genel_iskonto_tutari
+            genel_iskonto_tutari = toplam_kdv_haric * (fatura_data.genel_iskonto_degeri / 100)
+            toplam_kdv_haric -= genel_iskonto_tutari
+            toplam_kdv_dahil = toplam_kdv_haric * (1 + sum(k.kdv_orani for k in fatura_data.kalemler) / len(fatura_data.kalemler))
         elif fatura_data.genel_iskonto_tipi == "TUTAR" and fatura_data.genel_iskonto_degeri > 0:
-            toplam_kdv_dahil -= fatura_data.genel_iskonto_degeri
-            
+            genel_iskonto_tutari = fatura_data.genel_iskonto_degeri
+            oran = toplam_kdv_haric / toplam_kdv_dahil if toplam_kdv_dahil > 0 else 0
+            toplam_kdv_dahil -= genel_iskonto_tutari
+            toplam_kdv_haric = toplam_kdv_dahil * oran
+
         db_fatura = semalar.Fatura(
             fatura_no=fatura_data.fatura_no,
             fatura_turu=fatura_data.fatura_turu,
@@ -485,6 +491,7 @@ def create_fatura(fatura_data: modeller.FaturaCreate, db: Session = Depends(get_
                 islem_tipi_stok = semalar.StokIslemTipiEnum.GİRİŞ
             
             if islem_tipi_stok:
+                db.add(db_stok)
                 db_stok_hareket = semalar.StokHareket(
                     stok_id=kalem_data.urun_id,
                     tarih=db_fatura.tarih,
@@ -497,77 +504,122 @@ def create_fatura(fatura_data: modeller.FaturaCreate, db: Session = Depends(get_
                     onceki_stok=stok_miktar_oncesi,
                     sonraki_stok=db_stok.miktar
                 )
-                db.add(db_stok)
                 db.add(db_stok_hareket)
+        
+        # --- DÜZELTİLDİ: PEŞİN FATURALAR İÇİN TEK KAYIT MANTIĞI YERİNE İKİ AYRI KAYIT OLUŞTURMA ---
+        # Bu mantık, muhasebe olarak daha doğru ve net bir kayıt sunar.
+        
+        cari_turu = None
+        if db_fatura.fatura_turu in [semalar.FaturaTuruEnum.SATIS, semalar.FaturaTuruEnum.SATIS_IADE]:
+            cari_turu = semalar.CariTipiEnum.MUSTERI
+        elif db_fatura.fatura_turu in [semalar.FaturaTuruEnum.ALIS, semalar.FaturaTuruEnum.ALIS_IADE, semalar.FaturaTuruEnum.DEVIR_GIRIS]:
+            cari_turu = semalar.CariTipiEnum.TEDARIKCI
 
-        if db_fatura.odeme_turu != semalar.OdemeTuruEnum.ETKISIZ_FATURA:
+        if not cari_turu:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz cari türü.")
+
+        # --- AÇIK HESAP KAYITLARI ---
+        if fatura_data.odeme_turu == semalar.OdemeTuruEnum.ACIK_HESAP:
             islem_yone_cari = None
-            cari_turu = None
             if db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS:
+                islem_yone_cari = semalar.IslemYoneEnum.BORC
+            elif db_fatura.fatura_turu in [semalar.FaturaTuruEnum.ALIS, semalar.FaturaTuruEnum.SATIS_IADE]:
                 islem_yone_cari = semalar.IslemYoneEnum.ALACAK
-                cari_turu = semalar.CariTipiEnum.MUSTERI
-            elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS:
-                islem_yone_cari = semalar.IslemYoneEnum.BORC
-                cari_turu = semalar.CariTipiEnum.TEDARIKCI
-            elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS_IADE:
-                islem_yone_cari = semalar.IslemYoneEnum.BORC
-                cari_turu = semalar.CariTipiEnum.MUSTERI
             elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS_IADE:
-                islem_yone_cari = semalar.IslemYoneEnum.ALACAK
-                cari_turu = semalar.CariTipiEnum.TEDARIKCI
+                islem_yone_cari = semalar.IslemYoneEnum.BORC
             elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.DEVIR_GIRIS:
                 islem_yone_cari = semalar.IslemYoneEnum.BORC
-                cari_turu = semalar.CariTipiEnum.TEDARIKCI
 
-            if islem_yone_cari and cari_turu:
-                db_cari_hareket = semalar.CariHareket(
-                    cari_id=db_fatura.cari_id,
-                    cari_turu=cari_turu,
-                    tarih=db_fatura.tarih,
-                    islem_turu=db_fatura.fatura_turu.value,
-                    islem_yone=islem_yone_cari,
-                    tutar=db_fatura.genel_toplam,
-                    aciklama=f"{db_fatura.fatura_no} nolu fatura ({db_fatura.fatura_turu.value})",
-                    kaynak=semalar.KaynakTipEnum.FATURA,
-                    kaynak_id=db_fatura.id,
-                    odeme_turu=db_fatura.odeme_turu,
-                    kasa_banka_id=db_fatura.kasa_banka_id,
-                    vade_tarihi=db_fatura.vade_tarihi
-                )
-                db.add(db_cari_hareket)
+            db_cari_hareket_ana = semalar.CariHareket(
+                cari_id=db_fatura.cari_id,
+                cari_turu=cari_turu,
+                tarih=db_fatura.tarih,
+                islem_turu=db_fatura.fatura_turu.value,
+                islem_yone=islem_yone_cari,
+                tutar=db_fatura.genel_toplam,
+                aciklama=f"{db_fatura.fatura_no} nolu fatura ({db_fatura.fatura_turu.value})",
+                kaynak=semalar.KaynakTipEnum.FATURA,
+                kaynak_id=db_fatura.id,
+                odeme_turu=db_fatura.odeme_turu,
+                vade_tarihi=db_fatura.vade_tarihi
+            )
+            db.add(db_cari_hareket_ana)
 
-        if db_fatura.odeme_turu in [semalar.OdemeTuruEnum.NAKIT, semalar.OdemeTuruEnum.KART, semalar.OdemeTuruEnum.EFT_HAVALE, semalar.OdemeTuruEnum.CEK, semalar.OdemeTuruEnum.SENET] and db_fatura.kasa_banka_id:
+        # --- PEŞİN ÖDEME KAYITLARI ---
+        elif fatura_data.odeme_turu in [semalar.OdemeTuruEnum.NAKIT, semalar.OdemeTuruEnum.KART, semalar.OdemeTuruEnum.EFT_HAVALE, semalar.OdemeTuruEnum.CEK, semalar.OdemeTuruEnum.SENET]:
+            
             islem_yone_kasa = None
             if db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS:
+                islem_yone_fatura = semalar.IslemYoneEnum.BORC
+                islem_yone_odeme = semalar.IslemYoneEnum.ALACAK
                 islem_yone_kasa = semalar.IslemYoneEnum.GIRIS
             elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS:
+                islem_yone_fatura = semalar.IslemYoneEnum.ALACAK
+                islem_yone_odeme = semalar.IslemYoneEnum.BORC
                 islem_yone_kasa = semalar.IslemYoneEnum.CIKIS
             elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS_IADE:
+                islem_yone_fatura = semalar.IslemYoneEnum.ALACAK
+                islem_yone_odeme = semalar.IslemYoneEnum.BORC
                 islem_yone_kasa = semalar.IslemYoneEnum.CIKIS
             elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS_IADE:
+                islem_yone_fatura = semalar.IslemYoneEnum.BORC
+                islem_yone_odeme = semalar.IslemYoneEnum.ALACAK
                 islem_yone_kasa = semalar.IslemYoneEnum.GIRIS
-            elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.DEVIR_GIRIS:
-                islem_yone_kasa = semalar.IslemYoneEnum.GIRIS
+            
+            # 1. Fatura için borç/alacak kaydı
+            db_cari_hareket_fatura = semalar.CariHareket(
+                cari_id=db_fatura.cari_id,
+                cari_turu=cari_turu,
+                tarih=db_fatura.tarih,
+                islem_turu=db_fatura.fatura_turu.value,
+                islem_yone=islem_yone_fatura,
+                tutar=db_fatura.genel_toplam,
+                aciklama=f"{db_fatura.fatura_no} nolu fatura ({db_fatura.fatura_turu.value})",
+                kaynak=semalar.KaynakTipEnum.FATURA,
+                kaynak_id=db_fatura.id,
+                odeme_turu=db_fatura.odeme_turu,
+                kasa_banka_id=None,
+                vade_tarihi=None
+            )
+            db.add(db_cari_hareket_fatura)
+            
+            # 2. Anında ödeme için tahsilat/ödeme kaydı
+            db_cari_hareket_odeme = semalar.CariHareket(
+                cari_id=db_fatura.cari_id,
+                cari_turu=cari_turu,
+                tarih=db_fatura.tarih,
+                islem_turu=f"{db_fatura.odeme_turu.value}_TAHSİLATI" if islem_yone_odeme == semalar.IslemYoneEnum.ALACAK else f"{db_fatura.odeme_turu.value}_ÖDEMESİ",
+                islem_yone=islem_yone_odeme,
+                tutar=db_fatura.genel_toplam,
+                aciklama=f"{db_fatura.fatura_no} nolu fatura için {db_fatura.odeme_turu.value} tahsilat/ödeme.",
+                kaynak=semalar.KaynakTipEnum.FATURA,
+                kaynak_id=db_fatura.id,
+                odeme_turu=db_fatura.odeme_turu,
+                kasa_banka_id=db_fatura.kasa_banka_id,
+                vade_tarihi=db_fatura.tarih
+            )
+            db.add(db_cari_hareket_odeme)
 
-            if islem_yone_kasa:
-                db_kasa_banka_hareket = semalar.KasaBankaHareket(
-                    kasa_banka_id=db_fatura.kasa_banka_id,
-                    tarih=db_fatura.tarih,
-                    islem_turu=db_fatura.fatura_turu.value,
-                    islem_yone=islem_yone_kasa,
-                    tutar=db_fatura.genel_toplam,
-                    aciklama=f"{db_fatura.fatura_no} nolu fatura ({db_fatura.fatura_turu.value})",
-                    kaynak=semalar.KaynakTipEnum.FATURA,
-                    kaynak_id=db_fatura.id
-                )
-                db_kasa_banka = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == db_fatura.kasa_banka_id).first()
-                if db_kasa_banka:
-                    if islem_yone_kasa == semalar.IslemYoneEnum.GIRIS:
-                        db_kasa_banka.bakiye += db_fatura.genel_toplam
-                    else:
-                        db_kasa_banka.bakiye -= db_fatura.genel_toplam
-                    db.add(db_kasa_banka)
-                db.add(db_kasa_banka_hareket)
+            # Kasa/Banka Hareketi
+            db_kasa_banka_hareket = semalar.KasaBankaHareket(
+                kasa_banka_id=fatura_data.kasa_banka_id,
+                tarih=db_fatura.tarih,
+                islem_turu=db_fatura.odeme_turu.value,
+                islem_yone=islem_yone_kasa,
+                tutar=db_fatura.genel_toplam,
+                aciklama=f"{db_fatura.fatura_no} nolu fatura ({db_fatura.fatura_turu.value}) için ödeme",
+                kaynak=semalar.KaynakTipEnum.FATURA,
+                kaynak_id=db_fatura.id
+            )
+            db.add(db_kasa_banka_hareket)
+            
+            db_kasa_banka = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == fatura_data.kasa_banka_id).first()
+            if db_kasa_banka:
+                if islem_yone_kasa == semalar.IslemYoneEnum.GIRIS:
+                    db_kasa_banka.bakiye += db_fatura.genel_toplam
+                else:
+                    db_kasa_banka.bakiye -= db_fatura.genel_toplam
+                db.add(db_kasa_banka)
 
         db.commit()
         db.refresh(db_fatura)

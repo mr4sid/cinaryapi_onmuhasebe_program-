@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from . import semalar
 
 class CariHesaplamaService:
@@ -8,19 +8,16 @@ class CariHesaplamaService:
 
     def calculate_cari_net_bakiye(self, cari_id: int, cari_turu: str) -> float:
         """
-        Belirli bir cari (Müşteri veya Tedarikçi) için net bakiyeyi hesaplar.
+        Belirli bir cari (Müşteri veya Tedarikçi) için net bakiyeyi tek bir sorguda hesaplar.
         """
-        alacak_toplami = self.db.query(func.sum(semalar.CariHareket.tutar)).filter(
+        # Sorgu sonucunda None gelmesi durumunda 0 değerini kullanmak için func.coalesce eklendi.
+        result = self.db.query(
+            func.coalesce(func.sum(case((semalar.CariHareket.islem_yone == "ALACAK", semalar.CariHareket.tutar), else_=0)), 0).label('alacak_toplami'),
+            func.coalesce(func.sum(case((semalar.CariHareket.islem_yone == "BORC", semalar.CariHareket.tutar), else_=0)), 0).label('borc_toplami')
+        ).filter(
             semalar.CariHareket.cari_id == cari_id,
-            semalar.CariHareket.cari_turu == cari_turu,
-            semalar.CariHareket.islem_yone == "ALACAK"
-        ).scalar() or 0.0
+            semalar.CariHareket.cari_turu == cari_turu
+        ).one()
 
-        borc_toplami = self.db.query(func.sum(semalar.CariHareket.tutar)).filter(
-            semalar.CariHareket.cari_id == cari_id,
-            semalar.CariHareket.cari_turu == cari_turu,
-            semalar.CariHareket.islem_yone == "BORC"
-        ).scalar() or 0.0
-
-        net_bakiye = alacak_toplami - borc_toplami
+        net_bakiye = result.alacak_toplami - result.borc_toplami
         return net_bakiye

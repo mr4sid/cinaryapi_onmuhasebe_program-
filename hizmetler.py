@@ -26,6 +26,7 @@ class FaturaService:
                        genel_iskonto_tipi=None, genel_iskonto_degeri=None, original_fatura_id=None):
         """
         Yeni bir fatura kaydı ve ilişkili kalemlerini API'ye gönderir.
+        Tüm iş mantığı sunucu tarafında işlenir.
         """
         fatura_data = {
             "fatura_no": fatura_no,
@@ -49,8 +50,7 @@ class FaturaService:
             
             # API'den dönen yanıtın bir sözlük olduğunu ve 'id' anahtarını içerdiğini kontrol et
             if isinstance(fatura_response, dict) and "id" in fatura_response:
-                fatura_id = fatura_response.get("id")
-                return True, f"Fatura '{fatura_no}' başarıyla oluşturuldu. ID: {fatura_id}"
+                return True, f"Fatura '{fatura_no}' başarıyla oluşturuldu. ID: {fatura_response.get('id')}"
             else:
                 # Başarılı bir yanıt alınamamışsa veya formatı yanlışsa
                 message = fatura_response.get("detail", "Fatura oluşturma isteği başarısız oldu. API'den beklenmeyen yanıt formatı.")
@@ -222,45 +222,96 @@ class CariService:
         else:
             raise ValueError("Geçersiz cari tipi belirtildi. 'MUSTERI' veya 'TEDARIKCI' olmalı.")
 
-
 class TopluIslemService:
     def __init__(self, db_manager):
         self.db = db_manager
         logger.info("TopluIslemService başlatıldı.")
+        # Nitelik verilerini önbelleğe almak için boş sözlükler oluştur
+        self._nitelik_cache = {
+            "kategoriler": {},
+            "markalar": {},
+            "urun_gruplari": {},
+            "urun_birimleri": {},
+            "ulkeler": {}
+        }
+        self._load_nitelik_cache()
     
+    def _load_nitelik_cache(self):
+        """Tüm nitelik verilerini API'den çekip önbelleğe alır."""
+        try:
+            self._nitelik_cache["kategoriler"] = {normalize_turkish_chars(item.get('ad')).lower(): item.get('id') for item in self.db.kategori_listele()}
+            self._nitelik_cache["markalar"] = {normalize_turkish_chars(item.get('ad')).lower(): item.get('id') for item in self.db.marka_listele().get('items', [])}
+            self._nitelik_cache["urun_gruplari"] = {normalize_turkish_chars(item.get('ad')).lower(): item.get('id') for item in self.db.urun_grubu_listele().get('items', [])}
+            self._nitelik_cache["urun_birimleri"] = {normalize_turkish_chars(item.get('ad')).lower(): item.get('id') for item in self.db.urun_birimi_listele().get('items', [])}
+            self._nitelik_cache["ulkeler"] = {normalize_turkish_chars(item.get('ad')).lower(): item.get('id') for item in self.db.ulke_listele().get('items', [])}
+        except Exception as e:
+            logger.error(f"Nitelik önbelleği yüklenirken hata oluştu: {e}")
+            
+    def _get_nitelik_id_from_cache(self, nitelik_tipi, nitelik_adi):
+        """Önbellekten nitelik adını ID'ye dönüştürür."""
+        if not nitelik_adi:
+            return None
+        return self._nitelik_cache[nitelik_tipi].get(normalize_turkish_chars(nitelik_adi).lower())
+
     def toplu_musteri_analiz_et(self, raw_data: list) -> Dict[str, Union[List, Dict]]:
         processed_data = []
         new_records = []
         update_records = []
         error_records = []
+
+        # Mevcut müşteri verilerini önbelleğe al
+        mevcut_musteri_kod_map = {}
+        try:
+            mevcut_musteriler_response = self.db.musteri_listesi_al(limit=10000)
+            mevcut_musteriler = mevcut_musteriler_response.get('items', [])
+            for musteri in mevcut_musteriler:
+                mevcut_musteri_kod_map[musteri.get('kod')] = musteri
+        except Exception as e:
+            logger.error(f"Mevcut müşteri listesi çekilirken hata: {e}")
+            raise ValueError(f"Mevcut müşteri verileri alınamadı. Analiz durduruldu: {e}")
         
+        # Excel verisinin başlık satırını atla (varsayım)
         for row_index, row in enumerate(raw_data):
+            hata_mesajlari = []
+            
+            # 1. Satırın geçerliliğini kontrol et
+            if not row or not row[0] or not row[1]:
+                hata_mesajlari.append("Müşteri Kodu veya Adı boş olamaz.")
+                error_records.append({"hata": "; ".join(hata_mesajlari), "satir": row_index + 2, "veri": row})
+                continue
+            
             try:
-                kod = str(row[0]).strip() if len(row) > 0 and row[0] is not None else None
-                ad = str(row[1]).strip() if len(row) > 1 and row[1] is not None else None
+                # 2. Veri tiplerini dönüştür
+                kod = str(row[0]).strip()
+                ad = str(row[1]).strip()
+                telefon = str(row[2]).strip() if len(row) > 2 and row[2] is not None else None
+                adres = str(row[3]).strip() if len(row) > 3 and row[3] is not None else None
+                vergi_dairesi = str(row[4]).strip() if len(row) > 4 and row[4] is not None else None
+                vergi_no = str(row[5]).strip() if len(row) > 5 and row[5] is not None else None
                 
-                if not kod or not ad:
-                    error_records.append({"hata": "Kod veya Ad boş olamaz", "satir": row_index + 2, "veri": row})
-                    continue
-
-                mevcut_musteri_response = self.db.musteri_listesi_al(arama=kod)
-                mevcut_musteri = [m for m in mevcut_musteri_response.get("items") if m.get('kod') == kod]
+                # 3. Kayıt türünü belirle (yeni mi, güncellenecek mi?)
+                mevcut_musteri = mevcut_musteri_kod_map.get(kod)
                 
-                if mevcut_musteri:
-                    update_records.append({"kod": kod, "ad": ad})
-                else:
-                    new_records.append({"kod": kod, "ad": ad})
-
-                processed_data.append({
+                kayit = {
                     "kod": kod,
                     "ad": ad,
-                    "telefon": str(row[2]).strip() if len(row) > 2 and row[2] is not None else None,
-                    "adres": str(row[3]).strip() if len(row) > 3 and row[3] is not None else None,
-                    "vergi_dairesi": str(row[4]).strip() if len(row) > 4 and row[4] is not None else None,
-                    "vergi_no": str(row[5]).strip() if len(row) > 5 and row[5] is not None else None
-                })
+                    "telefon": telefon,
+                    "adres": adres,
+                    "vergi_dairesi": vergi_dairesi,
+                    "vergi_no": vergi_no
+                }
+
+                if mevcut_musteri:
+                    kayit["id"] = mevcut_musteri.get("id")
+                    update_records.append(kayit)
+                else:
+                    new_records.append(kayit)
+
+                processed_data.append(kayit)
+
             except Exception as e:
-                error_records.append({"hata": f"Analiz hatası: {e}", "satir": row_index + 2, "veri": row})
+                hata_mesajlari.append(f"Analiz hatası: {e}")
+                error_records.append({"hata": "; ".join(hata_mesajlari), "satir": row_index + 2, "veri": row})
                 
         return {
             "all_processed_data": processed_data,
@@ -274,34 +325,56 @@ class TopluIslemService:
         new_records = []
         update_records = []
         error_records = []
+
+        # Mevcut tedarikçi verilerini önbelleğe al
+        mevcut_tedarikci_kod_map = {}
+        try:
+            mevcut_tedarikciler_response = self.db.tedarikci_listesi_al(limit=10000)
+            mevcut_tedarikciler = mevcut_tedarikciler_response.get('items', [])
+            for tedarikci in mevcut_tedarikciler:
+                mevcut_tedarikci_kod_map[tedarikci.get('kod')] = tedarikci
+        except Exception as e:
+            logger.error(f"Mevcut tedarikçi listesi çekilirken hata: {e}")
+            raise ValueError(f"Mevcut tedarikçi verileri alınamadı. Analiz durduruldu: {e}")
         
         for row_index, row in enumerate(raw_data):
+            hata_mesajlari = []
+            
+            if not row or not row[0] or not row[1]:
+                hata_mesajlari.append("Tedarikçi Kodu veya Adı boş olamaz.")
+                error_records.append({"hata": "; ".join(hata_mesajlari), "satir": row_index + 2, "veri": row})
+                continue
+            
             try:
-                kod = str(row[0]).strip() if len(row) > 0 and row[0] is not None else None
-                ad = str(row[1]).strip() if len(row) > 1 and row[1] is not None else None
+                kod = str(row[0]).strip()
+                ad = str(row[1]).strip()
+                telefon = str(row[2]).strip() if len(row) > 2 and row[2] is not None else None
+                adres = str(row[3]).strip() if len(row) > 3 and row[3] is not None else None
+                vergi_dairesi = str(row[4]).strip() if len(row) > 4 and row[4] is not None else None
+                vergi_no = str(row[5]).strip() if len(row) > 5 and row[5] is not None else None
                 
-                if not kod or not ad:
-                    error_records.append({"hata": "Kod veya Ad boş olamaz", "satir": row_index + 2, "veri": row})
-                    continue
-
-                mevcut_tedarikci_response = self.db.tedarikci_listesi_al(arama=kod)
-                mevcut_tedarikci = [t for t in mevcut_tedarikci_response.get("items") if t.get('kod') == kod]
+                mevcut_tedarikci = mevcut_tedarikci_kod_map.get(kod)
                 
-                if mevcut_tedarikci:
-                    update_records.append({"kod": kod, "ad": ad})
-                else:
-                    new_records.append({"kod": kod, "ad": ad})
-
-                processed_data.append({
+                kayit = {
                     "kod": kod,
                     "ad": ad,
-                    "telefon": str(row[2]).strip() if len(row) > 2 and row[2] is not None else None,
-                    "adres": str(row[3]).strip() if len(row) > 3 and row[3] is not None else None,
-                    "vergi_dairesi": str(row[4]).strip() if len(row) > 4 and row[4] is not None else None,
-                    "vergi_no": str(row[5]).strip() if len(row) > 5 and row[5] is not None else None
-                })
+                    "telefon": telefon,
+                    "adres": adres,
+                    "vergi_dairesi": vergi_dairesi,
+                    "vergi_no": vergi_no
+                }
+
+                if mevcut_tedarikci:
+                    kayit["id"] = mevcut_tedarikci.get("id")
+                    update_records.append(kayit)
+                else:
+                    new_records.append(kayit)
+
+                processed_data.append(kayit)
+
             except Exception as e:
-                error_records.append({"hata": f"Analiz hatası: {e}", "satir": row_index + 2, "veri": row})
+                hata_mesajlari.append(f"Analiz hatası: {e}")
+                error_records.append({"hata": "; ".join(hata_mesajlari), "satir": row_index + 2, "veri": row})
                 
         return {
             "all_processed_data": processed_data,
@@ -317,64 +390,94 @@ class TopluIslemService:
         hata_kayitlari = []
         tum_islenmis_veri = []
 
-        # Excel verisinin başlık satırını atla
+        # Tüm mevcut stok verilerini önbelleğe al
+        mevcut_stok_kodu_map = {}
+        try:
+            mevcut_stoklar_response = self.db.stok_listesi_al(limit=10000)
+            mevcut_stoklar = mevcut_stoklar_response.get('items', [])
+            for stok in mevcut_stoklar:
+                mevcut_stok_kodu_map[stok.get('kod')] = stok
+        except Exception as e:
+            logger.error(f"Mevcut stok listesi çekilirken hata: {e}")
+            raise ValueError(f"Mevcut stok verileri alınamadı. Analiz durduruldu: {e}")
+
+        # Excel verisinin başlık satırını atla (varsayım)
         for index, row_data in enumerate(excel_veri):
-            kayit = {}
             hata_mesajlari = []
             
             # Tüm verileri tutan listeye ekle
             tum_islenmis_veri.append(row_data)
 
-            # Stok kodu Excel'deki ilk sütun, kontrol et
+            # 1. Satırın geçerliliğini kontrol et
             if not row_data or not row_data[0]:
                 hata_mesajlari.append("Stok kodu boş olamaz.")
-            else:
-                try:
-                    # Veri tiplerini dönüştürme ve doğrulama
-                    kod = str(row_data[0]).strip()
-                    ad = str(row_data[1]).strip() if len(row_data) > 1 and row_data[1] is not None else ""
-                    miktar = float(row_data[2]) if len(row_data) > 2 and row_data[2] is not None else 0.0
-                    alis_fiyati = float(row_data[3]) if len(row_data) > 3 and row_data[3] is not None else 0.0
-                    satis_fiyati = float(row_data[4]) if len(row_data) > 4 and row_data[4] is not None else 0.0
-                    kdv_orani = float(row_data[5]) if len(row_data) > 5 and row_data[5] is not None else 20.0
-                    min_stok_seviyesi = float(row_data[6]) if len(row_data) > 6 and row_data[6] is not None else 0.0
-                    aktif = bool(row_data[7]) if len(row_data) > 7 and row_data[7] is not None else True
-
-                    # Veritabanında mevcut stoğu ara
-                    eslesen_stoklar = self.db.stok_listesi_al(arama=kod, limit=1)
-
-                    if eslesen_stoklar["total"] > 0:
-                        # Stok mevcut, güncelleme kaydı olarak işaretle
-                        mevcut_stok = eslesen_stoklar["items"][0]
-                        kayit = {
-                            "id": mevcut_stok.get("id"),
-                            "kod": kod,
-                            "ad": ad or mevcut_stok.get("ad"),
-                            "miktar": miktar or mevcut_stok.get("miktar"),
-                            "alis_fiyati": alis_fiyati or mevcut_stok.get("alis_fiyati"),
-                            "satis_fiyati": satis_fiyati or mevcut_stok.get("satis_fiyati"),
-                            "kdv_orani": kdv_orani or mevcut_stok.get("kdv_orani"),
-                            "min_stok_seviyesi": min_stok_seviyesi or mevcut_stok.get("min_stok_seviyesi"),
-                            "aktif": aktif or mevcut_stok.get("aktif")
-                        }
-                        guncellenecek_kayitlar.append(kayit)
-                    else:
-                        # Stok mevcut değil, yeni kayıt olarak işaretle
-                        kayit = {
-                            "kod": kod,
-                            "ad": ad,
-                            "miktar": miktar,
-                            "alis_fiyati": alis_fiyati,
-                            "satis_fiyati": satis_fiyati,
-                            "kdv_orani": kdv_orani,
-                            "min_stok_seviyesi": min_stok_seviyesi,
-                            "aktif": aktif
-                        }
-                        yeni_kayitlar.append(kayit)
-                except (ValueError, IndexError) as e:
-                    hata_mesajlari.append(f"Veri formatı hatası: {e}. Lütfen sayısal alanları kontrol edin.")
+                hata_kayitlari.append({"satir": index + 2, "hata": "; ".join(hata_mesajlari), "veri": row_data})
+                continue
             
-            # Hata mesajları varsa, kaydı hatalı olarak ekle
+            try:
+                # 2. Veri tiplerini dönüştür ve doğrula
+                kod = str(row_data[0]).strip()
+                ad = str(row_data[1]).strip() if len(row_data) > 1 and row_data[1] is not None else None
+                
+                # Sayısal alanları güvenli bir şekilde dönüştür
+                miktar = self.db.safe_float(row_data[2]) if len(row_data) > 2 and row_data[2] is not None else 0.0
+                alis_fiyati = self.db.safe_float(row_data[3]) if len(row_data) > 3 and row_data[3] is not None else 0.0
+                satis_fiyati = self.db.safe_float(row_data[4]) if len(row_data) > 4 and row_data[4] is not None else 0.0
+                kdv_orani = self.db.safe_float(row_data[5]) if len(row_data) > 5 and row_data[5] is not None else 20.0
+                min_stok_seviyesi = self.db.safe_float(row_data[6]) if len(row_data) > 6 and row_data[6] is not None else 0.0
+                aktif = row_data[7] if len(row_data) > 7 and row_data[7] is not None else True
+                
+                # Nitelik adlarını ID'ye çevir (isteğe bağlı sütunlar için)
+                kategori_adi = str(row_data[8]).strip() if len(row_data) > 8 and row_data[8] is not None else None
+                marka_adi = str(row_data[9]).strip() if len(row_data) > 9 and row_data[9] is not None else None
+                urun_grubu_adi = str(row_data[10]).strip() if len(row_data) > 10 and row_data[10] is not None else None
+                birim_adi = str(row_data[11]).strip() if len(row_data) > 11 and row_data[11] is not None else None
+                ulke_adi = str(row_data[12]).strip() if len(row_data) > 12 and row_data[12] is not None else None
+                detay = str(row_data[13]).strip() if len(row_data) > 13 and row_data[13] is not None else None
+                urun_resmi_yolu = str(row_data[14]).strip() if len(row_data) > 14 and row_data[14] is not None else None
+                
+                # Nitelik ID'lerini almak için önbelleklenmiş veriyi kullan
+                kategori_id = self._get_nitelik_id_from_cache("kategoriler", kategori_adi) if kategori_adi else None
+                marka_id = self._get_nitelik_id_from_cache("markalar", marka_adi) if marka_adi else None
+                urun_grubu_id = self._get_nitelik_id_from_cache("urun_gruplari", urun_grubu_adi) if urun_grubu_adi else None
+                birim_id = self._get_nitelik_id_from_cache("urun_birimleri", birim_adi) if birim_adi else None
+                mense_id = self._get_nitelik_id_from_cache("ulkeler", ulke_adi) if ulke_adi else None
+                
+                # 3. Kayıt türünü belirle (yeni mi, güncellenecek mi?)
+                mevcut_stok = mevcut_stok_kodu_map.get(kod)
+                
+                kayit = {
+                    "kod": kod,
+                    "ad": ad,
+                    "miktar": miktar,
+                    "alis_fiyati": alis_fiyati,
+                    "satis_fiyati": satis_fiyati,
+                    "kdv_orani": kdv_orani,
+                    "min_stok_seviyesi": min_stok_seviyesi,
+                    "aktif": aktif,
+                    "detay": detay,
+                    "kategori_id": kategori_id,
+                    "marka_id": marka_id,
+                    "urun_grubu_id": urun_grubu_id,
+                    "birim_id": birim_id,
+                    "mense_id": mense_id,
+                    "urun_resmi_yolu": urun_resmi_yolu
+                }
+                
+                if mevcut_stok:
+                    kayit["id"] = mevcut_stok.get("id")
+                    guncellenecek_kayitlar.append(kayit)
+                else:
+                    if not ad:
+                        hata_mesajlari.append("Yeni ürünler için Ad alanı zorunludur.")
+                        raise ValueError("Yeni ürün için Ad alanı zorunlu.")
+                    yeni_kayitlar.append(kayit)
+
+            except (ValueError, IndexError) as e:
+                hata_mesajlari.append(f"Veri formatı hatası: {e}. Lütfen sayısal alanları kontrol edin.")
+            except Exception as e:
+                hata_mesajlari.append(f"Analiz hatası: {e}")
+
             if hata_mesajlari:
                 hata_kayitlari.append({
                     "satir": index + 2,

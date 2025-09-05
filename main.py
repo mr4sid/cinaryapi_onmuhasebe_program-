@@ -601,7 +601,7 @@ class App(QMainWindow):
         self.musteri_karti_penceresi = YeniMusteriEklePenceresi(self, self.db_manager, self.musteri_yonetimi_sayfasi.musteri_listesini_yenile, app_ref=self)
         self.musteri_karti_penceresi.show()
 
-    def _tedarikci_karti_penceresi_ac(self):
+    def _tedarikci_karti_penceresi_ac(self): 
         from pencereler import YeniTedarikciEklePenceresi
         self.tedarikci_karti_penceresi = YeniTedarikciEklePenceresi(self, self.db_manager, self.tedarikci_yonetimi_sayfasi.tedarikci_listesini_yenile, app_ref=self)
         self.tedarikci_karti_penceresi.show()

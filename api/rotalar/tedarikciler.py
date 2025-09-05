@@ -1,10 +1,13 @@
-# api.zip/rotalar/tedarikciler.py dosyasının tamamını bu şekilde güncelleyin:
+# api/rotalar/tedarikciler.py dosyasının tamamı
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
+from typing import List, Optional
+
 from .. import modeller, semalar
 from ..veritabani import get_db
 from ..api_servisler import CariHesaplamaService
+
 router = APIRouter(prefix="/tedarikciler", tags=["Tedarikçiler"])
 
 @router.post("/", response_model=modeller.TedarikciRead)
@@ -17,29 +20,31 @@ def create_tedarikci(tedarikci: modeller.TedarikciCreate, db: Session = Depends(
 
 @router.get("/", response_model=modeller.TedarikciListResponse)
 def read_tedarikciler(
+    db: Session = Depends(get_db),
     skip: int = 0,
-    limit: int = 100,
-    arama: str = Query(None, min_length=1, max_length=50),
-    aktif_durum: bool = Query(None),
-    db: Session = Depends(get_db)
+    limit: int = 25,
+    arama: Optional[str] = None,
+    aktif_durum: Optional[bool] = None
 ):
     query = db.query(semalar.Tedarikci)
 
     if arama:
+        search_term = f"%{arama}%"
         query = query.filter(
-            (semalar.Tedarikci.ad.ilike(f"%{arama}%")) |
-            (semalar.Tedarikci.kod.ilike(f"%{arama}%")) |
-            (semalar.Tedarikci.telefon.ilike(f"%{arama}%")) |
-            (semalar.Tedarikci.vergi_no.ilike(f"%{arama}%"))
+            or_(
+                semalar.Tedarikci.ad.ilike(search_term),
+                semalar.Tedarikci.kod.ilike(search_term),
+                semalar.Tedarikci.telefon.ilike(search_term),
+                semalar.Tedarikci.vergi_no.ilike(search_term)
+            )
         )
-
+    
     if aktif_durum is not None:
         query = query.filter(semalar.Tedarikci.aktif == aktif_durum)
 
     total_count = query.count()
     tedarikciler = query.offset(skip).limit(limit).all()
 
-    # Yeni hizmet sınıfını kullanarak her tedarikçi için net bakiyeyi hesapla
     cari_hizmeti = CariHesaplamaService(db)
     tedarikciler_with_balance = []
     for tedarikci in tedarikciler:
@@ -56,7 +61,6 @@ def read_tedarikci(tedarikci_id: int, db: Session = Depends(get_db)):
     if not tedarikci:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
 
-    # Yeni hizmet sınıfını kullanarak tedarikçinin net bakiyesini hesapla
     cari_hizmeti = CariHesaplamaService(db)
     net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(tedarikci_id, "TEDARIKCI")
     tedarikci_dict = modeller.TedarikciRead.model_validate(tedarikci).model_dump()

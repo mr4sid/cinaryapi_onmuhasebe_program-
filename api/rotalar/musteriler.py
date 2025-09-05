@@ -1,7 +1,9 @@
 # api.zip/rotalar/musteriler.py dosyasının tamamını bu şekilde güncelleyin:
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
+from typing import List, Optional
+
 from .. import modeller, semalar
 from ..veritabani import get_db
 from ..api_servisler import CariHesaplamaService
@@ -17,29 +19,31 @@ def create_musteri(musteri: modeller.MusteriCreate, db: Session = Depends(get_db
 
 @router.get("/", response_model=modeller.MusteriListResponse)
 def read_musteriler(
+    db: Session = Depends(get_db),
     skip: int = 0,
-    limit: int = 100,
-    arama: str = Query(None, min_length=1, max_length=50),
-    aktif_durum: bool = Query(None),
-    db: Session = Depends(get_db)
+    limit: int = 25,
+    arama: Optional[str] = None,
+    aktif_durum: Optional[bool] = None
 ):
     query = db.query(semalar.Musteri)
 
     if arama:
+        search_term = f"%{arama}%"
         query = query.filter(
-            (semalar.Musteri.ad.ilike(f"%{arama}%")) |
-            (semalar.Musteri.kod.ilike(f"%{arama}%")) |
-            (semalar.Musteri.telefon.ilike(f"%{arama}%")) |
-            (semalar.Musteri.vergi_no.ilike(f"%{arama}%"))
+            or_(
+                semalar.Musteri.ad.ilike(search_term),
+                semalar.Musteri.kod.ilike(search_term),
+                semalar.Musteri.telefon.ilike(search_term),
+                semalar.Musteri.vergi_no.ilike(search_term)
+            )
         )
-
+        
     if aktif_durum is not None:
         query = query.filter(semalar.Musteri.aktif == aktif_durum)
 
     total_count = query.count()
     musteriler = query.offset(skip).limit(limit).all()
 
-    # Yeni hizmet sınıfını kullanarak her müşteri için net bakiyeyi hesapla
     cari_hizmeti = CariHesaplamaService(db)
     musteriler_with_balance = []
     for musteri in musteriler:
@@ -56,12 +60,22 @@ def read_musteri(musteri_id: int, db: Session = Depends(get_db)):
     if not musteri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müşteri bulunamadı")
 
-    # Yeni hizmet sınıfını kullanarak müşterinin net bakiyesini hesapla
     cari_hizmeti = CariHesaplamaService(db)
     net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(musteri_id, "MUSTERI")
     musteri_dict = modeller.MusteriRead.model_validate(musteri).model_dump()
     musteri_dict["net_bakiye"] = net_bakiye
     return musteri_dict
+
+@router.put("/{musteri_id}", response_model=modeller.MusteriRead)
+def update_musteri(musteri_id: int, musteri: modeller.MusteriUpdate, db: Session = Depends(get_db)):
+    db_musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == musteri_id).first()
+    if not db_musteri:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müşteri bulunamadı")
+    for key, value in musteri.model_dump(exclude_unset=True).items():
+        setattr(db_musteri, key, value)
+    db.commit()
+    db.refresh(db_musteri)
+    return db_musteri
 
 @router.put("/{musteri_id}", response_model=modeller.MusteriRead)
 def update_musteri(musteri_id: int, musteri: modeller.MusteriUpdate, db: Session = Depends(get_db)):

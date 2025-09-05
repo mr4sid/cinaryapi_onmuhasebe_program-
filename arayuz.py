@@ -421,30 +421,30 @@ class StokYonetimiSayfasi(QWidget):
     def _yukle_filtre_comboboxlari_stok_yonetimi(self):
         try:
             # Kategorileri yükle
-            kategoriler_response = self.db.kategori_listele() 
-            # API yanıtından 'items' listesini alıyoruz, API'nin {"items": [...], "total": 0} dönmesi beklenir
-            kategoriler_list = kategoriler_response.get("items", []) # Güvenli erişim
-            self.kategoriler = [{"id": k.get("id"), "ad": k.get("ad")} for k in kategoriler_list] 
-            self.kategori_filter_cb.clear() 
-            self.kategori_filter_cb.addItem("Tümü", userData=None) 
+            kategoriler_response = self.db.kategori_listele()
+            # API yanıtının bir sözlük veya liste olabileceğini kontrol ediyoruz
+            kategoriler_list = kategoriler_response.get("items", []) if isinstance(kategoriler_response, dict) else kategoriler_response
+            self.kategoriler = [{"id": k.get("id"), "ad": k.get("ad")} for k in kategoriler_list]
+            self.kategori_filter_cb.clear()
+            self.kategori_filter_cb.addItem("Tümü", userData=None)
             for kategori in self.kategoriler:
                 self.kategori_filter_cb.addItem(kategori["ad"], userData=kategori["id"])
 
             # Markaları yükle
-            markalar_response = self.db.marka_listele() 
-            # API yanıtından 'items' listesini alıyoruz
-            markalar_list = markalar_response.get("items", []) # Güvenli erişim
-            self.markalar = [{"id": m.get("id"), "ad": m.get("ad")} for m in markalar_list] 
-            self.marka_filter_cb.clear() 
+            markalar_response = self.db.marka_listele()
+            # API yanıtının bir sözlük veya liste olabileceğini kontrol ediyoruz
+            markalar_list = markalar_response.get("items", []) if isinstance(markalar_response, dict) else markalar_response
+            self.markalar = [{"id": m.get("id"), "ad": m.get("ad")} for m in markalar_list]
+            self.marka_filter_cb.clear()
             self.marka_filter_cb.addItem("Tümü", userData=None)
             for marka in self.markalar:
                 self.marka_filter_cb.addItem(marka["ad"], userData=marka["id"])
 
             # Ürün Gruplarını yükle
-            urun_gruplari_response = self.db.urun_grubu_listele() 
-            # API yanıtından 'items' listesini alıyoruz
-            urun_gruplari_list = urun_gruplari_response.get("items", []) # Güvenli erişim
-            self.urun_gruplari = [{"id": g.get("id"), "ad": g.get("ad")} for g in urun_gruplari_list] 
+            urun_gruplari_response = self.db.urun_grubu_listele()
+            # API yanıtının bir sözlük veya liste olabileceğini kontrol ediyoruz
+            urun_gruplari_list = urun_gruplari_response.get("items", []) if isinstance(urun_gruplari_response, dict) else urun_gruplari_response
+            self.urun_gruplari = [{"id": g.get("id"), "ad": g.get("ad")} for g in urun_gruplari_list]
             self.urun_grubu_filter_cb.clear()
             self.urun_grubu_filter_cb.addItem("Tümü", userData=None)
             for grup in self.urun_gruplari:
@@ -453,7 +453,7 @@ class StokYonetimiSayfasi(QWidget):
         except Exception as e:
             logger.error(f"Kategori/Marka/Ürün Grubu yüklenirken hata oluştu: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Kategori/Marka/Ürün Grubu yüklenemedi. {e}")
-
+            
     def _filtreleri_temizle(self):
         self.arama_entry.clear()
         self.kategori_filter_cb.setCurrentText("TÜMÜ")
@@ -1527,7 +1527,7 @@ class TedarikciYonetimiSayfasi(QWidget):
 
             self.app.set_status_message(f"Tedarikçi listesi başarıyla güncellendi. Toplam {toplam_kayit} tedarikçi.")
             self.guncelle_toplam_ozet_bilgiler()
-            self._sayfalama_butonlarini_guncelle() # <-- BU SATIR EKLENDİ
+            self._sayfalama_butonlarini_guncelle()
 
         except Exception as e:
             logger.error(f"Tedarikçi listesi yüklenirken hata oluştu: {e}", exc_info=True)

@@ -305,15 +305,25 @@ class OnMuhasebe:
 
                 # Tahsilat/Ödeme Toplamını Hesapla
                 if odeme_turu in self.pesin_odeme_turleri:
-                    toplam_tahsilat_odeme += tutar
+                    # Bu kontrol, Tahsilat/Ödeme hareketlerinin de tahsilat/ödeme toplamına dahil edilmesini sağlar
+                    if h.get('kaynak') in [self.KAYNAK_TIP_TAHSILAT, self.KAYNAK_TIP_ODEME]:
+                        toplam_tahsilat_odeme += tutar
+                    # Faturalar, sadece peşin ödeme türünde ise tahsilat toplamına eklenir.
+                    # Buradaki mantık, fatura tutarının ödeme türüne göre ayrıştırılmasıdır.
+                    elif h.get('kaynak') in [self.KAYNAK_TIP_FATURA, self.KAYNAK_TIP_IADE_FATURA]:
+                        toplam_tahsilat_odeme += tutar
+
 
                 # Vade bilgileri için hesaplama
                 if odeme_turu == self.ODEME_TURU_ACIK_HESAP and vade_tarihi_str:
-                    vade_tarihi = datetime.strptime(vade_tarihi_str, '%Y-%m-%d').date()
-                    if vade_tarihi < datetime.now().date():
-                        vadesi_gelmis += tutar
-                    else:
-                        vadesi_gelecek += tutar
+                    try:
+                        vade_tarihi = datetime.strptime(vade_tarihi_str, '%Y-%m-%d').date()
+                        if vade_tarihi < datetime.now().date():
+                            vadesi_gelmis += tutar
+                        else:
+                            vadesi_gelecek += tutar
+                    except ValueError:
+                        logger.warning(f"Geçersiz vade tarihi formatı: {vade_tarihi_str}")
 
             # Dönem sonu bakiyesi
             donem_sonu_bakiye = devreden_bakiye + toplam_alacak - toplam_borc
