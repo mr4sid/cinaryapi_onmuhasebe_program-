@@ -21,7 +21,7 @@ from arayuz import ( # arayuz.py'den tüm gerekli sayfaları içe aktarın
     UrunNitelikYonetimiSekmesi
 )
 from veritabani import OnMuhasebe
-from hizmetler import FaturaService, TopluIslemService
+from hizmetler import FaturaService, TopluIslemService, lokal_db_servisi 
 from raporlar import Raporlama
 # Logger kurulumu
 logger = logging.getLogger(__name__)
@@ -806,6 +806,13 @@ class App(QMainWindow):
             logger.critical(f"API URL güncellemesi sonrası bağlantı hatası: {e}")
 
 if __name__ == "__main__":
+    print("Veriler senkronize ediliyor...")
+    # Sunucu adresini buraya girin ve portu 8001 olarak ayarlayın.
+    sunucu_adresi = "http://localhost:8001" 
+    basari, mesaj = lokal_db_servisi.senkronize_veriler(sunucu_adresi) 
+    print(mesaj)
+    if not basari:
+        print("Sunucuya bağlanılamadı, program çevrimdışı modda başlatılıyor.")
     app = QApplication(sys.argv)
 
     app.setStyle("Fusion")

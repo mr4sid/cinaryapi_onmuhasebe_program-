@@ -341,7 +341,11 @@ def get_cari_hesap_ekstresi_endpoint(
         semalar.CariHareket.tarih < baslangic_tarihi
     ).scalar() or 0.0
 
-    devreden_bakiye = devreden_bakiye_borc - devreden_bakiye_alacak
+    # DÜZELTME: Bakiye yönü, cari türüne göre ayarlanıyor
+    if cari_turu == semalar.CariTipiEnum.MUSTERI:
+        devreden_bakiye = devreden_bakiye_alacak - devreden_bakiye_borc
+    else: # Tedarikçi
+        devreden_bakiye = devreden_bakiye_borc - devreden_bakiye_alacak
 
     # Belirtilen tarih aralığındaki hareketleri çek
     hareketler_query = db.query(semalar.CariHareket).filter(

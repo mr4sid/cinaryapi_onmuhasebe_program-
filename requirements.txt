@@ -20,3 +20,4 @@ reportlab==4.4.2
 shiboken6==6.9.1
 six==1.17.0
 tzdata==2025.2
+SQLAlchemy==2.0.31
