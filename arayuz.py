@@ -580,28 +580,28 @@ class StokYonetimiSayfasi(QWidget):
         for item in stok_listesi:
             item_qt = QTreeWidgetItem(self.tree_stok)
             
-            item_qt.setData(0, Qt.UserRole, item.get('id'))
+            item_qt.setData(0, Qt.UserRole, item.id)
             
             # Sıfır miktar için renkli uyarı
-            if item.get('miktar', 0) <= item.get('min_stok_seviyesi', 0):
+            if item.miktar <= item.min_stok_seviyesi:
                 for col in range(self.tree_stok.columnCount()):
                     item_qt.setBackground(col, QBrush(QColor("#ffcdd2"))) # Açık kırmızı
                     
-            item_qt.setText(0, str(item.get('id', '')))
-            item_qt.setText(1, item.get('kod', ''))
-            item_qt.setText(2, item.get('ad', ''))
+            item_qt.setText(0, str(item.id))
+            item_qt.setText(1, item.kod)
+            item_qt.setText(2, item.ad)
             
             # Sayısal alanları formatla
-            miktar_str = f"{item.get('miktar', 0):,.2f}".replace('.', ',')
-            satis_fiyat_str = self.db._format_currency(item.get('satis_fiyati', 0))
-            kdv_str = f"%{item.get('kdv_orani', 0):.0f}"
-            min_stok_str = f"{item.get('min_stok_seviyesi', 0):,.2f}".replace('.', ',')
+            miktar_str = f"{item.miktar:,.2f}".replace('.', ',')
+            satis_fiyat_str = self.db._format_currency(item.satis_fiyati)
+            kdv_str = f"%{item.kdv_orani:.0f}"
+            min_stok_str = f"{item.min_stok_seviyesi:,.2f}".replace('.', ',')
 
             item_qt.setText(3, miktar_str)
             item_qt.setText(4, satis_fiyat_str)
             item_qt.setText(5, kdv_str)
             item_qt.setText(6, min_stok_str)
-            item_qt.setText(7, "Evet" if item.get('aktif', True) else "Hayır")
+            item_qt.setText(7, "Evet" if item.aktif else "Hayır")
             
             # DEĞİŞİKLİK: Tüm sütunları merkeze hizala ve yazı fontunu ayarla
             for i in range(self.tree_stok.columnCount()):

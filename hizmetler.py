@@ -637,15 +637,26 @@ class LokalVeritabaniServisi:
                 'cari_hareketler': ['tarih', 'vade_tarihi']
             }
             datetime_fields = {
+                'stoklar': ['olusturma_tarihi'], # Eklendi
+                'musteriler': ['olusturma_tarihi'], # Eklendi
+                'tedarikciler': ['olusturma_tarihi'], # Eklendi
+                'kasalar_bankalar': ['olusturma_tarihi'], # Eklendi
                 'faturalar': ['olusturma_tarihi_saat', 'son_guncelleme_tarihi_saat'],
                 'siparisler': ['olusturma_tarihi_saat', 'son_guncelleme_tarihi_saat'],
-                'cari_hareketler': ['olusturma_tarihi_saat']
+                'cari_hareketler': ['olusturma_tarihi_saat'],
+                'gelir_gider': ['olusturma_tarihi_saat'] # Eklendi
             }
 
             for endpoint, model in endpoints.items():
-                response = requests.get(f"{sunucu_adresi}/{endpoint}/")
+                response = requests.get(f"{sunucu_adresi}/{endpoint}", params={"limit": 999999})
                 response.raise_for_status()
-                server_data = response.json()["items"]
+                response_data = response.json()
+                if isinstance(response_data, dict) and "items" in response_data:
+                    server_data = response_data["items"]
+                elif isinstance(response_data, list):
+                    server_data = response_data
+                else:
+                    raise ValueError(f"API'den beklenmeyen veri formatı: {response_data}")
                 
                 for item_data in server_data:
                     item_data = _convert_dates(item_data, date_fields.get(endpoint.split('/')[-1], []), datetime_fields.get(endpoint.split('/')[-1], []))

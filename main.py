@@ -247,6 +247,26 @@ class Ui_MainWindow_Minimal:
 
         self.menuAyarlar.addAction(MainWindow.actionY_netici_Ayarlar)
 
+class SyncWorker(QObject):
+    is_finished = Signal(bool, str)
+
+    def __init__(self, db_manager):
+        super().__init__()
+        self.db_manager = db_manager
+
+    @Slot()
+    def run(self):
+        success, message = False, "Bilinmeyen bir hata oluştu."
+        try:
+            # Burası, eski blocking senkronizasyon mantığıdır.
+            # Hizmetler.py'deki senkronizasyon fonksiyonunu çağırır.
+            success, message = self.db_manager.senkronize_veriler_lokal_db_icin()
+        except Exception as e:
+            message = f"Senkronizasyon sırasında beklenmedik bir hata oluştu: {e}"
+            logger.error(message, exc_info=True)
+        finally:
+            self.is_finished.emit(success, message)
+
 class App(QMainWindow):
     backup_completed_signal = Signal(bool, str, str)    
     def __init__(self):
@@ -308,6 +328,7 @@ class App(QMainWindow):
 
         self._setup_ui_connections() 
         self._initial_load_data()
+        self._start_background_sync()
 
         # Yeni Menü eylemleri bağlantıları
         self.actionStok_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
@@ -370,6 +391,31 @@ class App(QMainWindow):
         self.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
         self.actionY_netici_Ayarlar.triggered.connect(self._yonetici_ayarlari_penceresi_ac)
         self._update_status_bar()
+
+    def _start_background_sync(self):
+        """Senkronizasyon işlemini arkaplan thread'inde başlatır."""
+        self.sync_thread = QThread()
+        self.sync_worker = SyncWorker(self.db_manager)
+        self.sync_worker.moveToThread(self.sync_thread)
+
+        self.sync_thread.started.connect(self.sync_worker.run)
+        self.sync_worker.is_finished.connect(self.sync_thread.quit)
+        self.sync_worker.is_finished.connect(self.sync_worker.deleteLater)
+        self.sync_thread.finished.connect(self.sync_thread.deleteLater)
+        self.sync_worker.is_finished.connect(self._handle_sync_completion)
+
+        self.set_status_message("Veriler güncelleniyor, lütfen bekleyiniz...")
+        self.sync_thread.start()
+
+    def _handle_sync_completion(self, success, message):
+        """Senkronizasyon tamamlandığında çağrılır."""
+        if success:
+            final_message = f"Senkronizasyon başarıyla tamamlandı. {message}"
+            self.set_status_message(final_message, "green")
+            self._initial_load_data() # Tüm UI listelerini yerel veritabanından yenile
+        else:
+            final_message = f"Senkronizasyon işlemi tamamlanamadı: {message}"
+            self.set_status_message(final_message, "red")
 
     def register_cari_ekstre_window(self, window_instance):
         """Açık olan cari ekstre pencerelerini takip eder."""
@@ -806,13 +852,6 @@ class App(QMainWindow):
             logger.critical(f"API URL güncellemesi sonrası bağlantı hatası: {e}")
 
 if __name__ == "__main__":
-    print("Veriler senkronize ediliyor...")
-    # Sunucu adresini buraya girin ve portu 8001 olarak ayarlayın.
-    sunucu_adresi = "http://localhost:8001" 
-    basari, mesaj = lokal_db_servisi.senkronize_veriler(sunucu_adresi) 
-    print(mesaj)
-    if not basari:
-        print("Sunucuya bağlanılamadı, program çevrimdışı modda başlatılıyor.")
     app = QApplication(sys.argv)
 
     app.setStyle("Fusion")

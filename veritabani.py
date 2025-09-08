@@ -7,6 +7,7 @@ import locale # YENİ EKLENDİ (Para birimi formatlama için)
 from config import API_BASE_URL # DÜZELTİLDİ: Göreceli içe aktarma kaldırıldı, doğrudan import
 from typing import List, Optional, Dict, Any # Yeni importlar
 from datetime import datetime
+from hizmetler import lokal_db_servisi 
 # Logger kurulumu
 logger = logging.getLogger(__name__)
 
@@ -1524,3 +1525,9 @@ class OnMuhasebe:
         except Exception as e:
             logger.error(f"Veritabanı geri yükleme API isteği başarısız: {e}")
             return False, f"Geri yükleme başarısız oldu: {e}", None
+        
+    def senkronize_veriler_lokal_db_icin(self):
+        """
+        Lokal veritabanı senkronizasyonunu başlatmak için bir aracı metot.
+        """
+        return lokal_db_servisi.senkronize_veriler(self.api_base_url)
