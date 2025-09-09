@@ -18,7 +18,7 @@ from arayuz import ( # arayuz.py'den tüm gerekli sayfaları içe aktarın
     FaturaListesiSayfasi, SiparisListesiSayfasi,
     GelirGiderSayfasi, RaporlamaMerkeziSayfasi,
     TedarikciYonetimiSayfasi,
-    UrunNitelikYonetimiSekmesi
+    UrunNitelikYonetimiSekmesi, VeriYonetimiSekmesi
 )
 from veritabani import OnMuhasebe
 from hizmetler import FaturaService, TopluIslemService, lokal_db_servisi 
@@ -74,7 +74,6 @@ class BackupWorker(QObject):
     def __init__(self, db_manager, file_path):
         super().__init__()
         self.db_manager = db_manager
-        self.file_path = file_path
 
     @Slot()
     def run(self):
@@ -87,7 +86,6 @@ class BackupWorker(QObject):
         finally:
             self.is_finished.emit(success, message, created_file_path)
 
-# YENİ EKLENEN KOD BAŞLANGIÇ
 class RestoreWorker(QObject):
     is_finished = Signal(bool, str)
 
@@ -106,7 +104,24 @@ class RestoreWorker(QObject):
             logger.error(message, exc_info=True)
         finally:
             self.is_finished.emit(success, message)
-# YENİ EKLENEN KOD BİTİŞ
+
+class SyncWorker(QObject):
+    is_finished = Signal(bool, str)
+
+    def __init__(self, db_manager):
+        super().__init__()
+        self.db_manager = db_manager
+
+    @Slot()
+    def run(self):
+        success, message = False, "Bilinmeyen bir hata oluştu."
+        try:
+            success, message = self.db_manager.senkronize_veriler_lokal_db_icin()
+        except Exception as e:
+            message = f"Senkronizasyon sırasında beklenmedik bir hata oluştu: {e}"
+            logger.error(message, exc_info=True)
+        finally:
+            self.is_finished.emit(success, message)
 
 class Ui_MainWindow_Minimal:
     def setupUi(self, MainWindow):
@@ -215,6 +230,10 @@ class Ui_MainWindow_Minimal:
         MainWindow.actionY_netici_Ayarlar = QAction(MainWindow)
         MainWindow.actionY_netici_Ayarlar.setObjectName("actionY_netici_Ayarlar")
         MainWindow.actionY_netici_Ayarlar.setText("Yönetici Ayarları")
+        
+        MainWindow.actionVeri_Yonetimi = QAction(MainWindow)
+        MainWindow.actionVeri_Yonetimi.setObjectName("actionVeri_Yonetimi")
+        MainWindow.actionVeri_Yonetimi.setText("Veri Yönetimi")
 
         # Menüleri oluşturma ve Action'ları ekleme
         self.menuKartlar = self.menubar.addMenu("Kartlar")
@@ -244,8 +263,8 @@ class Ui_MainWindow_Minimal:
         self.menuAyarlar.addAction(MainWindow.actionYedekle)
         self.menuAyarlar.addAction(MainWindow.actionGeri_Y_kle)
         self.menuAyarlar.addAction(MainWindow.actionAPI_Ayarlar)
-
         self.menuAyarlar.addAction(MainWindow.actionY_netici_Ayarlar)
+        self.menuAyarlar.addAction(MainWindow.actionVeri_Yonetimi)
 
 class SyncWorker(QObject):
     is_finished = Signal(bool, str)
@@ -258,8 +277,6 @@ class SyncWorker(QObject):
     def run(self):
         success, message = False, "Bilinmeyen bir hata oluştu."
         try:
-            # Burası, eski blocking senkronizasyon mantığıdır.
-            # Hizmetler.py'deki senkronizasyon fonksiyonunu çağırır.
             success, message = self.db_manager.senkronize_veriler_lokal_db_icin()
         except Exception as e:
             message = f"Senkronizasyon sırasında beklenmedik bir hata oluştu: {e}"
@@ -321,7 +338,7 @@ class App(QMainWindow):
         
         self.urun_nitelik_yonetimi_sekmesi = UrunNitelikYonetimiSekmesi(self, self.db_manager, self)
         self.tab_widget.addTab(self.urun_nitelik_yonetimi_sekmesi, "Nitelik Yönetimi")
-
+        
         self.fatura_service = FaturaService(self.db_manager)
         self.toplu_islem_service = TopluIslemService(self.db_manager)
         self.raporlama = Raporlama(self.db_manager)
@@ -367,7 +384,7 @@ class App(QMainWindow):
         self.actionToplu_Veri_Aktar_m.triggered.connect(lambda: self._open_dialog_with_callback(
             'pencereler.TopluVeriEklePenceresi'
         ))
-
+        self.actionVeri_Yonetimi.triggered.connect(self._veri_yonetimi_penceresi_ac)
         self.actionM_teri_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
         self.actionTedarik_i_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
         self.actionStok_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
@@ -503,10 +520,6 @@ class App(QMainWindow):
 
     def show_invoice_form(self, fatura_tipi, duzenleme_id=None, initial_data=None):
         """Fatura oluşturma/düzenleme penceresini açar."""
-        # Sınıflar buraya taşındığı için import satırlarını kaldırdık veya düzenledik.
-        # from pencereler import FaturaDetayPenceresi, FaturaGuncellemePenceresi
-        # from arayuz import FaturaOlusturmaSayfasi
-
         from pencereler import FaturaGuncellemePenceresi
         from arayuz import FaturaOlusturmaSayfasi
 
@@ -519,7 +532,6 @@ class App(QMainWindow):
             )
             pencere.exec()
         else:
-            # Yeni fatura oluşturmak için FaturaOlusturmaSayfasi'nı bir QDialog içinde gösteriyoruz.
             pencere = QDialog(self)
             pencere.setWindowTitle("Yeni Satış Faturası" if fatura_tipi == self.db_manager.FATURA_TIP_SATIS else "Yeni Alış Faturası")
             pencere.setWindowState(Qt.WindowMaximized)
@@ -536,7 +548,6 @@ class App(QMainWindow):
             )
             dialog_layout.addWidget(fatura_form)
             
-            # Sinyal bağlantılarını burada kuruyoruz.
             fatura_form.saved_successfully.connect(pencere.accept)
             fatura_form.cancelled_successfully.connect(pencere.reject)
             
@@ -566,14 +577,14 @@ class App(QMainWindow):
         
     def show_order_form(self, siparis_tipi, siparis_id_duzenle=None, initial_data=None):
         """Sipariş oluşturma/düzenleme penceresini açar."""
-        from pencereler import SiparisPenceresi # Bu import burada yapılmalı
+        from pencereler import SiparisPenceresi
         self.siparis_penceresi = SiparisPenceresi(
-            self, # parent
+            self,
             self.db_manager,
-            self, # app_ref
+            self,
             siparis_tipi=siparis_tipi,
             siparis_id_duzenle=siparis_id_duzenle,
-            yenile_callback=self._initial_load_data, # Sipariş kaydedilince ana ekranı yenile
+            yenile_callback=self._initial_load_data,
             initial_data=initial_data
         )
         self.siparis_penceresi.show()
@@ -826,16 +837,30 @@ class App(QMainWindow):
         self.statusBar().showMessage("Uygulama hazır.")
 
     def _api_ayarlari_penceresi_ac(self):
-        # YENİ KOD: APIAyarlariPenceresi'ni içe aktarmak için pencereler.py içinde APIAyarlariPenceresi adlı bir sınıfın tanımlı olması gerekiyor.
-        # Terminal çıktısına göre böyle bir sınıf mevcut değil.
-        # Bu sorunu çözmek için `main.py`'deki bu metodu ve çağrıldığı yeri kaldırmamız gerekiyor.
-        # Bu değişiklik, kodun geri kalanını etkilemez, çünkü bu menü öğesi daha önce de çalışmıyordu.
         pass
 
     def _yonetici_ayarlari_penceresi_ac(self):
         from pencereler import YoneticiAyarlariPenceresi
         dialog = YoneticiAyarlariPenceresi(self, self.db_manager)
         dialog.exec()
+
+    def _veri_yonetimi_penceresi_ac(self):
+        """
+        Veri Yönetimi arayüzünü bir diyalog penceresi olarak açar.
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Veri Yönetimi ve Senkronizasyon")
+        dialog.setMinimumSize(800, 600)
+
+        dialog_layout = QVBoxLayout(dialog)
+        veri_yonetimi_widget = VeriYonetimiSekmesi(dialog, self.db_manager, self)
+        dialog_layout.addWidget(veri_yonetimi_widget)
+
+        # Sinyal ve slot bağlantıları
+        # Bu kısım, VeriYonetimiSekmesi'nin içinde butonlara işlevsellik eklerken kullanılacak
+
+        dialog.exec()
+        self.set_status_message("Veri Yönetimi penceresi açıldı.")
 
     def _handle_api_url_update(self, new_api_url):
         self.config["api_base_url"] = new_api_url
@@ -873,4 +898,4 @@ if __name__ == "__main__":
 
     window = App()
     window.show()
-    sys.exit(app.exec()) 
+    sys.exit(app.exec())

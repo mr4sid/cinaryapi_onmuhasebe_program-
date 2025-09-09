@@ -3,6 +3,7 @@ import requests
 import json
 import logging
 import os
+import time
 import locale # YENİ EKLENDİ (Para birimi formatlama için)
 from config import API_BASE_URL # DÜZELTİLDİ: Göreceli içe aktarma kaldırıldı, doğrudan import
 from typing import List, Optional, Dict, Any # Yeni importlar
@@ -1531,3 +1532,40 @@ class OnMuhasebe:
         Lokal veritabanı senkronizasyonunu başlatmak için bir aracı metot.
         """
         return lokal_db_servisi.senkronize_veriler(self.api_base_url)
+    
+    def _close_local_db_connections(self):
+        """
+        Uygulamanın lokal veritabanı bağlantılarını sonlandırır.
+        """
+        try:
+            lokal_db_servisi.engine.dispose()
+            logging.info("Lokal veritabanı bağlantıları başarıyla sonlandırıldı.")
+        except Exception as e:
+            logging.error(f"Lokal veritabanı bağlantıları sonlandırılırken hata: {e}", exc_info=True)    
+
+    def temizle_veritabani_dosyasi(self):
+        """
+        Yerel veritabanı dosyasını güvenli bir şekilde siler.
+        """
+        db_path = os.path.join(os.path.dirname(__file__), 'onmuhasebe.db')
+        
+        if os.path.exists(db_path):
+            try:
+                # Dosya kilitlerini serbest bırakmak için motoru sonlandırın
+                lokal_db_servisi.engine.dispose()
+                time.sleep(1) # OS'in kilitleri serbest bırakması için 1 saniye bekleyin
+                
+                os.remove(db_path)
+                return True, "Yerel veritabanı dosyası başarıyla silindi."
+            except Exception as e:
+                return False, f"Veritabanı dosyası silinirken bir hata oluştu: {e}"
+        else:
+            return False, "Yerel veritabanı dosyası zaten mevcut değil."
+
+    def _close_api_db_connections(self):
+        try:
+            response = requests.post(f"{self.api_base_url}/sistem/veritabani_baglantilarini_kapat")
+            response.raise_for_status()
+            return True, response.text
+        except Exception as e:
+            return False, f"API bağlantıları kapatılırken hata: {e}"

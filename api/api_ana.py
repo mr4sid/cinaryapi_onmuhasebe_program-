@@ -6,7 +6,7 @@ from sqlalchemy import text # EKLENDİ: text objesi için import
 import logging
 from datetime import datetime
 from contextlib import asynccontextmanager # EKLENDİ: asynccontextmanager için import
-
+from api.veritabani import engine
 # Gerekli içe aktarmalar
 # Base ve engine, veritabani.py'den import edilmeli
 from .veritabani import Base

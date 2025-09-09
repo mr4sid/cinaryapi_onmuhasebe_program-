@@ -4,10 +4,11 @@ import logging
 import traceback
 import multiprocessing
 import threading
+import time
 from datetime import datetime, date, timedelta
 
 # PySide6 modülleri
-from PySide6.QtWidgets import (
+from PySide6.QtWidgets import (QApplication,
     QWidget,QDialog, QLabel, QPushButton, QTabWidget, QMessageBox,
     QGridLayout, QVBoxLayout, QHBoxLayout, QFrame,
     QLineEdit, QMainWindow, QFileDialog, QComboBox, QTreeWidget, QTreeWidgetItem, QAbstractItemView,
@@ -9297,3 +9298,120 @@ class UrunNitelikYonetimiSekmesi(QWidget):
             except Exception as e:
                 QMessageBox.critical(self.app, "Beklenmeyen Hata", f"Ülke silinirken beklenmeyen bir hata oluştu:\n{e}")
                 self.app.set_status_message(f"Ülke silinirken hata: {e}")
+
+class VeriYonetimiSekmesi(QWidget):
+    def __init__(self, parent_notebook, db_manager, app_ref):
+        super().__init__(parent_notebook)
+        self.db = db_manager
+        self.app = app_ref
+        self.main_layout = QVBoxLayout(self)
+
+        self.main_layout.addWidget(QLabel("Veri Yönetimi ve Senkronizasyon", font=QFont("Segoe UI", 16, QFont.Bold)), alignment=Qt.AlignCenter)
+
+        # Butonlar için bir çerçeve ve layout
+        button_frame = QFrame(self)
+        button_layout = QGridLayout(button_frame)
+        self.main_layout.addWidget(button_frame)
+
+        # Senkronizasyon ve Veritabanı Yönetimi
+        group_sync = QGroupBox("Senkronizasyon ve Veritabanı", self)
+        group_sync_layout = QVBoxLayout(group_sync)
+        
+        self.btn_manuel_sync = QPushButton("Verileri Şimdi Senkronize Et")
+        self.btn_manuel_sync.setToolTip("API'den tüm verileri çeker ve yerel veritabanını günceller.")
+        # Bağlantı daha sonra yapılacak
+        group_sync_layout.addWidget(self.btn_manuel_sync)
+
+        self.btn_temizle_db = QPushButton("Yerel Veritabanını Temizle")
+        self.btn_temizle_db.setToolTip("Kullanıcılar hariç tüm yerel veritabanı verilerini siler.")
+        # Bağlantı daha sonra yapılacak
+        group_sync_layout.addWidget(self.btn_temizle_db)
+
+        button_layout.addWidget(group_sync, 0, 0)
+        
+        # Toplu İçe Aktarım
+        group_import = QGroupBox("Toplu Veri İçe Aktarım", self)
+        group_import_layout = QVBoxLayout(group_import)
+
+        self.btn_import_stok = QPushButton("Stokları Excel'den İçe Aktar")
+        group_import_layout.addWidget(self.btn_import_stok)
+
+        self.btn_import_musteri = QPushButton("Müşterileri Excel'den İçe Aktar")
+        group_import_layout.addWidget(self.btn_import_musteri)
+
+        self.btn_import_tedarikci = QPushButton("Tedarikçileri Excel'den İçe Aktar")
+        group_import_layout.addWidget(self.btn_import_tedarikci)
+
+        button_layout.addWidget(group_import, 0, 1)
+
+        # Toplu Dışa Aktarım
+        group_export = QGroupBox("Toplu Veri Dışa Aktarım", self)
+        group_export_layout = QVBoxLayout(group_export)
+
+        self.btn_export_stok = QPushButton("Stokları Excel'e Dışa Aktar")
+        group_export_layout.addWidget(self.btn_export_stok)
+
+        self.btn_export_musteri = QPushButton("Müşterileri Excel'e Dışa Aktar")
+        group_export_layout.addWidget(self.btn_export_musteri)
+
+        self.btn_export_tedarikci = QPushButton("Tedarikçileri Excel'e Dışa Aktar")
+        group_export_layout.addWidget(self.btn_export_tedarikci)
+
+        button_layout.addWidget(group_export, 0, 2)
+        
+        # Butonların sinyallerini metotlara bağlama
+        self.btn_manuel_sync.clicked.connect(self._manuel_senkronizasyon_baslat)
+        self.btn_temizle_db.clicked.connect(self._yerel_veritabanini_temizle)
+        self.btn_import_stok.clicked.connect(lambda: self._toplu_veri_aktarimi_ac("Stok"))
+        self.btn_import_musteri.clicked.connect(lambda: self._toplu_veri_aktarimi_ac("Müşteri"))
+        self.btn_import_tedarikci.clicked.connect(lambda: self._toplu_veri_aktarimi_ac("Tedarikçi"))
+        self.btn_export_stok.clicked.connect(lambda: self._toplu_veri_disa_aktarimi_ac("Stok"))
+        self.btn_export_musteri.clicked.connect(lambda: self._toplu_veri_disa_aktarimi_ac("Müşteri"))
+        self.btn_export_tedarikci.clicked.connect(lambda: self._toplu_veri_disa_aktarimi_ac("Tedarikçi"))
+        
+        self.main_layout.addStretch(1)        
+
+    def _manuel_senkronizasyon_baslat(self):
+        """
+        Kullanıcı isteğiyle senkronizasyon işlemini başlatır.
+        """
+        # App sınıfındaki arka plan senkronizasyon metodunu çağırıyoruz.
+        self.app._start_background_sync()
+
+    def _yerel_veritabanini_temizle(self):
+        """
+        Yerel veritabanını temizleme işlemini başlatır.
+        """
+        reply = QMessageBox.question(self, "Veritabanını Temizleme Onayı",
+                                     "Bu işlem, kullanıcılar hariç tüm yerel veritabanı verilerini kalıcı olarak silecektir. Devam etmek istediğinizden emin misiniz?",
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+
+        if reply == QMessageBox.StandardButton.Yes:
+            # Önce API'ye bağlantıları kapatması için komut gönderin
+            # DİKKAT: API'deki prefix zaten /sistem olduğu için, sadece /veritabani_baglantilarini_kapat çağırıyoruz.
+            try:
+                # Yeni yardımcı metodu çağırın
+                self.db._close_api_db_connections()
+            except Exception as e:
+                QMessageBox.critical(self, "API Bağlantı Hatası",
+                                     f"API bağlantıları kapatılırken bir hata oluştu: {e}\n"
+                                     "Lütfen API sunucusunun çalıştığından emin olun.")
+                self.app.set_status_message("Veritabanı temizleme başarısız.", "red")
+                return
+            
+            # Kendi masaüstü uygulamamızın bağlantılarını kapatıyoruz.
+            self.db._close_local_db_connections()
+
+    def _toplu_veri_aktarimi_ac(self, islem_tipi):
+        """
+        Toplu veri aktarımını başlatır.
+        """
+        QMessageBox.information(self, "Bilgi", f"'{islem_tipi}' toplu veri aktarımı işlevi henüz geliştirilmedi.")
+        self.app.set_status_message(f"'{islem_tipi}' toplu veri aktarımı işlevi bekleniyor.", "orange")
+
+    def _toplu_veri_disa_aktarimi_ac(self, islem_tipi):
+        """
+        Toplu veri dışa aktarımını başlatır.
+        """
+        QMessageBox.information(self, "Bilgi", f"'{islem_tipi}' toplu veri dışa aktarımı işlevi henüz geliştirilmedi.")
+        self.app.set_status_message(f"'{islem_tipi}' toplu veri dışa aktarımı işlevi bekleniyor.", "orange")

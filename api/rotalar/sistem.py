@@ -1,5 +1,7 @@
 # api/rotalar/sistem.py Dosyasının tam içeriği.
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import PlainTextResponse
+from api.veritabani import engine 
 from sqlalchemy.orm import Session
 from .. import modeller, semalar
 from ..veritabani import get_db
@@ -193,3 +195,11 @@ def get_next_siparis_kodu_endpoint(db: Session = Depends(get_db)):
             
     next_code = f"{prefix}{next_number:06d}"
     return {"next_code": next_code}
+
+@router.post("/sistem/veritabani_baglantilarini_kapat")
+async def veritabani_baglantilarini_kapat():
+    """
+    Tüm veritabanı bağlantılarını kapatır. Sadece yönetim amaçlıdır.
+    """
+    engine.dispose()
+    return PlainTextResponse("Veritabanı bağlantıları başarıyla kapatıldı.")

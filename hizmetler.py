@@ -684,6 +684,6 @@ class LokalVeritabaniServisi:
             print(f"Senkronizasyon hatası: {e}")
             return False, f"Beklenmedik bir hata oluştu: {e}"
         finally:
-            if lokal_db: lokal_db.close()
-            
+            if lokal_db: lokal_db.close()            
+
 lokal_db_servisi = LokalVeritabaniServisi()
