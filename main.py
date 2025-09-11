@@ -296,8 +296,8 @@ class App(QMainWindow):
         self.config = load_config()
 
         self.db_manager = None
-        self._initialize_db_manager()
-
+        self.is_online = False  # Yeni durum değişkeni
+        self._initialize_db_manager() # Bu metot artık uygulamayı durdurmayacak
         self.tab_widget = QTabWidget(self)
         self.setCentralWidget(self.tab_widget)
 
@@ -346,7 +346,6 @@ class App(QMainWindow):
         self._setup_ui_connections() 
         self._initial_load_data()
         self._start_background_sync()
-
         # Yeni Menü eylemleri bağlantıları
         self.actionStok_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
             'pencereler.StokKartiPenceresi',
@@ -397,17 +396,10 @@ class App(QMainWindow):
 
         self.actionYedekle.triggered.connect(self._yedekle)
         self.actionGeri_Y_kle.triggered.connect(self._geri_yukle)
-        # HATA VEREN SATIR: APIAyarlariPenceresi'ni içe aktarmadan çağırmaya çalışıyor.
-        # Bu metod da `pencereler` modülünden `APIAyarlariPenceresi`ni içe aktarmaya çalışıyor.
-        # Ancak `pencereler.py` içinde böyle bir sınıf tanımlı değil.
-        # `_api_ayarlari_penceresi_ac` metodunu çağırıp çalıştırmaya çalışmak bu hataya neden oluyor.
-        # Bu satırın düzeltilmesi için, ya bu pencerenin `pencereler.py`'de tanımlı olması ya da bu çağrının kaldırılması gerekir.
-        # Terminal çıktısına göre bu pencere mevcut değil. Bu yüzden bu metodu ve çağrıyı kaldırmak en mantıklısı.
-        # Veya `APIAyarlariPenceresi` sınıfını başka bir yerden içe aktarmak gerekir.
-        # Ancak, şu anki dosyalarda böyle bir sınıf tanımlı değil, bu yüzden bu fonksiyonu düzeltemeyiz.
         self.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
         self.actionY_netici_Ayarlar.triggered.connect(self._yonetici_ayarlari_penceresi_ac)
         self._update_status_bar()
+        self.set_status_message("Uygulama başlatılıyor, sunucuya bağlanılıyor...")
 
     def _start_background_sync(self):
         """Senkronizasyon işlemini arkaplan thread'inde başlatır."""
@@ -592,19 +584,31 @@ class App(QMainWindow):
 
     # --- App Sınıfının Metodları ---
     def _initialize_db_manager(self):
-        """OnMuhasebe yöneticisini API URL'si ile başlatır."""
+        """
+        OnMuhasebe yöneticisini başlatır.
+        API bağlantısı başarısız olursa uygulamayı durdurmaz, çevrimdışı moda geçer.
+        """
         try:
-            self.db_manager = OnMuhasebe(api_base_url=self.config["api_base_url"])
+            # API bağlantısını test ediyoruz.
+            # Veritabanı yöneticisi içinde sadece API bağlantısını test eden bir metot eklemek daha mantıklı olabilir.
+            # Şimdilik, doğrudan OnMuhasebe'yi API URL'si ile başlatıyoruz ve hatayı yakalıyoruz.
+            self.db_manager = OnMuhasebe(api_base_url=self.config["api_base_url"], app_ref=self)
+            self.is_online = True
             logger.info("Veritabanı yöneticisi API modu ile başarıyla başlatıldı.")
+            self.set_status_message("API bağlantısı başarılı.", "green")
+
         except ConnectionError as e:
-            QMessageBox.critical(self, "API Bağlantı Hatası",
-                                 f"API'ye bağlanılamadı: {e}\n"
-                                 "Lütfen API sunucusunun çalıştığından ve doğru adreste olduğundan emin olun.")
-            logger.critical(f"Uygulama başlatılırken API bağlantı hatası: {e}")
-            sys.exit(1)
+            QMessageBox.warning(self, "API Bağlantı Hatası",
+                                f"API'ye bağlanılamadı: {e}\n"
+                                "Uygulama çevrimdışı (offline) modda başlatılacaktır. Veri senkronizasyonu yapılamayacaktır.")
+            logger.critical(f"Uygulama başlatılırken API bağlantı hatası: {e}. Offline moda geçiliyor.")
+            self.db_manager = OnMuhasebe(api_base_url=None, app_ref=self) # API URL'si olmadan başlat
+            self.is_online = False
+            self.set_status_message("Çevrimdışı mod: API bağlantısı yok. Yerel veriler kullanılıyor.", "orange")
         except Exception as e:
             QMessageBox.critical(self, "Uygulama Başlatma Hatası",
-                                 f"Veritabanı yöneticisi başlatılırken beklenmeyen bir hata oluştu: {e}")
+                                 f"Veritabanı yöneticisi başlatılırken beklenmeyen bir hata oluştu: {e}\n"
+                                 "Uygulama kapanacak.")
             logger.critical(f"Uygulama başlatılırken beklenmeyen hata: {e}")
             sys.exit(1)
 

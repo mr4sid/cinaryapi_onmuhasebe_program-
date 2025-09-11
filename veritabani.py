@@ -1,14 +1,20 @@
 # veritabani.py dosyasının TAMAMI (Güncellenmiş Hal)
+from hizmetler import lokal_db_servisi 
 import requests
 import json
 import logging
 import os
 import time
-import locale # YENİ EKLENDİ (Para birimi formatlama için)
-from config import API_BASE_URL # DÜZELTİLDİ: Göreceli içe aktarma kaldırıldı, doğrudan import
-from typing import List, Optional, Dict, Any # Yeni importlar
+import locale
+from config import API_BASE_URL
+from typing import List, Optional, Dict, Any
 from datetime import datetime
-from hizmetler import lokal_db_servisi 
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Text, DateTime, MetaData
+from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.exc import SQLAlchemyError
+from requests.exceptions import ConnectionError, Timeout, RequestException # Yeni import
+from local_semalar import Base, Nitelik
+
 # Logger kurulumu
 logger = logging.getLogger(__name__)
 
@@ -79,42 +85,55 @@ class OnMuhasebe:
     def __init__(self, api_base_url=API_BASE_URL, data_dir=None, app_ref=None):
         """
         Veritabanı bağlantılarını ve API iletişimini yöneten sınıf.
-        Artık doğrudan veritabanı yerine FastAPI API'si ile iletişim kurar.
+        API'ye bağlanılamazsa yerel veritabanı modunda çalışır.
         """
-        self.api_base_url = api_base_url
-        self.data_dir = data_dir
         self.app = app_ref
-        logger.info(f"OnMuhasebe başlatıldı. API Base URL: {self.api_base_url}")
+        self.api_base_url = api_base_url
+        self.data_dir = data_dir or os.path.join(os.path.dirname(__file__), 'data')
+        self.is_online = False
+        self.lokal_db = lokal_db_servisi  # lokal_db_servisi artık burada referans veriliyor
+        
+        # API bağlantısını test et
+        if self.api_base_url:
+            try:
+                # API'ye hafif bir istek göndererek bağlantıyı kontrol et
+                requests.get(f"{self.api_base_url}/sistem/status", timeout=5)
+                self.is_online = True
+                logger.info("API bağlantısı başarılı. Çevrimiçi mod aktif.")
+            except (ConnectionError, Timeout, RequestException) as e:
+                logger.error(f"API'ye bağlanılamadı. Çevrimdışı moda geçiliyor. Hata: {e}")
+                self.api_base_url = None
+                self.is_online = False
+        
+        # Yerel veritabanını her zaman başlat
+        try:
+            self.lokal_db.initialize_database()
+            logger.info("Yerel veritabanı başarıyla başlatıldı.")
+        except Exception as e:
+            logger.critical(f"Yerel veritabanı başlatılırken kritik bir hata oluştu: {e}")
+            # Uygulama yerel veritabanı olmadan çalışamaz, bu yüzden kapanmalı
+            raise
 
     def _make_api_request(self, method: str, path: str, params: dict = None, json: dict = None):
         """
-        Merkezi API isteği yapıcı metot.
-        API'den gelen yanıtı işler ve başarılı olursa JSON olarak döndürür.
-        Hata durumunda ValueError yükseltir.
-        
-        Args:
-            method (str): HTTP metodu (GET, POST, PUT, DELETE).
-            path (str): API endpoint yolu (örneğin "/stoklar/").
-            params (dict, optional): GET istekleri için URL parametreleri. Varsayılan None.
-            json (dict, optional): POST/PUT istekleri için JSON payload. Varsayılan None.
-        
-        Returns:
-            dict: API'den gelen JSON yanıtı.
-            
-        Raises:
-            ValueError: API'den hata yanıtı gelirse veya bağlantı sorunu olursa.
+        Merkezi API isteği yapıcı metot. Çevrimdışı modda None döner.
         """
+        if not self.is_online:
+            logger.warning(f"Çevrimdışı mod: API isteği iptal edildi: {method} {path}")
+            return None  # API'ye bağlanılamazsa None dön
+
         url = f"{self.api_base_url}{path}"
         
         try:
+            # ... (mevcut _make_api_request metot içeriği)
             if method.upper() == "GET":
-                response = requests.get(url, params=params)
+                response = requests.get(url, params=params, timeout=10) # Timeout eklendi
             elif method.upper() == "POST":
-                response = requests.post(url, json=json)
+                response = requests.post(url, json=json, timeout=10)
             elif method.upper() == "PUT":
-                response = requests.put(url, json=json)
+                response = requests.put(url, json=json, timeout=10)
             elif method.upper() == "DELETE":
-                response = requests.delete(url, params=params)
+                response = requests.delete(url, params=params, timeout=10)
             else:
                 raise ValueError(f"Desteklenmeyen HTTP metodu: {method}")
 
@@ -125,22 +144,20 @@ class OnMuhasebe:
                 return response_json
             
             return {}
-
         except requests.exceptions.RequestException as e:
+            # Eğer API'ye bağlantı kurulamıyorsa
+            if isinstance(e, (ConnectionError, Timeout)):
+                self.app.set_status_message("API bağlantısı kesildi. Çevrimdışı moda geçiliyor.", "red")
+                self.is_online = False
+                return None
+            
+            # Diğer HTTP hataları
             error_detail = str(e)
             if e.response is not None:
                 try:
                     error_detail = e.response.json().get('detail', error_detail)
                 except ValueError:
                     error_detail = f"API'den beklenen JSON yanıtı alınamadı. Yanıt: {e.response.text[:200]}..."
-            
-            # 404 (Not Found) hatası için özel işlem
-            if e.response and e.response.status_code == 404:
-                # Bu durumun bekleniyor olabileceğini varsayarak daha düşük seviyede logla
-                logger.warning(f"API isteği sırasında 404 hatası oluştu. Kaynak bulunamadı: {url}. Detay: {error_detail}")
-                # ValueError fırlatmak yerine, boş bir yanıt dönebiliriz.
-                # Ancak `siparis_kalemleri_al` metodu bu hatayı yakaladığı için burada bir ValueError fırlatmak daha tutarlıdır.
-                raise ValueError(f"Kaynak bulunamadı: {error_detail}") from e
             
             logger.error(f"API isteği sırasında genel hata oluştu: {url}. Hata: {error_detail}", exc_info=True)
             raise ValueError(f"API isteği sırasında bir hata oluştu: {error_detail}") from e
@@ -232,16 +249,20 @@ class OnMuhasebe:
             return False, f"Müşteri eklenirken hata: {e}"
 
     def musteri_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
-        params = {
-            "skip": skip,
-            "limit": limit,
-            "arama": arama,
-            "aktif_durum": aktif_durum
-        }
-        # None olan veya boş string olan parametreleri temizle (API'ye sadece geçerli filtreleri gönder)
-        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
-        # Düzeltme: self.db.musteri_listesi_al yerine self._make_api_request çağrıldı
-        return self._make_api_request("GET", "/musteriler/", params=cleaned_params)
+        # API'den almayı dene
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/musteriler/", params={"skip": skip, "limit": limit, "arama": arama, "aktif_durum": aktif_durum})
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        
+        # API yanıtı gelmezse yerel veritabanından al
+        filtre = {"aktif_durum": aktif_durum} if aktif_durum is not None else {}
+        lokal_musteriler = self.lokal_db.listele(model_adi="Musteri", filtre=filtre)
+        return {"items": lokal_musteriler, "total": len(lokal_musteriler)}
 
     def musteri_getir_by_id(self, musteri_id: int):
         try:
@@ -368,14 +389,20 @@ class OnMuhasebe:
             return False, f"Tedarikçi eklenirken hata: {e}"
 
     def tedarikci_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
-        params = {
-            "skip": skip,
-            "limit": limit,
-            "arama": arama,
-            "aktif_durum": aktif_durum
-        }
-        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
-        return self._make_api_request("GET", "/tedarikciler/", params=cleaned_params)
+        # API'den almayı dene
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/tedarikciler/", params={"skip": skip, "limit": limit, "arama": arama, "aktif_durum": aktif_durum})
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        
+        # API yanıtı gelmezse yerel veritabanından al
+        filtre = {"aktif_durum": aktif_durum} if aktif_durum is not None else {}
+        lokal_tedarikciler = self.lokal_db.listele(model_adi="Tedarikci", filtre=filtre)
+        return {"items": lokal_tedarikciler, "total": len(lokal_tedarikciler)}
 
     def tedarikci_getir_by_id(self, tedarikci_id: int):
         try:
@@ -443,7 +470,22 @@ class OnMuhasebe:
             "aktif_durum": aktif_durum
         }
         cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
-        return self._make_api_request("GET", "/kasalar_bankalar/", params=cleaned_params)
+        
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/kasalar_bankalar/", params=cleaned_params)
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+                
+        # API'ye bağlanılamazsa veya API'den veri alınamazsa yerel veritabanını kullan
+        filtre = {
+            "aktif_durum": aktif_durum,
+            "tip": hesap_turu
+        }
+        return {"items": self.lokal_db.listele("KasaBankaHesap", filtre), "total": 0}
 
     def kasa_banka_getir_by_id(self, hesap_id: int):
         try:
@@ -487,11 +529,26 @@ class OnMuhasebe:
             logger.error(f"Stok eklenirken beklenmeyen hata: {e}", exc_info=True)
             return False, f"Ürün eklenirken beklenmeyen bir hata oluştu: {e}"
 
-    def stok_ozet_al(self):
+    def stok_ozet_al(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
         """
         API'den tüm stokların özet bilgilerini çeker.
         """
-        return self._make_api_request("GET", "/stoklar/ozet")
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        
+        # Offline modda veya API'den yanıt gelmezse boş sözlük döndür
+        return {
+            "toplam_satislar": 0.0,
+            "toplam_tahsilatlar": 0.0,
+            "toplam_odemeler": 0.0,
+            "en_cok_satan_urunler": [],
+        }
 
     def bulk_stok_upsert(self, stok_listesi: List[Dict[str, Any]]):
         """
@@ -521,7 +578,7 @@ class OnMuhasebe:
                         kategori_id: Optional[int] = None, marka_id: Optional[int] = None,
                         urun_grubu_id: Optional[int] = None, stokta_var: Optional[bool] = None):
         """
-        API'den stok listesini çeker.
+        API'den veya yerel DB'den stok listesini çeker.
         """
         params = {
             "skip": skip,
@@ -535,7 +592,34 @@ class OnMuhasebe:
             "stokta_var": stokta_var
         }
         cleaned_params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/stoklar/", params=cleaned_params)
+        
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/stoklar/", params=cleaned_params)
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+
+        # API'den yanıt gelmezse yerel veritabanından al
+        # Yerel veritabanı için filtreleme mantığını burada uygulayın
+        filtre = {
+            "aktif": aktif_durum,
+            "kategori_id": kategori_id,
+            "marka_id": marka_id,
+            "urun_grubu_id": urun_grubu_id
+        }
+        # kritik_stok_altinda ve stokta_var filtrelerini burada uygulamanız gerekecek
+        
+        lokal_stoklar = self.lokal_db.listele(model_adi="Stok", filtre=filtre)
+        
+        if kritik_stok_altinda:
+            lokal_stoklar = [s for s in lokal_stoklar if s.miktar < s.kritik_stok_seviyesi]
+        if stokta_var:
+            lokal_stoklar = [s for s in lokal_stoklar if s.miktar > 0]
+        
+        return {"items": lokal_stoklar, "total": len(lokal_stoklar)}
 
     def stok_hareketleri_listele(self, stok_id: int, islem_tipi: str = None, baslangic_tarih: str = None, bitis_tarihi: str = None):
         """
@@ -675,7 +759,7 @@ class OnMuhasebe:
             raise ValueError(f"API'den hata: {e}")
 
     def fatura_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, fatura_turu: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, cari_id: int = None, odeme_turu: str = None, kasa_banka_id: int = None):
-        """Filtrelere göre fatura listesini API'den çeker."""
+        """Filtrelere göre fatura listesini API'den veya yerel DB'den çeker."""
         params = {
             "skip": skip,
             "limit": limit,
@@ -688,7 +772,25 @@ class OnMuhasebe:
             "kasa_banka_id": kasa_banka_id
         }
         cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
-        return self._make_api_request("GET", "/faturalar/", params=cleaned_params)
+        
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/faturalar/", params=cleaned_params)
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+                
+        # API'den yanıt gelmezse yerel veritabanından al
+        filtre = {
+            "fatura_turu": fatura_turu,
+            "cari_id": cari_id,
+            "odeme_turu": odeme_turu,
+            "kasa_banka_id": kasa_banka_id
+        }
+        lokal_faturalar = self.lokal_db.listele(model_adi="Fatura", filtre=filtre)
+        return {"items": lokal_faturalar, "total": len(lokal_faturalar)}
                 
     def fatura_getir_by_id(self, fatura_id: int):
         try:
@@ -821,21 +923,22 @@ class OnMuhasebe:
             return False, f"Gelir/Gider eklenirken hata: {e}"
 
     def gelir_gider_listesi_al(self, skip: int = 0, limit: int = 20, tip_filtre: str = None,
-                               baslangic_tarihi: str = None, bitis_tarihi: str = None,
-                               aciklama_filtre: str = None):
+                            baslangic_tarihi: str = None, bitis_tarihi: str = None,
+                            aciklama_filtre: str = None):
         """
-        API'den gelir/gider listesini filtreleyerek çeker.
+        API'den veya yerel DB'den gelir/gider listesini filtreleyerek çeker.
         """
-        params = {
-            "skip": skip,
-            "limit": limit,
-            "tip_filtre": tip_filtre,
-            "baslangic_tarihi": baslangic_tarihi,
-            "bitis_tarihi": bitis_tarihi,
-            "aciklama_filtre": aciklama_filtre
-        }
-        cleaned_params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/gelir_gider/", params=cleaned_params)
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/gelir_gider/", params={"skip": skip, "limit": limit, "tip_filtre": tip_filtre, "baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "aciklama_filtre": aciklama_filtre})
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        
+        filtre = {"tip": tip_filtre} if tip_filtre else {}
+        return self.lokal_db.listele(model_adi="GelirGider", filtre=filtre)
 
     def gelir_gider_sil(self, gg_id: int):
         try:
@@ -917,14 +1020,33 @@ class OnMuhasebe:
     def nitelik_ekle(self, nitelik_tipi: str, data: dict):
         """
         Belirtilen nitelik tipine yeni bir kayıt ekler.
+        Önce API'ye, sonra yerel veritabanına kaydeder.
         """
+        # 1. API'ye göndermeyi dene
+        if self.is_online:
+            try:
+                response = self._make_api_request("POST", f"/nitelikler/{nitelik_tipi}", json=data)
+                if response:
+                    # API'den gelen veriyi yerel veritabanına kaydet
+                    self.lokal_db.ekle(model_adi="Nitelik", veri=response)
+                    return True, f"Nitelik ({nitelik_tipi}) başarıyla API'ye ve yerel veritabanına eklendi."
+            except Exception as e:
+                logger.warning(f"Nitelik eklenirken API'ye erişilemedi. Hata: {e}. Yerel veritabanına kaydediliyor.")
+                self.is_online = False # Bağlantı kesildi, durumu güncelle
+                
+        # 2. Eğer API'ye erişim yoksa veya hata oluştuysa, yerel veritabanına kaydet.
         try:
-            self._make_api_request("POST", f"/nitelikler/{nitelik_tipi}", json=data)
-            return True, f"Nitelik ({nitelik_tipi}) başarıyla eklendi."
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Nitelik tipi {nitelik_tipi} eklenirken hata: {e}")
-            raise # Hatayı yukarı fırlat
-
+            # Sadece yerel veritabanına kaydet
+            self.lokal_db.ekle(model_adi="Nitelik", veri=data)
+            
+            # Senkronizasyon kuyruğuna ekleme
+            self.lokal_db.senkronizasyon_kuyruguna_ekle("Nitelik", "POST", f"/nitelikler/{nitelik_tipi}", data)
+            
+            return True, f"Nitelik ({nitelik_tipi}) başarıyla yerel veritabanına eklendi. Bağlantı kurulduğunda senkronize edilecek."
+        except Exception as e:
+            logger.error(f"Nitelik yerel veritabanına eklenirken hata: {e}")
+            return False, f"Nitelik eklenirken hata: {e}"
+        
     def nitelik_guncelle(self, nitelik_tipi: str, nitelik_id: int, data: dict):
         """
         Belirtilen niteliği günceller.
@@ -948,19 +1070,30 @@ class OnMuhasebe:
             raise # Hatayı yukarı fırlat
 
     def kategori_listele(self, skip: int = 0, limit: int = 1000) -> List[dict]:
-        try:
-            response = self._make_api_request("GET", "/nitelikler/kategoriler", params={"skip": skip, "limit": limit})
-            if isinstance(response, dict) and "items" in response:
-                return response["items"]
-            elif isinstance(response, list):
-                # Bu durum, API'nin beklenen format dışında yanıt verdiğini gösterir.
-                return response
-            else:
-                logger.warning(f"kategori_listele: API'den beklenmedik yanıt formatı. Yanıt: {response}")
-                return []
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Kategori listesi API'den alınamadı: {e}")
-            return []
+        """
+        Önce API'den, sonra yerel veritabanından kategori listesini çeker.
+        """
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/nitelikler/kategoriler", params={"skip": skip, "limit": limit})
+                if response is not None:
+                    if isinstance(response, dict) and "items" in response:
+                        # API'den gelen verileri yerel veritabanına senkronize etme
+                        self.lokal_db.senkronize_veriler(self.api_base_url)
+                        return response["items"]
+                    elif isinstance(response, list):
+                        self.lokal_db.senkronize_veriler(self.api_base_url)
+                        return response
+                    else:
+                        self.app.set_status_message("API'den beklenmeyen yanıt formatı.", "orange")
+                else:
+                    self.app.set_status_message("API'den yanıt alınamadı. Yerel veritabanı kullanılıyor.", "orange")
+            except Exception as e:
+                self.app.set_status_message(f"API hatası: {e}. Yerel veritabanı kullanılıyor.", "orange")
+    
+        # API'ye bağlanılamazsa veya API'den veri alınamazsa yerel veritabanını kullan
+        # Note: Lokal veritabanında 'nitelik' tipini 'kategori' olarak filtrelemeliyiz.
+        return self.lokal_db.listele(model_adi="Nitelik", filtre={"tip": "kategori"})
 
     def marka_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
         try:
@@ -1020,87 +1153,168 @@ class OnMuhasebe:
 
     def gelir_siniflandirma_listele(self, skip: int = 0, limit: int = 1000, id: int = None):
         """
-        API'den gelir sınıflandırma listesini çeker.
+        API'den veya yerel DB'den gelir sınıflandırma listesini çeker.
         """
         params = {"skip": skip, "limit": limit, "id": id}
         cleaned_params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/nitelikler/gelir_siniflandirmalari", params=cleaned_params)
+
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/nitelikler/gelir_siniflandirmalari", params=cleaned_params)
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        
+        filtre = {"tip": "gelir_siniflandirma", "id": id} if id else {"tip": "gelir_siniflandirma"}
+        lokal_list = self.lokal_db.listele(model_adi="Nitelik", filtre=filtre)
+        return {"items": lokal_list, "total": len(lokal_list)}
 
     def gider_siniflandirma_listele(self, skip: int = 0, limit: int = 1000, id: int = None):
         """
-        API'den gider sınıflandırma listesini çeker.
+        API'den veya yerel DB'den gider sınıflandırma listesini çeker.
         """
         params = {"skip": skip, "limit": limit, "id": id}
         cleaned_params = {k: v for k, v in params.items() if v is not None}
-        return self._make_api_request("GET", "/nitelikler/gider_siniflandirmalari", params=cleaned_params)
+        
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/nitelikler/gider_siniflandirmalari", params=cleaned_params)
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+
+        filtre = {"tip": "gider_siniflandirma", "id": id} if id else {"tip": "gider_siniflandirma"}
+        lokal_list = self.lokal_db.listele(model_adi="Nitelik", filtre=filtre)
+        return {"items": lokal_list, "total": len(lokal_list)}
     
     # --- RAPORLAR ---
     def get_dashboard_summary(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
         params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        return self._make_api_request("GET", "/raporlar/dashboard_ozet", params=params)
+        
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/raporlar/dashboard_ozet", params=params)
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+
+        # API'ye ulaşılamazsa veya veri alınamazsa yerel verilerden özet oluştur
+        # Bu kısmı daha sonra yerel verilerden hesaplama yapacak şekilde geliştirebiliriz.
+        return {
+            "toplam_satislar": 0.0,
+            "toplam_tahsilatlar": 0.0,
+            "toplam_odemeler": 0.0,
+            "en_cok_satan_urunler": [],
+        }
 
     def get_total_sales(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
         """Dashboard özeti için toplam satışları çeker."""
-        try:
-            summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
-            return summary.get("toplam_satislar", 0.0)
-        except Exception as e:
-            logger.error(f"Toplam satışlar çekilirken hata: {e}")
-            return 0.0
+        if self.is_online:
+            try:
+                summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+                if summary is not None:
+                    return summary.get("toplam_satislar", 0.0)
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        return 0.0
 
     def get_total_collections(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
         """Dashboard özeti için toplam tahsilatları çeker."""
-        try:
-            summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
-            return summary.get("toplam_tahsilatlar", 0.0)
-        except Exception as e:
-            logger.error(f"Toplam tahsilatlar çekilirken hata: {e}")
-            return 0.0
+        if self.is_online:
+            try:
+                summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+                if summary is not None:
+                    return summary.get("toplam_tahsilatlar", 0.0)
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        return 0.0
 
     def get_total_payments(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
         """Dashboard özeti için toplam ödemeleri çeker."""
-        try:
-            summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
-            return summary.get("toplam_odemeler", 0.0)
-        except Exception as e:
-            logger.error(f"Toplam ödemeler çekilirken hata: {e}")
-            return 0.0
+        if self.is_online:
+            try:
+                summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+                if summary is not None:
+                    return summary.get("toplam_odemeler", 0.0)
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        return 0.0
 
     def get_satislar_detayli_rapor(self, baslangic_tarihi: str, bitis_tarihi: str, cari_id: int = None):
         params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "cari_id": cari_id}
-        return self._make_api_request("GET", "/raporlar/satislar_detayli_rapor", params=params)
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/raporlar/satislar_detayli_rapor", params=params)
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+
+        # Offline modda boş liste döndür
+        return {"items": [], "total": 0}
 
     def get_kar_zarar_verileri(self, baslangic_tarihi: str, bitis_tarihi: str):
         params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        try:
-            return self._make_api_request("GET", "/raporlar/kar_zarar_verileri", params=params)
-        except Exception as e:
-            logger.error(f"Kar/Zarar verileri çekilirken hata: {e}")
-            # Hata durumunda varsayılan boş bir KarZararResponse yapısı döndürebiliriz
-            return {
-                "toplam_satis_geliri": 0.0,
-                "toplam_satis_maliyeti": 0.0,
-                "toplam_alis_gideri": 0.0,
-                "diger_gelirler": 0.0,
-                "diger_giderler": 0.0,
-                "brut_kar": 0.0,
-                "net_kar": 0.0
-            }
-            
+        
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/raporlar/kar_zarar_verileri", params=params)
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        
+        # Offline modda varsayılan değerleri döndür
+        return {
+            "toplam_satis_geliri": 0.0,
+            "toplam_satis_maliyeti": 0.0,
+            "toplam_alis_gideri": 0.0,
+            "diger_gelirler": 0.0,
+            "diger_giderler": 0.0,
+            "brut_kar": 0.0,
+            "net_kar": 0.0
+        }
+                
     def get_monthly_sales_summary(self, baslangic_tarihi: str, bitis_tarihi: str):
         """Dashboard için aylık satış özetini çeker."""
-        logger.warning(f"get_monthly_sales_summary metodu API'de doğrudan karşılığı yok. Simüle ediliyor.")
-        return [] # Boş liste döndür
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/raporlar/aylik_satis_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+                
+        return {"items": [], "total": 0}
 
     def get_monthly_income_expense_summary(self, baslangic_tarihi: str, bitis_tarihi: str):
         """Dashboard için aylık gelir/gider özetini çeker."""
-        try:
-            yil = int(baslangic_tarihi.split('-')[0])
-            response = self._make_api_request("GET", "/raporlar/gelir_gider_aylik_ozet", params={"yil": yil})
-            return response.get("aylik_ozet", [])
-        except Exception as e:
-            logger.error(f"Aylık gelir/gider özeti çekilirken hata: {e}")
-            return []
+        if self.is_online:
+            try:
+                yil = int(baslangic_tarihi.split('-')[0])
+                response = self._make_api_request("GET", "/raporlar/gelir_gider_aylik_ozet", params={"yil": yil})
+                if response is not None:
+                    if isinstance(response, list):
+                        return response
+                    return response.get("aylik_ozet", [])
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        
+        # Offline modda veya API'den yanıt gelmezse boş liste döndür
+        return []
 
     def get_gross_profit_and_cost(self, baslangic_tarihi: str, bitis_tarihi: str):
         """Kar/Zarar raporu için brüt kar ve maliyet verilerini çeker."""
@@ -1118,17 +1332,17 @@ class OnMuhasebe:
 
     def get_nakit_akisi_verileri(self, baslangic_tarihi: str, bitis_tarihi: str):
         """Nakit akışı raporu için verileri çeker."""
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
-        try:
-            response = self._make_api_request("GET", "/raporlar/nakit_akisi_raporu", params=params)
-            return {
-                "nakit_girisleri": response.get("nakit_girisleri", 0.0),
-                "nakit_cikislar": response.get("nakit_cikislar", 0.0),
-                "net_nakit_akisi": response.get("net_nakit_akisi", 0.0)
-            }
-        except Exception as e:
-            logger.error(f"Nakit akışı verileri çekilirken hata: {e}")
-            return {"nakit_girisleri": 0.0, "nakit_cikislar": 0.0, "net_nakit_akisi": 0.0}
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/raporlar/nakit_akisi_raporu", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        
+        # Offline modda varsayılan değerleri döndür
+        return {"nakit_girisleri": 0.0, "nakit_cikislar": 0.0, "net_nakit_akisi": 0.0}
 
     def get_tum_kasa_banka_bakiyeleri(self):
         """Tüm kasa/banka hesaplarının güncel bakiyelerini çeker."""
@@ -1166,12 +1380,18 @@ class OnMuhasebe:
 
     def get_critical_stock_items(self):
         """Kritik stok altındaki ürünleri çeker."""
-        try:
-            response = self.stok_listesi_al(kritik_stok_altinda=True, limit=1000)
-            return response.get("items", [])
-        except Exception as e:
-            logger.error(f"Kritik stok ürünleri çekilirken hata: {e}")
-            return []
+        if self.is_online:
+            try:
+                response = self.stok_listesi_al(kritik_stok_altinda=True, limit=1000)
+                if response is not None:
+                    return response.get("items", [])
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+
+        # Offline modda boş liste döndür
+        # Not: Bu fonksiyonu daha sonra yerel veritabanından veri çekecek şekilde geliştirmeliyiz.
+        return []
             
     def get_sales_by_payment_type(self, baslangic_tarihi: str, bitis_tarihi: str):
         """Satış raporu için ödeme türüne göre satış dağılımını çeker."""
@@ -1180,22 +1400,28 @@ class OnMuhasebe:
 
     def get_top_selling_products(self, baslangic_tarihi: str, bitis_tarihi: str, limit: int = 5):
         """Dashboard ve satış raporu için en çok satan ürünleri çeker."""
-        try:
-            summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
-            return summary.get("en_cok_satan_urunler", [])
-        except Exception as e:
-            logger.error(f"En çok satan ürünler çekilirken hata: {e}")
-            return []
+        if self.is_online:
+            try:
+                summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+                if summary is not None:
+                    return summary.get("en_cok_satan_urunler", [])
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        return []
 
     def tarihsel_satis_raporu_verilerini_al(self, baslangic_tarihi: str, bitis_tarihi: str, cari_id: int = None):
         """Tarihsel satış raporu için detaylı fatura kalemleri verilerini çeker."""
         params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "cari_id": cari_id}
-        try:
-            response_data = self._make_api_request("GET", "/raporlar/satislar_detayli_rapor", params=params)
-            return response_data.get("items", [])
-        except Exception as e:
-            logger.error(f"Tarihsel satış raporu verileri çekilirken hata: {e}")
-            return []
+        if self.is_online:
+            try:
+                response_data = self._make_api_request("GET", "/raporlar/satislar_detayli_rapor", params=params)
+                if response_data is not None:
+                    return response_data.get("items", [])
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+        return []
             
     def get_urun_faturalari(self, urun_id: int, fatura_tipi: Optional[str] = None):
         """Belirli bir ürüne ait faturaları API'den çeker."""
@@ -1410,32 +1636,42 @@ class OnMuhasebe:
         except Exception as e:
             logger.error(f"Bir sonraki tedarikçi kodu API'den alınamadı: {e}")
             return "T-HATA"
-            
-    def siparis_listele(self, baslangic_tarih: Optional[str] = None, bitis_tarih: Optional[str] = None,
+
+    def siparis_listele(self, baslangic_tarih: Optional[str] = None, bitis_tarihi: Optional[str] = None,
                              arama_terimi: Optional[str] = None, cari_id_filter: Optional[int] = None,
                              durum_filter: Optional[str] = None, siparis_tipi_filter: Optional[str] = None,
                              limit: int = 100, offset: int = 0) -> dict:
         """
-        API'den sipariş listesini çeker.
+        API'den veya yerel DB'den sipariş listesini çeker.
         """
         params = {
             "skip": offset,
             "limit": limit,
             "baslangic_tarihi": baslangic_tarih,
-            "bitis_tarihi": bitis_tarih,
+            "bitis_tarihi": bitis_tarihi,
             "arama": arama_terimi,
             "cari_id": cari_id_filter,
             "durum": durum_filter,
             "siparis_turu": siparis_tipi_filter,
         }
-        # None olan parametreleri temizle
         params = {k: v for k, v in params.items() if v is not None}
         
-        try:
-            return self._make_api_request("GET", "/siparisler/", params=params)
-        except Exception as e:
-            logger.error(f"Sipariş listesi alınırken hata: {e}")
-            raise # Hatayı yukarı fırlat
+        if self.is_online:
+            try:
+                response = self._make_api_request("GET", "/siparisler/", params=params)
+                if response is not None:
+                    return response
+            except Exception as e:
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                self.is_online = False
+
+        filtre = {
+            "cari_id": cari_id_filter,
+            "durum": durum_filter,
+            "siparis_turu": siparis_tipi_filter
+        }
+        lokal_siparisler = self.lokal_db.listele(model_adi="Siparis", filtre=filtre)
+        return {"items": lokal_siparisler, "total": len(lokal_siparisler)}
 
     def get_gelir_gider_aylik_ozet(self, yil: int):
         """

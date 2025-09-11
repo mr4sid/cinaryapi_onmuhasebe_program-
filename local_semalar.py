@@ -1,9 +1,8 @@
 # local_semalar.py
 import enum
+from sqlalchemy.sql import func
 from datetime import datetime, date
-from sqlalchemy import (
-    Column, Integer, String, Float, Boolean, Date, DateTime, Text, Enum
-)
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey, Date, Enum
 from sqlalchemy.orm import declarative_base
 
 # Deklaratif taban sınıfı
@@ -119,21 +118,6 @@ class Tedarikci(Base):
     adres = Column(Text, nullable=True)
     vergi_dairesi = Column(String, nullable=True)
     vergi_no = Column(String, nullable=True)
-    aktif = Column(Boolean)
-    olusturma_tarihi = Column(DateTime, default=datetime.now)
-    
-class KasaBanka(Base):
-    __tablename__ = 'kasalar_bankalar'
-    id = Column(Integer, primary_key=True)
-    hesap_adi = Column(String)
-    kod = Column(String, unique=True, nullable=True)
-    tip = Column(String)
-    bakiye = Column(Float)
-    para_birimi = Column(String)
-    banka_adi = Column(String, nullable=True)
-    sube_adi = Column(String, nullable=True)
-    hesap_no = Column(String, nullable=True)
-    varsayilan_odeme_turu = Column(String, nullable=True)
     aktif = Column(Boolean)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
 
@@ -280,3 +264,56 @@ class GiderSiniflandirma(Base):
     __tablename__ = 'gider_siniflandirmalari'
     id = Column(Integer, primary_key=True)
     ad = Column(String)
+
+class Nitelik(Base):
+    __tablename__ = 'nitelikler'
+    id = Column(Integer, primary_key=True, index=True)
+    tip = Column(String(50), index=True)
+    ad = Column(String, unique=True, index=True, nullable=False)
+    aciklama = Column(Text, nullable=True)
+    aktif_durum = Column(Boolean, default=True)
+
+class SenkronizasyonKuyrugu(Base):
+    __tablename__ = 'senkronizasyon_kuyrugu'
+    id = Column(Integer, primary_key=True, index=True)
+    kaynak_tablo = Column(String, nullable=False)
+    kaynak_id = Column(Integer, nullable=False)
+    islem_tipi = Column(String, nullable=False) # 'ekle', 'guncelle', 'sil'
+    veri = Column(Text, nullable=True) # JSON formatında veri
+    islem_tarihi = Column(DateTime, default=func.now())
+    senkronize_edildi = Column(Boolean, default=False)    
+
+class CariHesap(Base):
+    __tablename__ = 'cari_hesaplar'
+    id = Column(Integer, primary_key=True, index=True)
+    cari_id = Column(Integer, nullable=False)
+    cari_tipi = Column(String(20), nullable=False)
+    bakiye = Column(Float, default=0.0)
+
+class SiparisKalemi(Base):
+    __tablename__ = 'siparis_kalemleri'
+    id = Column(Integer, primary_key=True, index=True)
+    siparis_id = Column(Integer, ForeignKey('siparisler.id'))
+    urun_id = Column(Integer, ForeignKey('stoklar.id'))
+    miktar = Column(Float, default=0.0)
+    birim_fiyat = Column(Float, default=0.0)
+    kdv_orani = Column(Float, default=0.0)
+    iskonto_orani = Column(Float, default=0.0)
+    ara_toplam = Column(Float, default=0.0)
+    toplam_tutar = Column(Float, default=0.0)
+    
+class KasaBankaHesap(Base):
+    __tablename__ = 'kasalar_bankalar'
+    id = Column(Integer, primary_key=True, index=True)
+    hesap_adi = Column(String(100), unique=True, index=True, nullable=False)
+    hesap_turu = Column(String(20), nullable=False)
+    aktif_durum = Column(Boolean, default=True)
+
+class GelirGider(Base):
+    __tablename__ = 'gelir_gider'
+    id = Column(Integer, primary_key=True, index=True)
+    tarih = Column(Date, nullable=False)
+    tip = Column(String(20), index=True, nullable=False)
+    tutar = Column(Float, default=0.0)
+    aciklama = Column(Text, nullable=True)
+    siniflandirma = Column(String(100), nullable=True)    

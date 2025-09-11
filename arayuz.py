@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QGridLayout, QSizePolicy )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from local_semalar import Stok, Musteri, Tedarikci, KasaBanka, UrunGrubu, UrunBirimi, Ulke, Siparis, Fatura, CariHareket
+from local_semalar import Stok, Musteri, Tedarikci, UrunGrubu, UrunBirimi, Ulke, Siparis, Fatura, CariHareket, KasaBankaHesap
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -831,22 +831,22 @@ class KasaBankaYonetimiSayfasi(QWidget):
         try:
             # YENİ KOD: Kasa/Banka hesap listesi yerel veritabanından çekiliyor.
             with lokal_db_servisi.get_db() as db:
-                hesaplar_query = db.query(KasaBanka)
+                hesaplar_query = db.query(KasaBankaHesap)
 
                 # Arama ve filtreleme mantığı yerel olarak uygulanıyor
                 arama_terimi = self.arama_entry_kb.text().strip()
                 if arama_terimi:
-                    hesaplar_query = hesaplar_query.filter(KasaBanka.hesap_adi.ilike(f"%{arama_terimi}%") |
-                                                           KasaBanka.hesap_no.ilike(f"%{arama_terimi}%") |
-                                                           KasaBanka.banka_adi.ilike(f"%{arama_terimi}%"))
+                    hesaplar_query = hesaplar_query.filter(KasaBankaHesap.hesap_adi.ilike(f"%{arama_terimi}%") |
+                                                           KasaBankaHesap.hesap_no.ilike(f"%{arama_terimi}%") |
+                                                           KasaBankaHesap.banka_adi.ilike(f"%{arama_terimi}%"))
 
                 hesap_turu = self.tip_filtre_kb.currentText()
                 if hesap_turu != "TÜMÜ":
-                    hesaplar_query = hesaplar_query.filter(KasaBanka.tip == hesap_turu)
+                    hesaplar_query = hesaplar_query.filter(KasaBankaHesap.tip == hesap_turu)
                 
                 aktif_durum = self.aktif_hesap_checkBox.isChecked()
                 if aktif_durum:
-                    hesaplar_query = hesaplar_query.filter(KasaBanka.aktif == True)
+                    hesaplar_query = hesaplar_query.filter(KasaBankaHesap.aktif_durum == True)
 
                 # Toplam kayıt sayısını al
                 self.toplam_kayit_sayisi = hesaplar_query.count()
@@ -939,7 +939,7 @@ class KasaBankaYonetimiSayfasi(QWidget):
         try:
             # YENİ KOD: Hesap verisi yerel veritabanından çekiliyor.
             with lokal_db_servisi.get_db() as db:
-                hesap_data = db.query(KasaBanka).filter(KasaBanka.id == int(hesap_id)).first()
+                hesap_data = db.query(KasaBankaHesap).filter(KasaBankaHesap.id == int(hesap_id)).first()
 
             if not hesap_data:
                 self.app.set_status_message(f"Hata: ID {hesap_id} olan hesap yerel veritabanında bulunamadı.", "red")
@@ -983,7 +983,7 @@ class KasaBankaYonetimiSayfasi(QWidget):
         try:
             # YENİ KOD: Hesap verisi yerel veritabanından çekiliyor.
             with lokal_db_servisi.get_db() as db:
-                hesap_data = db.query(KasaBanka).filter(KasaBanka.id == int(hesap_id)).first()
+                hesap_data = db.query(KasaBankaHesap).filter(KasaBankaHesap.id == int(hesap_id)).first()
 
             if hesap_data and hesap_data.kod == "NAKİT_KASA":
                 QMessageBox.critical(self.app, "Silme Hatası", "Varsayılan 'Nakit Kasa' hesabı silinemez. Sadece düzenlenebilir.")
@@ -2630,7 +2630,7 @@ class BaseFaturaListesi(QWidget):
                 self.odeme_turu_filter_cb.addItem(odeme_turu, userData=odeme_turu)
 
             with lokal_db_servisi.get_db() as db:
-                kasalar_bankalar = db.query(KasaBanka).all()
+                kasalar_bankalar = db.query(KasaBankaHesap).all()
             for kb in kasalar_bankalar:
                 display_text = f"{kb.hesap_adi} ({kb.tip})"
                 self.kasa_banka_map[display_text] = kb.id
@@ -6220,7 +6220,7 @@ class BaseFinansalIslemSayfasi(QWidget):
                 for item in recent_data:
                     tarih_formatted = item.tarih.strftime('%d.%m.%Y') if isinstance(item.tarih, (date, datetime)) else str(item.tarih)
                     tutar_formatted = OnMuhasebe()._format_currency(item.tutar)
-                    kasa_banka_adi = db.query(KasaBanka.hesap_adi).filter(KasaBanka.id == item.kasa_banka_id).scalar() if item.kasa_banka_id else '-'
+                    kasa_banka_adi = db.query(KasaBankaHesap.hesap_adi).filter(KasaBankaHesap.id == item.kasa_banka_id).scalar() if item.kasa_banka_id else '-'
 
                     item_qt = QTreeWidgetItem(self.tree_recent_transactions)
                     item_qt.setText(0, tarih_formatted)
@@ -6413,7 +6413,7 @@ class BaseFinansalIslemSayfasi(QWidget):
         try:
             # DÜZELTİLDİ: Veriler artık yerel veritabanından çekiliyor.
             with lokal_db_servisi.get_db() as db:
-                hesaplar = db.query(KasaBanka).all()
+                hesaplar = db.query(KasaBankaHesap).all()
             
             display_values = []
             if hesaplar:

@@ -52,10 +52,6 @@ def reset_db_connection():
 # Deklaratif taban sınıfı
 Base = declarative_base()
 
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/db")
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 # Veritabanı oturumu almak için bağımlılık fonksiyonu
 def get_db():
     """

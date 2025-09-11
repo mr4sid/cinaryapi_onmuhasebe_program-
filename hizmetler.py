@@ -7,7 +7,10 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any, Union
 from yardimcilar import normalize_turkish_chars
 from api import modeller
-from local_semalar import Base, Stok, Musteri, Tedarikci, Fatura, FaturaKalemi, Siparis, CariHareket, UrunKategori, UrunMarka, UrunGrubu, UrunBirimi, Ulke, GelirSiniflandirma, GiderSiniflandirma, KasaBanka
+from local_semalar import (Base, Stok, Musteri, Tedarikci, Fatura, FaturaKalemi,
+                            CariHesap, CariHareket, Siparis, SiparisKalemi, UrunKategori, UrunGrubu,
+                            KasaBankaHesap, StokHareket, GelirGider, Nitelik, Ulke, UrunMarka, 
+                            SenkronizasyonKuyrugu, GelirSiniflandirma, GiderSiniflandirma, UrunBirimi)
 logger = logging.getLogger(__name__)
 
 if not logger.handlers:
@@ -583,7 +586,15 @@ class LokalVeritabaniServisi:
         self.db_path = db_path
         self.engine = create_engine(f"sqlite:///{self.db_path}", echo=False)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
-        Base.metadata.create_all(bind=self.engine)
+        self.initialized = False  # Artık 'initialized' özelliğini tanımlıyoruz
+        self.logger = logging.getLogger(__name__) # Artık 'logger' özelliğini tanımlıyoruz
+        
+    def initialize_database(self):
+        """Yerel veritabanı tablolarını oluşturur."""
+        if not self.initialized:
+            Base.metadata.create_all(bind=self.engine)
+            self.initialized = True
+            self.logger.info("Yerel veritabanı şeması başarıyla oluşturuldu/güncellendi.")
 
     def get_db(self):
         db = self.SessionLocal()
@@ -593,6 +604,9 @@ class LokalVeritabaniServisi:
             db.close()
             
     def senkronize_veriler(self, sunucu_adresi: str):
+        if not sunucu_adresi:
+            return False, "Sunucu adresi belirtilmedi. Senkronizasyon atlandı."
+            
         lokal_db = None
         try:
             lokal_db = self.get_db()
@@ -617,7 +631,6 @@ class LokalVeritabaniServisi:
                 'stoklar': Stok,
                 'musteriler': Musteri,
                 'tedarikciler': Tedarikci,
-                'kasalar_bankalar': KasaBanka,
                 'faturalar': Fatura,
                 'siparisler': Siparis,
                 'cari_hareketler': CariHareket,
@@ -685,5 +698,47 @@ class LokalVeritabaniServisi:
             return False, f"Beklenmedik bir hata oluştu: {e}"
         finally:
             if lokal_db: lokal_db.close()            
+
+    def listele(self, model_adi: str, filtre: Optional[Dict[str, Any]] = None):
+        """
+        Yerel veritabanındaki belirtilen modelden verileri listeler.
+        """
+        db = self.SessionLocal()
+        
+        models = {
+            "Stok": Stok,
+            "Musteri": Musteri,
+            "Tedarikci": Tedarikci,
+            "Fatura": Fatura,
+            "FaturaKalemi": FaturaKalemi,
+            "CariHesap": CariHesap,
+            "CariHareket": CariHareket,
+            "Siparis": Siparis,
+            "SiparisKalemi": SiparisKalemi,
+            "KasaBankaHesap": KasaBankaHesap,
+            "StokHareket": StokHareket,
+            "GelirGider": GelirGider,
+            "Nitelik": Nitelik,
+            "SenkronizasyonKuyrugu": SenkronizasyonKuyrugu
+        }
+        
+        try:
+            model = models.get(model_adi)
+            if not model:
+                raise ValueError(f"Model bulunamadı: {model_adi}")
+
+            sorgu = db.query(model)
+            if filtre:
+                for key, value in filtre.items():
+                    if hasattr(model, key):
+                        sorgu = sorgu.filter(getattr(model, key) == value)
+            
+            return [item for item in sorgu.all()]
+        except Exception as e:
+            self.logger.error(f"Yerel DB listeleme hatası: {e}", exc_info=True)
+            return []
+        finally:
+            if db:
+                db.close()
 
 lokal_db_servisi = LokalVeritabaniServisi()
