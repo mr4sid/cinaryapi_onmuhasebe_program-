@@ -85,34 +85,40 @@ class OnMuhasebe:
     def __init__(self, api_base_url=API_BASE_URL, data_dir=None, app_ref=None):
         """
         Veritabanı bağlantılarını ve API iletişimini yöneten sınıf.
-        API'ye bağlanılamazsa yerel veritabanı modunda çalışır.
+        Uygulama anında başlar ve API bağlantı kontrolü daha sonra yapılır.
         """
         self.app = app_ref
         self.api_base_url = api_base_url
         self.data_dir = data_dir or os.path.join(os.path.dirname(__file__), 'data')
         self.is_online = False
-        self.lokal_db = lokal_db_servisi  # lokal_db_servisi artık burada referans veriliyor
+        self.lokal_db = lokal_db_servisi
         
-        # API bağlantısını test et
-        if self.api_base_url:
-            try:
-                # API'ye hafif bir istek göndererek bağlantıyı kontrol et
-                requests.get(f"{self.api_base_url}/sistem/status", timeout=5)
-                self.is_online = True
-                logger.info("API bağlantısı başarılı. Çevrimiçi mod aktif.")
-            except (ConnectionError, Timeout, RequestException) as e:
-                logger.error(f"API'ye bağlanılamadı. Çevrimdışı moda geçiliyor. Hata: {e}")
-                self.api_base_url = None
-                self.is_online = False
-        
-        # Yerel veritabanını her zaman başlat
+        # Yerel veritabanını her zaman anında başlat
         try:
             self.lokal_db.initialize_database()
             logger.info("Yerel veritabanı başarıyla başlatıldı.")
         except Exception as e:
             logger.critical(f"Yerel veritabanı başlatılırken kritik bir hata oluştu: {e}")
-            # Uygulama yerel veritabanı olmadan çalışamaz, bu yüzden kapanmalı
             raise
+
+    def check_online_status(self):
+        """
+        API bağlantısını test eder ve çevrimiçi/çevrimdışı mod durumunu ayarlar.
+        Bu metodun uygulama başlatıldıktan sonra çağrılması gerekir.
+        """
+        if self.api_base_url:
+            try:
+                requests.get(f"{self.api_base_url}/sistem/status", timeout=5)
+                self.is_online = True
+                logger.info("API bağlantısı başarılı. Çevrimiçi mod aktif.")
+                self.app.set_status_message("API bağlantısı başarılı. Çevrimiçi mod aktif.", "green")
+                return True
+            except (ConnectionError, Timeout, RequestException) as e:
+                self.is_online = False
+                logger.error(f"API'ye bağlanılamadı. Çevrimdışı moda geçiliyor. Hata: {e}")
+                self.app.set_status_message("API'ye bağlanılamadı. Çevrimdışı mod aktif.", "red")
+                return False
+        return False
 
     def _make_api_request(self, method: str, path: str, params: dict = None, json: dict = None):
         """
@@ -186,11 +192,31 @@ class OnMuhasebe:
 
     # --- KULLANICI YÖNETİMİ ---
     def kullanici_dogrula(self, kullanici_adi, sifre):
+        # 1. Çevrimiçi ise, API üzerinden doğrulamayı dene
+        if self.is_online:
+            try:
+                response = self._make_api_request("POST", "/dogrulama/login", json={"kullanici_adi": kullanici_adi, "sifre": sifre})
+                if response:
+                    # Başarılı API doğrulaması sonrası kullanıcıyı yerel DB'ye kaydet/güncelle
+                    self.lokal_db.kullanici_kaydet(response)
+                    return response.get("access_token"), response.get("token_type")
+            except (ValueError, ConnectionError, Exception) as e:
+                logger.error(f"Kullanıcı doğrulama API üzerinden başarısız: {e}")
+                self.app.set_status_message("API bağlantısı yok. Yerel doğrulama deneniyor.", "orange")
+                self.is_online = False
+        
+        # 2. Çevrimdışı ise veya API doğrulaması başarısız olursa, yerel DB'de doğrulamayı dene
         try:
-            response = self._make_api_request("POST", "/dogrulama/login", json={"kullanici_adi": kullanici_adi, "sifre": sifre})
-            return response.get("access_token"), response.get("token_type")
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Kullanıcı doğrulama başarısız: {e}")
+            kullanici = self.lokal_db.kullanici_dogrula(kullanici_adi, sifre)
+            if kullanici:
+                self.app.set_status_message("Çevrimdışı doğrulama başarılı.", "green")
+                return kullanici.get("access_token", "OFFLINE_TOKEN"), kullanici.get("token_type", "bearer")
+            else:
+                self.app.set_status_message("Çevrimdışı doğrulama başarısız. Kullanıcı adı veya şifre hatalı.", "red")
+                return None, None
+        except Exception as e:
+            logger.error(f"Kullanıcı doğrulama yerel DB'de başarısız: {e}")
+            self.app.set_status_message(f"Yerel doğrulama sırasında hata: {e}", "red")
             return None, None
 
     def kullanici_listele(self):
@@ -253,13 +279,17 @@ class OnMuhasebe:
         if self.is_online:
             try:
                 response = self._make_api_request("GET", "/musteriler/", params={"skip": skip, "limit": limit, "arama": arama, "aktif_durum": aktif_durum})
+                # API yanıtı geçerliyse, bu veriyi kullan.
                 if response is not None:
+                    # Ayrıca API'den gelen veriyi yerel veritabanına senkronize etme adımı eklenebilir.
+                    # Şimdilik sadece API'den gelen veriyi döndürüyoruz.
                     return response
             except Exception as e:
+                # API'ye bağlanırken bir hata oluşursa, çevrimdışı moda geç ve yerel veritabanını kullan
                 self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
                 self.is_online = False
         
-        # API yanıtı gelmezse yerel veritabanından al
+        # API'ye bağlanılamazsa veya API'den veri alınamazsa yerel veritabanından al
         filtre = {"aktif_durum": aktif_durum} if aktif_durum is not None else {}
         lokal_musteriler = self.lokal_db.listele(model_adi="Musteri", filtre=filtre)
         return {"items": lokal_musteriler, "total": len(lokal_musteriler)}
@@ -610,12 +640,11 @@ class OnMuhasebe:
             "marka_id": marka_id,
             "urun_grubu_id": urun_grubu_id
         }
-        # kritik_stok_altinda ve stokta_var filtrelerini burada uygulamanız gerekecek
         
         lokal_stoklar = self.lokal_db.listele(model_adi="Stok", filtre=filtre)
         
         if kritik_stok_altinda:
-            lokal_stoklar = [s for s in lokal_stoklar if s.miktar < s.kritik_stok_seviyesi]
+            lokal_stoklar = [s for s in lokal_stoklar if s.miktar < s.min_stok_seviyesi]
         if stokta_var:
             lokal_stoklar = [s for s in lokal_stoklar if s.miktar > 0]
         
@@ -1611,13 +1640,18 @@ class OnMuhasebe:
             return False, f"Veresiye borç eklenirken hata: {e}"
 
     def get_next_stok_kodu(self):
-        """API'den bir sonraki stok kodunu alır."""
-        try:
-            response_data = self._make_api_request("GET", "/sistem/next_stok_code")
-            return response_data.get("next_code", "STK-HATA")
-        except Exception as e:
-            logger.error(f"Bir sonraki stok kodu API'den alınamadı: {e}")
-            return "STK-HATA"
+        """API'den bir sonraki stok kodunu alır, çevrimdışıysa manuel kod üretir."""
+        if self.is_online:
+            try:
+                response_data = self._make_api_request("GET", "/sistem/next_stok_code")
+                return response_data.get("next_code", "STK-HATA")
+            except (ValueError, ConnectionError, Exception) as e:
+                logger.error(f"Bir sonraki stok kodu API'den alınamadı, çevrimdışı moda geçiliyor: {e}")
+                self.is_online = False
+                # API hatası durumunda da yerel kod üretmeye düşer
+        
+        # Eğer çevrimdışıysak veya API'ye bağlanılamazsa yerel bir kod üret.
+        return f"MANUEL-{int(time.time())}"
         
     def get_next_musteri_kodu(self):
         """API'den bir sonraki müşteri kodunu alır."""

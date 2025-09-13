@@ -1,3 +1,4 @@
 {
-    "last_username": "test_admin"
+    "api_base_url": "http://127.0.0.1:8001",
+    "last_username": "admin"
 }

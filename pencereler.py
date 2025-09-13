@@ -3511,30 +3511,121 @@ class StokKartiPenceresi(QDialog):
         main_container = QWidget(self)
         self.setLayout(QVBoxLayout(main_container))
         
-        self.ozet_ve_bilgi_frame = QGroupBox("Cari Özet Bilgileri", self)
-        self.layout().addWidget(self.ozet_ve_bilgi_frame)
-        self._create_ozet_bilgi_alani()
+        # Ana içerik ve resim için üst yatay çerçeve
+        top_main_frame = QFrame(self)
+        top_main_layout = QHBoxLayout(top_main_frame)
+        self.layout().addWidget(top_main_frame)
+        
+        # Sol Panel (Giriş Alanları)
+        input_panel_frame = QFrame(top_main_frame)
+        input_panel_layout = QGridLayout(input_panel_frame)
+        top_main_layout.addWidget(input_panel_frame, 2)
+        
+        input_panel_layout.addWidget(QLabel("Ürün Kodu (*):"), 0, 0)
+        self.kod_e = QLineEdit()
+        self.kod_e.setPlaceholderText("Benzersiz ürün kodu...")
+        input_panel_layout.addWidget(self.kod_e, 0, 1, 1, 2)
+        
+        input_panel_layout.addWidget(QLabel("Ürün Adı (*):"), 1, 0)
+        self.ad_e = QLineEdit()
+        self.ad_e.setPlaceholderText("Ürün adı...")
+        input_panel_layout.addWidget(self.ad_e, 1, 1, 1, 2)
+        
+        input_panel_layout.addWidget(QLabel("Miktar:"), 2, 0)
+        self.miktar_e = QLineEdit()
+        self.miktar_e.setReadOnly(True)
+        input_panel_layout.addWidget(self.miktar_e, 2, 1, 1, 2)
+        
+        input_panel_layout.addWidget(QLabel("Alış Fiyatı (KDV Dahil):"), 3, 0)
+        self.alis_fiyat_e = QLineEdit()
+        setup_numeric_entry(self.app, self.alis_fiyat_e)
+        input_panel_layout.addWidget(self.alis_fiyat_e, 3, 1, 1, 2)
+        
+        input_panel_layout.addWidget(QLabel("Satış Fiyatı (KDV Dahil):"), 4, 0)
+        self.satis_fiyat_e = QLineEdit()
+        setup_numeric_entry(self.app, self.satis_fiyat_e)
+        input_panel_layout.addWidget(self.satis_fiyat_e, 4, 1, 1, 2)
+        
+        input_panel_layout.addWidget(QLabel("KDV Oranı (%):"), 5, 0)
+        self.kdv_e = QLineEdit()
+        setup_numeric_entry(self.app, self.kdv_e, decimal_places=0)
+        input_panel_layout.addWidget(self.kdv_e, 5, 1)
+        
+        input_panel_layout.addWidget(QLabel("Min. Stok Seviyesi:"), 6, 0)
+        self.min_stok_e = QLineEdit()
+        setup_numeric_entry(self.app, self.min_stok_e)
+        input_panel_layout.addWidget(self.min_stok_e, 6, 1, 1, 2)
+        
+        input_panel_layout.addWidget(QLabel("Aktif:"), 7, 0)
+        self.aktif_cb = QCheckBox()
+        input_panel_layout.addWidget(self.aktif_cb, 7, 1, 1, 2)
 
-        self.notebook = QTabWidget(self)
-        self.layout().addWidget(self.notebook)
+        input_panel_layout.addWidget(QLabel("Kategori:"), 8, 0)
+        self.kategori_combo = QComboBox()
+        input_panel_layout.addWidget(self.kategori_combo, 8, 1, 1, 2)
         
-        self.hesap_hareketleri_tab = QWidget(self.notebook)
-        self.notebook.addTab(self.hesap_hareketleri_tab, "Hesap Hareketleri")
-        self._create_hesap_hareketleri_tab()
+        input_panel_layout.addWidget(QLabel("Marka:"), 9, 0)
+        self.marka_combo = QComboBox()
+        input_panel_layout.addWidget(self.marka_combo, 9, 1, 1, 2)
+        
+        input_panel_layout.addWidget(QLabel("Ürün Grubu:"), 10, 0)
+        self.urun_grubu_combo = QComboBox()
+        input_panel_layout.addWidget(self.urun_grubu_combo, 10, 1, 1, 2)
+        
+        input_panel_layout.addWidget(QLabel("Birim:"), 11, 0)
+        self.birim_combo = QComboBox()
+        input_panel_layout.addWidget(self.birim_combo, 11, 1, 1, 2)
+        
+        input_panel_layout.addWidget(QLabel("Menşei Ülke:"), 12, 0)
+        self.mensei_ulke_combo = QComboBox()
+        input_panel_layout.addWidget(self.mensei_ulke_combo, 12, 1, 1, 2)
 
-        self.siparisler_tab = QWidget(self.notebook)
-        self.notebook.addTab(self.siparisler_tab, "Siparişler")
-        self._create_siparisler_tab()
+        input_panel_layout.addWidget(QLabel("Detay:"), 13, 0, Qt.AlignTop)
+        self.detay_e = QTextEdit()
+        input_panel_layout.addWidget(self.detay_e, 13, 1, 1, 2)
         
-        self.hizli_islemler_ana_frame = QFrame(self)
-        self.layout().addWidget(self.hizli_islemler_ana_frame)
-        self._create_hizli_islem_alanlari()
+        # Sağ Panel (Resim)
+        image_panel_frame = QFrame(top_main_frame)
+        image_panel_layout = QVBoxLayout(image_panel_frame)
+        top_main_layout.addWidget(image_panel_frame, 1)
         
-        # Tarih giriş alanlarını oluşturduktan sonra varsayılan değerleri atıyoruz
-        today = date.today()
-        start_date = today - timedelta(days=3 * 365) if self.cari_tip == "TEDARIKCI" else today - timedelta(days=6 * 30)
-        self.bas_tarih_entry.setText(start_date.strftime('%Y-%m-%d'))
-        self.bit_tarih_entry.setText(today.strftime('%Y-%m-%d'))
+        self.resim_label = QLabel("Resim Yok")
+        self.resim_label.setScaledContents(True)
+        self.resim_label.setMinimumSize(250, 250)
+        self.resim_label.setAlignment(Qt.AlignCenter)
+        self.resim_label.setFrameShape(QFrame.StyledPanel)
+        image_panel_layout.addWidget(self.resim_label)
+        
+        resim_button_frame = QFrame(image_panel_frame)
+        resim_button_layout = QHBoxLayout(resim_button_frame)
+        image_panel_layout.addWidget(resim_button_frame)
+        
+        btn_resim_sec = QPushButton("Resim Seç")
+        btn_resim_sec.clicked.connect(self._resim_sec)
+        resim_button_layout.addWidget(btn_resim_sec)
+        
+        btn_resim_sil = QPushButton("Resmi Kaldır")
+        btn_resim_sil.clicked.connect(self._resim_sil)
+        resim_button_layout.addWidget(btn_resim_sil)
+
+        # Alt Sekmeler
+        self.bottom_tab_widget = QTabWidget(self)
+        self.layout().addWidget(self.bottom_tab_widget)
+        from arayuz import StokHareketiSekmesi, IlgiliFaturalarSekmesi
+        self.stok_hareketleri_sekmesi = StokHareketiSekmesi(
+            self.bottom_tab_widget, self.db, self.stok_id,
+            self.urun_duzenle.get('ad', '-') if self.urun_duzenle else '',
+            self.app)
+        self.bottom_tab_widget.addTab(self.stok_hareketleri_sekmesi, "Stok Hareketleri")
+
+        self.ilgili_faturalar_sekmesi = IlgiliFaturalarSekmesi(
+            self.bottom_tab_widget, self.db, self.stok_id,
+            self.urun_duzenle.get('ad', '-') if self.urun_duzenle else '',
+            self.app)
+        self.bottom_tab_widget.addTab(self.ilgili_faturalar_sekmesi, "İlgili Faturalar")
+
+        # Butonlar
+        self._add_bottom_buttons()
 
     def _add_bottom_buttons(self):
         """Pencerenin alt kısmındaki butonları oluşturur ve yerleştirir."""
@@ -3684,12 +3775,13 @@ class StokKartiPenceresi(QDialog):
             urun_gruplari_response = self.db.urun_grubu_listele()
             urun_birimleri_response = self.db.urun_birimi_listele()
             ulkeler_response = self.db.ulke_listele()
-
-            kategoriler = kategoriler_response.get("items", [])
-            markalar = markalar_response.get("items", [])
-            urun_gruplari = urun_gruplari_response.get("items", [])
-            urun_birimleri = urun_birimleri_response.get("items", [])
-            ulkeler = ulkeler_response.get("items", [])
+            
+            # API'den gelen yanıtın sözlük veya liste olabileceğini kontrol et
+            kategoriler = kategoriler_response.get("items", []) if isinstance(kategoriler_response, dict) else kategoriler_response
+            markalar = markalar_response.get("items", []) if isinstance(markalar_response, dict) else markalar_response
+            urun_gruplari = urun_gruplari_response.get("items", []) if isinstance(urun_gruplari_response, dict) else urun_gruplari_response
+            urun_birimleri = urun_birimleri_response.get("items", []) if isinstance(urun_birimleri_response, dict) else urun_birimleri_response
+            ulkeler = ulkeler_response.get("items", []) if isinstance(ulkeler_response, dict) else ulkeler_response
 
             self.kategori_combo.clear()
             self.marka_combo.clear()
@@ -3789,7 +3881,16 @@ class StokKartiPenceresi(QDialog):
         logger.info(f"Ürün ID {self.stok_id} için mevcut ürün verileri yüklendi.")
 
     def _formu_sifirla(self):
-        self.kod_e.clear()
+        try:
+            generated_stok_kodu = self.db.get_next_stok_kodu()
+            self.kod_e.setText(generated_stok_kodu)
+            self.kod_e.setReadOnly(True)
+            if generated_stok_kodu.startswith("MANUEL"):
+                self.kod_e.setReadOnly(False)
+        except Exception as e:
+            QMessageBox.warning(self, "Kod Üretme Hatası", f"Otomatik stok kodu alınırken bir hata oluştu: {e}. Lütfen manuel olarak giriniz.")
+            self.kod_e.setReadOnly(False)
+            
         self.ad_e.clear()
         self.miktar_e.setText("0,00")
         self.alis_fiyat_e.setText("0,00")
@@ -3815,8 +3916,8 @@ class StokKartiPenceresi(QDialog):
         self.btn_sil.setVisible(False)
         self.btn_manuel_stok_giris.setEnabled(False)
         self.btn_manuel_stok_cikis.setEnabled(False)
-        self.bottom_tab_widget.setEnabled(False)
         
+        # Sekmeler sadece düzenleme modunda etkin olmalı
         self.stok_hareketleri_sekmesi.urun_id = None
         self.stok_hareketleri_sekmesi.urun_adi = ""
         self.stok_hareketleri_sekmesi._load_stok_hareketleri()
@@ -3824,6 +3925,8 @@ class StokKartiPenceresi(QDialog):
         self.ilgili_faturalar_sekmesi.urun_id = None
         self.ilgili_faturalar_sekmesi.urun_adi = ""
         self.ilgili_faturalar_sekmesi._load_ilgili_faturalar()
+        
+        self.bottom_tab_widget.setEnabled(False)
 
         logger.info("Stok Kartı formu sıfırlandı.")
 

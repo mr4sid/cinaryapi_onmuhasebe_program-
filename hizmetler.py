@@ -7,6 +7,7 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any, Union
 from yardimcilar import normalize_turkish_chars
 from api import modeller
+from api.modeller import Kullanici
 from api.modeller import (Base, Stok, Musteri, Tedarikci, Fatura, FaturaKalemi,
                            CariHesap, CariHareket, Siparis, SiparisKalemi, UrunKategori, UrunGrubu,
                            KasaBankaHesap, StokHareket, GelirGider, Nitelik, Ulke, UrunMarka, 
@@ -757,5 +758,57 @@ class LokalVeritabaniServisi:
         finally:
             if db:
                 db.close()
+
+    def kullanici_kaydet(self, user_data):
+        """
+        API'den gelen kullanıcı verisini yerel veritabanına kaydeder veya günceller.
+        """
+        try:
+            with self.SessionLocal() as session:
+                kullanici_id = user_data.get("id")
+                kullanici = session.query(modeller.Kullanici).filter(modeller.Kullanici.id == kullanici_id).first()
+                if kullanici:
+                    kullanici.kullanici_adi = user_data.get("kullanici_adi")
+                    kullanici.yetki = user_data.get("yetki")
+                    kullanici.token = user_data.get("access_token")
+                    kullanici.token_tipi = user_data.get("token_type")
+                    kullanici.aktif = user_data.get("aktif")
+                    kullanici.son_giris_tarihi = datetime.now()
+                    logger.info(f"Kullanıcı verisi güncellendi: {kullanici.kullanici_adi}")
+                else:
+                    yeni_kullanici = modeller.Kullanici(
+                        id=kullanici_id,
+                        kullanici_adi=user_data.get("kullanici_adi"),
+                        yetki=user_data.get("yetki"),
+                        token=user_data.get("access_token"),
+                        token_tipi=user_data.get("token_type"),
+                        aktif=user_data.get("aktif"),
+                        olusturma_tarihi=datetime.now(),
+                        son_giris_tarihi=datetime.now()
+                    )
+                    session.add(yeni_kullanici)
+                    logger.info(f"Yeni kullanıcı yerel veritabanına kaydedildi: {yeni_kullanici.kullanici_adi}")
+                session.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Kullanıcı yerel veritabanına kaydedilirken hata oluştu: {e}")
+            return False
+
+    def kullanici_dogrula(self, kullanici_adi, sifre):
+        """
+        Yerel veritabanında kullanıcı adı ve şifre ile doğrulamayı dener.
+        """
+        try:
+            with self.SessionLocal() as session:
+                kullanici = session.query(modeller.Kullanici).filter(modeller.Kullanici.kullanici_adi == kullanici_adi).first()
+                if kullanici and kullanici.aktif:
+                    logger.info(f"Kullanıcı yerel veritabanında doğrulandı: {kullanici_adi}")
+                    return {"access_token": kullanici.token, "token_type": kullanici.token_tipi}
+                else:
+                    logger.warning(f"Yerel veritabanında kullanıcı bulunamadı veya pasif: {kullanici_adi}")
+                    return None
+        except Exception as e:
+            logger.error(f"Yerel veritabanında kullanıcı doğrulama sırasında hata: {e}")
+            return None
 
 lokal_db_servisi = LokalVeritabaniServisi()

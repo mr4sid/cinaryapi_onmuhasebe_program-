@@ -7831,90 +7831,82 @@ class GirisEkrani(QWidget):
         super().__init__(parent)
         self.db = db_manager
         self.callback = callback_basarili_giris
-        self.main_layout = QVBoxLayout(self) # Ana layout QVBoxLayout
+        self.main_layout = QVBoxLayout(self)
 
-        # Giriş formunu ortalamak için bir QFrame ve QVBoxLayout
         center_frame = QFrame(self)
         center_layout = QVBoxLayout(center_frame)
-        self.main_layout.addWidget(center_frame, alignment=Qt.AlignCenter) # Ortala
+        self.main_layout.addWidget(center_frame, alignment=Qt.AlignCenter)
 
-        # Kullanıcı Girişi Başlığı
         title_label = QLabel("Kullanıcı Girişi")
         title_label.setFont(QFont("Segoe UI", 22, QFont.Bold))
         center_layout.addWidget(title_label, alignment=Qt.AlignCenter)
 
-        # Kullanıcı Adı
         center_layout.addWidget(QLabel("Kullanıcı Adı:"), alignment=Qt.AlignCenter)
         self.k_adi_e = QLineEdit()
-        self.k_adi_e.setFixedWidth(250) # Genişlik
-        self.k_adi_e.setFixedHeight(30) # Yükseklik (padding yerine)
+        self.k_adi_e.setFixedWidth(250)
+        self.k_adi_e.setFixedHeight(30)
         self.k_adi_e.setFont(QFont("Segoe UI", 11))
         center_layout.addWidget(self.k_adi_e)
 
-        # Şifre
         center_layout.addWidget(QLabel("Şifre:"), alignment=Qt.AlignCenter)
         self.sifre_e = QLineEdit()
-        self.sifre_e.setEchoMode(QLineEdit.Password) # Şifreyi gizle
+        self.sifre_e.setEchoMode(QLineEdit.Password)
         self.sifre_e.setFixedWidth(250)
         self.sifre_e.setFixedHeight(30)
         self.sifre_e.setFont(QFont("Segoe UI", 11))
-        self.sifre_e.returnPressed.connect(self.giris_yap) # Enter tuşu için
         center_layout.addWidget(self.sifre_e)
 
-        # Giriş Butonu
         giris_button = QPushButton("Giriş Yap")
         giris_button.setFixedWidth(150)
-        giris_button.setFixedHeight(40) # Padding yerine
+        giris_button.setFixedHeight(40)
         giris_button.setFont(QFont("Segoe UI", 11, QFont.Bold))
         giris_button.clicked.connect(self.giris_yap)
         center_layout.addWidget(giris_button, alignment=Qt.AlignCenter)
 
-        # Kayıtlı kullanıcı adını yükle
-        # config = self.db.load_config() # main.py'den geliyor, burada db.load_config yok.
-        # config'i doğrudan App sınıfından alıyoruz.
-        # App'in bir özelliği olarak db_manager'a iletiliyor olmalı.
-        # Giriş Ekranı'nın parent'ı App sınıfıdır.
-        from main import load_config # main.py'deki load_config'u doğrudan import ediyoruz.
+        from main import load_config
         app_config = load_config()
         last_username = app_config.get('last_username', '')
-        self.k_adi_e.setText(last_username) # setText ile ata
+        self.k_adi_e.setText(last_username)
 
-        # Şirket Adı (Giriş Ekranının Altında)
-        # self.db.sirket_bilgileri yerine self.db.get_sirket_bilgileri() çağrısını kullan
         sirket_adi_giris = "Şirket Adınız"
         try:
-            sirket_bilgileri = self.db.get_sirket_bilgileri() # API'den şirket bilgilerini çek
-            sirket_adi_giris = sirket_bilgileri.get("sirket_adi", "Şirket Adınız")
+            sirket_bilgileri = self.db.sirket_bilgilerini_yukle()
+            if sirket_bilgileri:
+                sirket_adi_giris = sirket_bilgileri.get("sirket_adi", "Şirket Adınız")
+            else:
+                sirket_adi_giris = "Şirket Bilgisi Yüklenemedi (Offline)"
         except Exception as e:
             logger.error(f"Giriş Ekranı şirket bilgileri yüklenirken hata: {e}")
             sirket_adi_giris = "Şirket Bilgisi Yüklenemedi"
 
         sirket_label_bottom = QLabel(sirket_adi_giris)
         sirket_label_bottom.setFont(QFont("Segoe UI", 10))
-        # QLabel'ı ana layout'un altına yerleştirmek için (Qt.AlignBottom)
         self.main_layout.addWidget(sirket_label_bottom, alignment=Qt.AlignCenter | Qt.AlignBottom)
 
-        # Odaklanma işlemi en sona alınmalı
-        self.k_adi_e.setFocus() # setFocus() ile odaklan
+        self.k_adi_e.setFocus()
 
-    def giris_yap(self): # event parametresi kaldırıldı
+    def giris_yap(self):
         k_adi = self.k_adi_e.text()
         sifre = self.sifre_e.text()
 
-        # Kullanıcı adını config'e kaydet (sadece eğer main.py'deki save_config çağrılırsa kalıcı olur)
-        from main import save_config, load_config # main.py'deki fonksiyonları import ediyoruz.
+        from main import save_config, load_config
         app_config = load_config()
         app_config['last_username'] = k_adi
         save_config(app_config)
 
-        kullanici = self.db.kullanici_dogrula(k_adi, sifre) # API tabanlı doğrulama
-        if kullanici:
-            self.callback(kullanici) # Başarılı giriş callback'ini çağır
+        # db.kullanici_dogrula artık (token, tip) veya (None, None) döndürüyor.
+        # Bu nedenle sadece token'ın varlığını kontrol etmek yeterli.
+        kullanici = self.db.kullanici_dogrula(k_adi, sifre)
+        
+        # Sadece geçerli bir token varsa girişe izin ver.
+        if kullanici and kullanici[0]:
+            self.callback(kullanici)
         else:
             QMessageBox.critical(self, "Giriş Hatası", "Kullanıcı adı veya şifre hatalı!")
-            self.sifre_e.clear() # Şifre alanını temizle
-            self.sifre_e.setFocus() # Şifre alanına odaklan
+            self.sifre_e.clear()
+            self.sifre_e.setFocus()
 
+class StokHareketleriSekmesi(QWidget):
     def __init__(self, parent_notebook, db_manager, app_ref, urun_id, urun_adi, parent_pencere=None):
         super().__init__(parent_notebook)
         self.db = db_manager
