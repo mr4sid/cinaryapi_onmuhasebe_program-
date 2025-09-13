@@ -21,7 +21,7 @@ from arayuz import ( # arayuz.py'den tüm gerekli sayfaları içe aktarın
     UrunNitelikYonetimiSekmesi, VeriYonetimiSekmesi
 )
 from veritabani import OnMuhasebe
-from hizmetler import FaturaService, TopluIslemService, lokal_db_servisi 
+from hizmetler import FaturaService, TopluIslemService, CariService, lokal_db_servisi 
 from raporlar import Raporlama
 # Logger kurulumu
 logger = logging.getLogger(__name__)
@@ -339,9 +339,9 @@ class App(QMainWindow):
         self.urun_nitelik_yonetimi_sekmesi = UrunNitelikYonetimiSekmesi(self, self.db_manager, self)
         self.tab_widget.addTab(self.urun_nitelik_yonetimi_sekmesi, "Nitelik Yönetimi")
         
-        self.fatura_service = FaturaService(self.db_manager)
-        self.toplu_islem_service = TopluIslemService(self.db_manager)
-        self.raporlama = Raporlama(self.db_manager)
+        self.fatura_service = FaturaService(self.db_manager, self)
+        self.toplu_islem_service = TopluIslemService(self.db_manager, self)
+        self.cari_service = CariService(self.db_manager, self)
 
         self._setup_ui_connections() 
         self._initial_load_data()

@@ -7,10 +7,10 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any, Union
 from yardimcilar import normalize_turkish_chars
 from api import modeller
-from local_semalar import (Base, Stok, Musteri, Tedarikci, Fatura, FaturaKalemi,
-                            CariHesap, CariHareket, Siparis, SiparisKalemi, UrunKategori, UrunGrubu,
-                            KasaBankaHesap, StokHareket, GelirGider, Nitelik, Ulke, UrunMarka, 
-                            SenkronizasyonKuyrugu, GelirSiniflandirma, GiderSiniflandirma, UrunBirimi)
+from api.modeller import (Base, Stok, Musteri, Tedarikci, Fatura, FaturaKalemi,
+                           CariHesap, CariHareket, Siparis, SiparisKalemi, UrunKategori, UrunGrubu,
+                           KasaBankaHesap, StokHareket, GelirGider, Nitelik, Ulke, UrunMarka, 
+                           SenkronizasyonKuyrugu, GelirSiniflandirma, GiderSiniflandirma, UrunBirimi)
 logger = logging.getLogger(__name__)
 
 if not logger.handlers:
@@ -21,8 +21,9 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 class FaturaService:
-    def __init__(self, db_manager):
+    def __init__(self, db_manager, app_ref):
         self.db = db_manager
+        self.app = app_ref
         logger.info("FaturaService başlatıldı.")
 
     def fatura_olustur(self, fatura_no, tarih, fatura_tipi, cari_id, kalemler_data, odeme_turu,
@@ -111,8 +112,9 @@ class FaturaService:
             return False, f"Siparişi faturaya dönüştürülürken beklenmeyen bir hata oluştu: {e}"
 
 class CariService:
-    def __init__(self, db_manager):
+    def __init__(self, db_manager, app_ref):
         self.db = db_manager
+        self.app = app_ref
         logger.info("CariService başlatıldı.")
 
     def musteri_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
@@ -182,8 +184,9 @@ class CariService:
             raise ValueError("Geçersiz cari tipi belirtildi. 'MUSTERI' veya 'TEDARIKCI' olmalı.")
 
 class TopluIslemService:
-    def __init__(self, db_manager):
+    def __init__(self, db_manager, app_ref):
         self.db = db_manager
+        self.app = app_ref
         logger.info("TopluIslemService başlatıldı.")
         self._nitelik_cache = {
             "kategoriler": {},
@@ -196,13 +199,27 @@ class TopluIslemService:
     
     def _load_nitelik_cache(self):
         try:
-            self._nitelik_cache["kategoriler"] = {normalize_turkish_chars(item.get('ad')).lower(): item.get('id') for item in self.db.kategori_listele()}
-            self._nitelik_cache["markalar"] = {normalize_turkish_chars(item.get('ad')).lower(): item.get('id') for item in self.db.marka_listele().get('items', [])}
-            self._nitelik_cache["urun_gruplari"] = {normalize_turkish_chars(item.get('ad')).lower(): item.get('id') for item in self.db.urun_grubu_listele().get('items', [])}
-            self._nitelik_cache["urun_birimleri"] = {normalize_turkish_chars(item.get('ad')).lower(): item.get('id') for item in self.db.urun_birimi_listele().get('items', [])}
-            self._nitelik_cache["ulkeler"] = {normalize_turkish_chars(item.get('ad')).lower(): item.get('id') for item in self.db.ulke_listele().get('items', [])}
+            # Her bir nitelik listesi için veriyi çek ve önbelleğe al
+            kategoriler_response = self.db.kategori_listele()
+            markalar_response = self.db.marka_listele()
+            urun_gruplari_response = self.db.urun_grubu_listele()
+            urun_birimleri_response = self.db.urun_birimi_listele()
+            ulkeler_response = self.db.ulke_listele()
+
+            kategoriler = kategoriler_response.get("items", []) if isinstance(kategoriler_response, dict) else kategoriler_response or []
+            markalar = markalar_response.get("items", []) if isinstance(markalar_response, dict) else markalar_response or []
+            urun_gruplari = urun_gruplari_response.get("items", []) if isinstance(urun_gruplari_response, dict) else urun_gruplari_response or []
+            urun_birimleri = urun_birimleri_response.get("items", []) if isinstance(urun_birimleri_response, dict) else urun_birimleri_response or []
+            ulkeler = ulkeler_response.get("items", []) if isinstance(ulkeler_response, dict) else ulkeler_response or []
+
+            self._nitelik_cache["kategoriler"] = {normalize_turkish_chars(item.ad if hasattr(item, 'ad') else item.get('ad')).lower(): item.id if hasattr(item, 'id') else item.get('id') for item in kategoriler if hasattr(item, 'id') or item.get('id')}
+            self._nitelik_cache["markalar"] = {normalize_turkish_chars(item.ad if hasattr(item, 'ad') else item.get('ad')).lower(): item.id if hasattr(item, 'id') else item.get('id') for item in markalar if hasattr(item, 'id') or item.get('id')}
+            self._nitelik_cache["urun_gruplari"] = {normalize_turkish_chars(item.ad if hasattr(item, 'ad') else item.get('ad')).lower(): item.id if hasattr(item, 'id') else item.get('id') for item in urun_gruplari if hasattr(item, 'id') or item.get('id')}
+            self._nitelik_cache["urun_birimleri"] = {normalize_turkish_chars(item.ad if hasattr(item, 'ad') else item.get('ad')).lower(): item.id if hasattr(item, 'id') else item.get('id') for item in urun_birimleri if hasattr(item, 'id') or item.get('id')}
+            self.app.set_status_message(f"Ürün nitelikleri başarıyla yüklendi: {len(kategoriler)} kategori, {len(markalar)} marka, {len(urun_gruplari)} grup ve {len(urun_birimleri)} birim.","black")
         except Exception as e:
-            logger.error(f"Nitelik önbelleği yüklenirken hata oluştu: {e}")
+            logger.error(f"Nitelik önbelleği yüklenirken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Nitelik verileri yüklenemedi. {e}", "red")
             
     def _get_nitelik_id_from_cache(self, nitelik_tipi, nitelik_adi):
         if not nitelik_adi:

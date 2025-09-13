@@ -13,7 +13,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, T
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 from requests.exceptions import ConnectionError, Timeout, RequestException # Yeni import
-from local_semalar import Base, Nitelik
+from api.modeller import Base, Nitelik
 
 # Logger kurulumu
 logger = logging.getLogger(__name__)

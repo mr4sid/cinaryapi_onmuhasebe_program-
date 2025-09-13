@@ -38,7 +38,9 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QGridLayout, QSizePolicy )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from local_semalar import Stok, Musteri, Tedarikci, UrunGrubu, UrunBirimi, Ulke, Siparis, Fatura, CariHareket, KasaBankaHesap
+from api.modeller import (Stok, Musteri, Fatura, Tedarikci, FaturaKalemi,
+                           StokHareket, CariHareket, Siparis, SiparisKalemi,
+                           UrunKategori, UrunGrubu, UrunBirimi, UrunMarka, KasaBankaHesap, Ulke)
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -79,9 +81,9 @@ class AnaSayfa(QWidget):
         
         # AŞAMA 1 - Adım 1.2: CariService entegrasyonu için servisleri burada başlatıyoruz
         from hizmetler import FaturaService, TopluIslemService, CariService # Yerel import daha esnek olabilir
-        self.fatura_service = FaturaService(self.db)
-        self.toplu_islem_service = TopluIslemService(self.db)
-        self.cari_service = CariService(self.db) # <-- BU SATIR EKLENDİ
+        self.fatura_service = FaturaService(self.db, self.app) # app referansı eklendi
+        self.toplu_islem_service = TopluIslemService(self.db, self.app) # app referansı eklendi
+        self.cari_service = CariService(self.db, self.app) # app referansı eklendi
         
         self.main_layout = QGridLayout(self)
         
@@ -1033,7 +1035,7 @@ class MusteriYonetimiSayfasi(QWidget):
         
         # CariService entegrasyonu için servisleri burada başlatıyoruz
         from hizmetler import CariService
-        self.cari_service = CariService(self.db)
+        self.cari_service = CariService(self.db, self.app)         
 
         self.main_layout = QVBoxLayout(self)
 
@@ -1406,7 +1408,7 @@ class TedarikciYonetimiSayfasi(QWidget):
 
         # CariService örneğini burada başlatıyoruz
         from hizmetler import CariService
-        self.cari_service = CariService(self.db)
+        self.cari_service = CariService(self.db, self.app)
 
         self.main_layout = QVBoxLayout(self)
 
@@ -1812,7 +1814,7 @@ class SiparisListesiSayfasi(QWidget):
         self.db = db_manager
         self.app = app_ref
         from hizmetler import CariService # Bu import zaten olabilir, kontrol edin
-        self.cari_service = CariService(self.db) # <-- BU SATIR EKLENECEK
+        self.cari_service = CariService(self.db, self.app)
         self.main_layout = QVBoxLayout(self)
         self.after_timer = QTimer(self)
         self.after_timer.setSingleShot(True)
@@ -1978,30 +1980,59 @@ class SiparisListesiSayfasi(QWidget):
     def _yukle_filtre_comboboxlari(self):
         cari_display_values = ["TÜMÜ"]
         self.cari_filter_map = {"TÜMÜ": None}
-        
+
         try:
-            # Musteri listesini CariService üzerinden çekiyoruz
-            musteriler_response = self.cari_service.musteri_listesi_al(limit=10000) #
-            musteriler = musteriler_response.get("items", []) #
+            # Müşteri listesini CariService üzerinden çekiyoruz
+            musteriler = self.cari_service.musteri_listesi_al(limit=10000)
             
-            for m in musteriler:
-                display_text = f"{m.get('ad', '')} (M: {m.get('kod', '')})"
-                self.cari_filter_map[display_text] = m.get('id')
-                cari_display_values.append(display_text)
+            # Gelen verinin türüne göre döngüyü ayarlıyoruz
+            if isinstance(musteriler, dict) and 'items' in musteriler:
+                musteriler_list = musteriler.get("items", [])
+            elif isinstance(musteriler, list):
+                musteriler_list = musteriler
+            else:
+                musteriler_list = []
+                self.app.set_status_message(f"Hata: Müşteri listesi API yanıt formatı hatalı.", "red")
+                logger.warning(f"Müşteri listesi yüklenirken hata: API'den beklenmeyen yanıt formatı. Yanıt: {musteriler}")
+
+            for m in musteriler_list:
+                if isinstance(m, dict):
+                    display_text = f"{m.get('ad', '')} (M: {m.get('kod', '')})"
+                    self.cari_filter_map[display_text] = m.get('id')
+                    cari_display_values.append(display_text)
+                else: # SQLAlchemy nesnesi
+                    display_text = f"{m.ad} (M: {m.kod})"
+                    self.cari_filter_map[display_text] = m.id
+                    cari_display_values.append(display_text)
+
         except Exception as e:
             logger.warning(f"Müşteri listesi yüklenirken hata: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Müşteri listesi alınamadı - {e}")
 
-
         try:
             # Tedarikçi listesini CariService üzerinden çekiyoruz
-            tedarikciler_response = self.cari_service.tedarikci_listesi_al(limit=10000)
-            tedarikciler = tedarikciler_response.get("items", [])
+            tedarikciler = self.cari_service.tedarikci_listesi_al(limit=10000)
+            
+            # Gelen verinin türüne göre döngüyü ayarlıyoruz
+            if isinstance(tedarikciler, dict) and 'items' in tedarikciler:
+                tedarikciler_list = tedarikciler.get("items", [])
+            elif isinstance(tedarikciler, list):
+                tedarikciler_list = tedarikciler
+            else:
+                tedarikciler_list = []
+                self.app.set_status_message(f"Hata: Tedarikçi listesi API yanıt formatı hatalı.", "red")
+                logger.warning(f"Tedarikçi listesi yüklenirken hata: API'den beklenmeyen yanıt formatı. Yanıt: {tedarikciler}")
 
-            for t in tedarikciler:
-                display_text = f"{t.get('ad', '')} (T: {t.get('kod', '')})"
-                self.cari_filter_map[display_text] = t.get('id')
-                cari_display_values.append(display_text)
+            for t in tedarikciler_list:
+                if isinstance(t, dict):
+                    display_text = f"{t.get('ad', '')} (T: {t.get('kod', '')})"
+                    self.cari_filter_map[display_text] = t.get('id')
+                    cari_display_values.append(display_text)
+                else: # SQLAlchemy nesnesi
+                    display_text = f"{t.ad} (T: {t.kod})"
+                    self.cari_filter_map[display_text] = t.id
+                    cari_display_values.append(display_text)
+
         except Exception as e:
             logger.warning(f"Tedarikçi listesi yüklenirken hata: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Tedarikçi listesi alınamadı - {e}")
@@ -2606,39 +2637,68 @@ class BaseFaturaListesi(QWidget):
         self.kasa_banka_filter_cb.addItem("TÜMÜ", userData=None)
         
         try:
-            # DÜZELTİLDİ: Veriler artık yerel veritabanından çekiliyor.
-            with lokal_db_servisi.get_db() as db:
-                cariler = []
-                if self.fatura_tipi == self.db.FATURA_TIP_SATIS:
-                    cariler = db.query(Musteri).all()
-                elif self.fatura_tipi == self.db.FATURA_TIP_ALIS:
-                    cariler = db.query(Tedarikci).all()
+            # Cari verilerini çekme
+            # Bu çağrı hem API'den dict listesi hem de yerelden SQLAlchemy nesneleri listesi döndürebilir.
+            cariler = []
+            if self.fatura_tipi == self.db.FATURA_TIP_SATIS:
+                cariler = self.db.musteri_listesi_al()
+                if isinstance(cariler, dict):
+                    cariler = cariler.get('items', [])
+            elif self.fatura_tipi == self.db.FATURA_TIP_ALIS:
+                cariler = self.db.tedarikci_listesi_al()
+                if isinstance(cariler, dict):
+                    cariler = cariler.get('items', [])
 
-                for cari in cariler:
-                    display_text = ""
-                    if self.fatura_tipi == self.db.FATURA_TIP_SATIS:
-                        display_text = f"{cari.ad} (Kod: {cari.kod})"
-                    elif self.fatura_tipi == self.db.FATURA_TIP_ALIS:
-                        display_text = f"{cari.ad} (Kod: {cari.kod})"
+            for cari in cariler:
+                display_text = ""
+                cari_id = None
+                cari_kod = ""
+                cari_ad = ""
+                
+                if isinstance(cari, dict):
+                    cari_id = cari.get('id')
+                    cari_ad = cari.get('ad', 'Bilinmiyor')
+                    cari_kod = cari.get('kod', '')
+                else: # SQLAlchemy modeli
+                    cari_id = cari.id
+                    cari_ad = cari.ad
+                    cari_kod = cari.kod
+                
+                display_text = f"{cari_ad} (Kod: {cari_kod})"
 
-                    self.cari_filter_map[display_text] = cari.id
-                    self.cari_filter_cb.addItem(display_text, cari.id)
+                self.cari_filter_map[display_text] = cari_id
+                self.cari_filter_cb.addItem(display_text, cari_id)
 
-            # Ödeme türleri ve kasa/banka hesapları için de yerel veritabanı kullanılmalı
+            # Ödeme türleri
             for odeme_turu in [self.db.ODEME_TURU_NAKIT, self.db.ODEME_TURU_KART, self.db.ODEME_TURU_EFT_HAVALE, self.db.ODEME_TURU_CEK, self.db.ODEME_TURU_SENET, self.db.ODEME_TURU_ACIK_HESAP, self.db.ODEME_TURU_ETKISIZ_FATURA]:
                 self.odeme_turu_map[odeme_turu] = odeme_turu
                 self.odeme_turu_filter_cb.addItem(odeme_turu, userData=odeme_turu)
 
-            with lokal_db_servisi.get_db() as db:
-                kasalar_bankalar = db.query(KasaBankaHesap).all()
+            # Kasa/Banka hesaplarını çekme
+            kasalar_bankalar = self.db.kasa_banka_listesi_al()
+            if isinstance(kasalar_bankalar, dict):
+                kasalar_bankalar = kasalar_bankalar.get('items', [])
+            
             for kb in kasalar_bankalar:
-                display_text = f"{kb.hesap_adi} ({kb.tip})"
-                self.kasa_banka_map[display_text] = kb.id
-                self.kasa_banka_filter_cb.addItem(display_text, userData=kb.id)
+                kb_id = None
+                kb_adi = ""
+                kb_tip = ""
+                if isinstance(kb, dict):
+                    kb_id = kb.get('id')
+                    kb_adi = kb.get('hesap_adi', 'Bilinmiyor')
+                    kb_tip = kb.get('hesap_turu', 'Bilinmiyor')
+                else: # SQLAlchemy modeli
+                    kb_id = kb.id
+                    kb_adi = kb.hesap_adi
+                    kb_tip = kb.hesap_turu
+                    
+                display_text = f"{kb_adi} ({kb_tip})"
+                self.kasa_banka_map[display_text] = kb_id
+                self.kasa_banka_filter_cb.addItem(display_text, userData=kb_id)
 
         except Exception as e:
-            logger.error(f"Filtre verileri yüklenirken hata oluştu: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Filtre verileri yüklenemedi: {e}")
+            logger.error(f"Filtre verileri yüklenirken hata oluştu: {e}", exc_info=True)
 
     def _arama_temizle(self):
         self.arama_fatura_entry.clear()
@@ -3542,40 +3602,45 @@ class BaseIslemSayfasi(QWidget):
         self._on_cari_selected()
 
     def _on_cari_selected(self):
-        bakiye_text = ""
-        bakiye_color = "black"
-        if self.secili_cari_id:
-            cari_id = int(self.secili_cari_id)
+        selected_cari_id = self.cari_combo.currentData()
+        if selected_cari_id:
+            cari_tip = self.cari_combo.currentText().split(":")[0].strip()
+            cari = self.db.cari_getir_by_id(selected_cari_id, cari_tip)
             
-            # Değişiklik: Bakiye, API çağrısından gelen devreden bakiye ve hareketlerle hesaplanıyor.
-            hareketler, devreden_bakiye, _, _ = self.db.cari_hesap_ekstresi_al(
-                cari_id, 
-                self.db.CARI_TIP_MUSTERI if self.islem_tipi in ['SATIŞ', 'SATIŞ_SIPARIS'] else self.db.CARI_TIP_TEDARIKCI,
-                "1900-01-01", 
-                datetime.now().strftime('%Y-%m-%d')
-            )
-            
-            net_bakiye = devreden_bakiye
-            for h in hareketler:
-                # Sadece açık hesap hareketlerini dikkate al
-                if h.get('odeme_turu') == self.db.ODEME_TURU_ACIK_HESAP:
-                    if h.get('islem_yone') == 'BORC':
-                        net_bakiye -= h.get('tutar')
-                    elif h.get('islem_yone') == 'ALACAK':
-                        net_bakiye += h.get('tutar')
-
-            if net_bakiye > 0: bakiye_text, bakiye_color = f"Borç: {self.db._format_currency(net_bakiye)}", "red"
-            elif net_bakiye < 0: bakiye_text, bakiye_color = f"Alacak: {self.db._format_currency(abs(net_bakiye))}", "green"
-            else: bakiye_text = "Bakiye: 0,00 TL"
+            if cari:
+                # Cari nesnesinin türünü kontrol et
+                if isinstance(cari, dict):
+                    cari_adi = cari.get('ad', 'Bilinmiyor')
+                else: # SQLAlchemy modeli
+                    cari_adi = cari.ad
                 
-            self.lbl_cari_bakiye.setText(bakiye_text)
-            self.lbl_cari_bakiye.setStyleSheet(f"color: {bakiye_color};")
-        else:
-            self.lbl_cari_bakiye.setText("")
-            self.lbl_cari_bakiye.setStyleSheet("color: black;")
+                self.cari_adi_label.setText(cari_adi)
+                
+                # Bakiye kontrolü
+                net_bakiye_response = self.db.cari_getir_net_bakiye(selected_cari_id, cari_tip)
+                
+                net_bakiye = None
+                if isinstance(net_bakiye_response, dict):
+                    net_bakiye = net_bakiye_response.get('bakiye')
+                elif net_bakiye_response is not None:
+                    net_bakiye = net_bakiye_response
 
-        if hasattr(self, '_odeme_turu_ve_misafir_adi_kontrol'):
-            self._odeme_turu_ve_misafir_adi_kontrol()
+                # NoneType hatasını önlemek için kontrol
+                if net_bakiye is not None and isinstance(net_bakiye, (int, float)):
+                    self.bakiye_label.setText(f"Bakiye: {net_bakiye:.2f} TL")
+                    if net_bakiye > 0:
+                        self.bakiye_label.setStyleSheet("color: red;")
+                    elif net_bakiye < 0:
+                        self.bakiye_label.setStyleSheet("color: green;")
+                    else:
+                        self.bakiye_label.setStyleSheet("color: black;")
+                else:
+                    self.bakiye_label.setText("Bakiye: Yok")
+                    self.bakiye_label.setStyleSheet("color: black;")
+
+            self.fatura_kalemleri_tablosunu_yukle([])
+            self._guncel_stok_miktarlarini_getir()
+            self._yenile_butonu_durum_guncelle()
 
     def _temizle_cari_secimi(self):
         self.secili_cari_id = None
@@ -3594,6 +3659,7 @@ class BaseIslemSayfasi(QWidget):
 
             self.tum_urunler_cache.clear()
             for urun_data in urunler_listesi_local:
+                # SQLAlchemy nesnesini sözlüğe dönüştürerek önbelleğe alıyoruz.
                 self.tum_urunler_cache.append({
                     'id': urun_data.id,
                     'kod': urun_data.kod,
@@ -6170,7 +6236,7 @@ class BaseFinansalIslemSayfasi(QWidget):
                             perakende_musteri_display_text = text
                             break
                     if perakende_musteri_display_text and perakende_musteri_display_text in display_values:
-                        self.cari_combo.setCurrentText("")
+                        self.cari_combo.setCurrentText(perakende_musteri_display_text)
                     else:
                         self.cari_combo.setCurrentIndex(0)
                 elif self.islem_tipi == 'ODEME' and genel_tedarikci_id_val is not None:
@@ -6180,7 +6246,7 @@ class BaseFinansalIslemSayfasi(QWidget):
                             genel_tedarikci_display_text = text
                             break
                     if genel_tedarikci_display_text and genel_tedarikci_display_text in display_values:
-                        self.cari_combo.setCurrentText("")
+                        self.cari_combo.setCurrentText(genel_tedarikci_display_text)
                     else:
                         self.cari_combo.setCurrentIndex(0)
                 else:
@@ -6331,30 +6397,40 @@ class BaseFinansalIslemSayfasi(QWidget):
             cari_id_int = int(secilen_cari_id)
             if self.cari_tip == self.db.CARI_TIP_MUSTERI:
                 net_bakiye = self.db.get_musteri_net_bakiye(cari_id_int)
-                if net_bakiye > 0:
-                    bakiye_text = f"Borç: {self.db._format_currency(net_bakiye)}"
-                    bakiye_color = "red"
-                elif net_bakiye < 0:
-                    bakiye_text = f"Alacak: {self.db._format_currency(abs(net_bakiye))}"
-                    bakiye_color = "green"
+                if net_bakiye is not None:
+                    if net_bakiye > 0:
+                        bakiye_text = f"Borç: {self.db._format_currency(net_bakiye)}"
+                        bakiye_color = "red"
+                    elif net_bakiye < 0:
+                        bakiye_text = f"Alacak: {self.db._format_currency(abs(net_bakiye))}"
+                        bakiye_color = "green"
+                    else:
+                        bakiye_text = "Bakiye: 0,00 TL"
+                        bakiye_color = "black"
                 else:
-                    bakiye_text = "Bakiye: 0,00 TL"
+                    bakiye_text = "Bakiye: Yüklenemedi"
                     bakiye_color = "black"
+
             elif self.cari_tip == self.db.CARI_TIP_TEDARIKCI:
                 net_bakiye = self.db.get_tedarikci_net_bakiye(cari_id_int)
-                if net_bakiye > 0:
-                    bakiye_text = f"Borç: {self.db._format_currency(net_bakiye)}"
-                    bakiye_color = "red"
-                elif net_bakiye < 0:
-                    bakiye_text = f"Alacak: {self.db._format_currency(abs(net_bakiye))}"
-                    bakiye_color = "green"
+                if net_bakiye is not None:
+                    if net_bakiye > 0:
+                        bakiye_text = f"Borç: {self.db._format_currency(net_bakiye)}"
+                        bakiye_color = "red"
+                    elif net_bakiye < 0:
+                        bakiye_text = f"Alacak: {self.db._format_currency(abs(net_bakiye))}"
+                        bakiye_color = "green"
+                    else:
+                        bakiye_text = "Bakiye: 0,00 TL"
+                        bakiye_color = "black"
                 else:
-                    bakiye_text = "Bakiye: 0,00 TL"
+                    bakiye_text = "Bakiye: Yüklenemedi"
                     bakiye_color = "black"
+
             self.lbl_cari_bakiye.setText(bakiye_text)
             self.lbl_cari_bakiye.setStyleSheet(f"color: {bakiye_color};")
         else:
-            self.lbl_cari_bakiye.setText("")
+            self.lbl_cari_bakiye.setText("Bakiye: ---")
             self.lbl_cari_bakiye.setStyleSheet("color: black;")
 
         self._load_recent_transactions()
@@ -7265,8 +7341,8 @@ class RaporlamaMerkeziSayfasi(QWidget):
     def _update_genel_bakis_tab(self, bas_t_str, bit_t_str):
         try:
             # Dashboard özeti verilerini çek
-            dashboard_summary = self.db.get_dashboard_summary(bas_t_str, bit_t_str)
-
+            dashboard_summary = self.db.get_dashboard_summary(bas_t_str, bit_t_str) or {}
+            
             toplam_satislar = dashboard_summary.get("toplam_satislar", 0.0)
             toplam_alislar = dashboard_summary.get("toplam_alislar", 0.0)
             toplam_tahsilatlar = dashboard_summary.get("toplam_tahsilatlar", 0.0)
@@ -7285,20 +7361,20 @@ class RaporlamaMerkeziSayfasi(QWidget):
             self.lbl_metric_overdue_payables.setText(self.db._format_currency(vadesi_gecmis_borclar_toplami))
 
             # Kâr/Zarar verilerini çek
-            kar_zarar_data = self.db.get_kar_zarar_verileri(bas_t_str, bit_t_str)
+            kar_zarar_data = self.db.get_kar_zarar_verileri(bas_t_str, bit_t_str) or {}
             self.lbl_genel_bakis_donem_gelir.setText(self.db._format_currency(kar_zarar_data.get("diger_gelirler", 0.0)))
             self.lbl_genel_bakis_donem_gider.setText(self.db._format_currency(kar_zarar_data.get("diger_giderler", 0.0)))
             self.lbl_genel_bakis_brut_kar.setText(self.db._format_currency(kar_zarar_data.get("brut_kar", 0.0)))
             self.lbl_genel_bakis_net_kar.setText(self.db._format_currency(kar_zarar_data.get("net_kar", 0.0)))
 
             # Nakit Akışı verilerini çek
-            nakit_akis_data = self.db.get_nakit_akisi_verileri(bas_t_str, bit_t_str)
+            nakit_akis_data = self.db.get_nakit_akisi_verileri(bas_t_str, bit_t_str) or {}
             self.lbl_genel_bakis_nakit_girisleri.setText(self.db._format_currency(nakit_akis_data.get("nakit_girisleri", 0.0)))
             self.lbl_genel_bakis_nakit_cikislar.setText(self.db._format_currency(nakit_akis_data.get("nakit_cikislar", 0.0)))
             self.lbl_genel_bakis_net_nakit_akisi.setText(self.db._format_currency(nakit_akis_data.get("net_nakit_akisi", 0.0)))
 
             # Kasa/Banka bakiyeleri
-            kasa_banka_bakiyeleri = self.db.get_tum_kasa_banka_bakiyeleri()
+            kasa_banka_bakiyeleri = self.db.get_tum_kasa_banka_bakiyeleri() or []
             self.kasa_banka_list_widget.clear()
             if kasa_banka_bakiyeleri:
                 for hesap in kasa_banka_bakiyeleri:
@@ -7314,7 +7390,7 @@ class RaporlamaMerkeziSayfasi(QWidget):
 
             # En çok satan ürünler (API'den geliyor)
             self.en_cok_satan_urunler_list_widget.clear()
-            if en_cok_satan_urunler: # Dashboard summary'den gelen data
+            if en_cok_satan_urunler:
                 for urun in en_cok_satan_urunler:
                     item_text = f"{urun.get('ad', 'Bilinmeyen Ürün')} ({urun.get('toplam_miktar', 0):.0f} adet)"
                     self.en_cok_satan_urunler_list_widget.addItem(item_text)
@@ -7322,7 +7398,7 @@ class RaporlamaMerkeziSayfasi(QWidget):
                 self.en_cok_satan_urunler_list_widget.addItem("Veri bulunamadı.")
 
             # Kritik stok ürünleri (API'den geliyor)
-            critical_stock_items = self.db.get_critical_stock_items()
+            critical_stock_items = self.db.get_critical_stock_items() or []
             self.kritik_stok_urunler_list_widget.clear()
             if critical_stock_items:
                 for urun in critical_stock_items:
@@ -7334,9 +7410,8 @@ class RaporlamaMerkeziSayfasi(QWidget):
                 self.kritik_stok_urunler_list_widget.addItem("Kritik stok altında ürün bulunamadı.")
 
             # Grafikleri güncelle
-            # aylik_gelir_gider_ozet is needed for the plot
-            aylik_gelir_gider_ozet_data = self.db.get_gelir_gider_aylik_ozet(datetime.strptime(bas_t_str, '%Y-%m-%d').year)
-
+            aylik_gelir_gider_ozet_data = self.db.get_gelir_gider_aylik_ozet(datetime.strptime(bas_t_str, '%Y-%m-%d').year) or {}
+            
             aylar_labels = [item.get('ay_adi') for item in aylik_gelir_gider_ozet_data.get('aylik_ozet', [])]
             toplam_gelirler = [item.get('toplam_gelir') for item in aylik_gelir_gider_ozet_data.get('aylik_ozet', [])]
             toplam_giderler = [item.get('toplam_gider') for item in aylik_gelir_gider_ozet_data.get('aylik_ozet', [])]
@@ -7357,8 +7432,7 @@ class RaporlamaMerkeziSayfasi(QWidget):
         except Exception as e:
             logger.error(f"Genel bakış sekmesi güncellenirken hata: {e}", exc_info=True)
             QMessageBox.critical(self, "Hata", f"Genel bakış sekmesi yüklenirken bir hata oluştu:\n{e}")
-            # set_status_message çağrısı burada yok, App sınıfında yönetiliyor olabilir.
-            #             
+
     def _update_satis_raporlari_tab(self, bas_t_str, bit_t_str):
         self.tree_satis_detay.clear()
 
