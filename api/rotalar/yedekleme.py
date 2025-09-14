@@ -3,53 +3,41 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from ..veritabani import get_db, reset_db_connection
 from datetime import datetime
-import subprocess # PostgreSQL komutlarını çalıştırmak için
+import subprocess
 from sqlalchemy import text 
+from typing import Optional
+
 router = APIRouter(prefix="/yedekleme", tags=["Veritabanı Yedekleme"])
 
-# Ortam değişkenlerinden veritabanı bağlantı bilgilerini al
-# Normalde bu bilgiler config dosyasından veya Docker secret/env'den gelmelidir.
-# Güvenlik nedeniyle doğrudan kodda olmamalıdır.
 DB_USER = os.getenv("POSTGRES_USER", "postgres")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "admin")
 DB_HOST = os.getenv("POSTGRES_HOST", "localhost")
 DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 DB_NAME = os.getenv("POSTGRES_DB", "onmuhasebe_db")
 
-# Yedeklemelerin saklanacağı dizin (uygulamanın kök dizininde 'backups' klasörü)
-# Uygulamanın çalıştırıldığı dizine göre ayarlanmalıdır.
-# Örneğin, projenin kök dizininde 'backups' adında bir klasör oluşturulabilir.
 BACKUP_DIR = os.path.join(os.getcwd(), "backups")
-os.makedirs(BACKUP_DIR, exist_ok=True) # Dizin yoksa oluştur
+os.makedirs(BACKUP_DIR, exist_ok=True)
 
 @router.post("/backup", summary="Veritabanını Yedekle", status_code=status.HTTP_200_OK)
 def create_db_backup(db: Session = Depends(get_db)):
-    """
-    Uygulamanın PostgreSQL veritabanını yedekler.
-    Yedek dosyası sunucu tarafında belirlenen bir dizine kaydedilir.
-    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_filename = f"{DB_NAME}_backup_{timestamp}.sql"
     backup_filepath = os.path.join(BACKUP_DIR, backup_filename)
 
     try:
-        # pg_dump komutu ile yedekleme yap
-        # Güvenlik Notu: Şifreyi doğrudan komutta geçmek yerine PGPASSWORD ortam değişkeni kullanılmalıdır.
         os.environ['PGPASSWORD'] = DB_PASSWORD
         command = [
             "pg_dump",
             "-h", DB_HOST,
             "-p", DB_PORT,
             "-U", DB_USER,
-            "-F", "p", # Plain text format
+            "-F", "p",
             "-d", DB_NAME,
             "-f", backup_filepath
         ]
         
-        # subprocess.run ile komutu çalıştır
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         
-        # Hata kontrolü
         if result.stderr:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Yedekleme sırasında hata oluştu: {result.stderr}")
 
@@ -61,17 +49,11 @@ def create_db_backup(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Beklenmedik bir hata oluştu: {e}")
     finally:
-        # PGPASSWORD ortam değişkenini temizle
         if 'PGPASSWORD' in os.environ:
             del os.environ['PGPASSWORD']
 
-
 @router.post("/restore", summary="Veritabanını Geri Yükle", status_code=status.HTTP_200_OK)
 def restore_db_backup(backup_file: UploadFile = File(...)):
-    """
-    Yüklenen yedek dosyasını kullanarak PostgreSQL veritabanını geri yükler.
-    UYARI: Bu işlem mevcut veritabanı içeriğini SİLECEKTİR!
-    """
     if not backup_file.filename.endswith(".sql"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sadece .sql uzantılı dosyalar kabul edilir.")
 
@@ -95,17 +77,13 @@ def restore_db_backup(backup_file: UploadFile = File(...)):
         if result.stderr and "SET" not in result.stderr:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Geri yükleme sırasında hata oluştu: {result.stderr}")
         
-        # Geri yükleme başarılı olduktan sonra bağlantı havuzunu sıfırla
         reset_db_connection()
 
-        # Bağlantı havuzunun yeniden oluşturulduğundan emin olmak için
-        # dummy bir sorgu çalıştırarak yeni bir bağlantı kurmayı zorla
         try:
             db_test = next(get_db())
             db_test.execute(text("SELECT 1"))
             db_test.close()
         except Exception as e:
-            # Eğer test bağlantısı başarısız olursa, istemciye hata gönder
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Geri yükleme başarılı, ancak veritabanı bağlantısı tekrar kurulamadı: {e}"

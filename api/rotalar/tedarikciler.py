@@ -1,4 +1,3 @@
-# api/rotalar/tedarikciler.py dosyasının tamamı
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
@@ -21,12 +20,13 @@ def create_tedarikci(tedarikci: modeller.TedarikciCreate, db: Session = Depends(
 @router.get("/", response_model=modeller.TedarikciListResponse)
 def read_tedarikciler(
     db: Session = Depends(get_db),
+    kullanici_id: int = Query(..., description="Tedarikçi listesini filtrelemek için kullanıcı ID"),
     skip: int = 0,
     limit: int = 25,
     arama: Optional[str] = None,
     aktif_durum: Optional[bool] = None
 ):
-    query = db.query(semalar.Tedarikci)
+    query = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.kullanici_id == kullanici_id)
 
     if arama:
         search_term = f"%{arama}%"
@@ -56,8 +56,8 @@ def read_tedarikciler(
     return {"items": tedarikciler_with_balance, "total": total_count}
 
 @router.get("/{tedarikci_id}", response_model=modeller.TedarikciRead)
-def read_tedarikci(tedarikci_id: int, db: Session = Depends(get_db)):
-    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id).first()
+def read_tedarikci(tedarikci_id: int, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id, semalar.Tedarikci.kullanici_id == kullanici_id).first()
     if not tedarikci:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
 
@@ -68,8 +68,8 @@ def read_tedarikci(tedarikci_id: int, db: Session = Depends(get_db)):
     return tedarikci_dict
 
 @router.put("/{tedarikci_id}", response_model=modeller.TedarikciRead)
-def update_tedarikci(tedarikci_id: int, tedarikci: modeller.TedarikciUpdate, db: Session = Depends(get_db)):
-    db_tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id).first()
+def update_tedarikci(tedarikci_id: int, tedarikci: modeller.TedarikciUpdate, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    db_tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id, semalar.Tedarikci.kullanici_id == kullanici_id).first()
     if not db_tedarikci:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
     for key, value in tedarikci.model_dump(exclude_unset=True).items():
@@ -79,8 +79,8 @@ def update_tedarikci(tedarikci_id: int, tedarikci: modeller.TedarikciUpdate, db:
     return db_tedarikci
 
 @router.delete("/{tedarikci_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_tedarikci(tedarikci_id: int, db: Session = Depends(get_db)):
-    db_tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id).first()
+def delete_tedarikci(tedarikci_id: int, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    db_tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id, semalar.Tedarikci.kullanici_id == kullanici_id).first()
     if not db_tedarikci:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
     db.delete(db_tedarikci)
@@ -88,8 +88,8 @@ def delete_tedarikci(tedarikci_id: int, db: Session = Depends(get_db)):
     return
 
 @router.get("/{tedarikci_id}/net_bakiye", response_model=modeller.NetBakiyeResponse)
-def get_net_bakiye_endpoint(tedarikci_id: int, db: Session = Depends(get_db)):
-    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id).first()
+def get_net_bakiye_endpoint(tedarikci_id: int, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == tedarikci_id, semalar.Tedarikci.kullanici_id == kullanici_id).first()
     if not tedarikci:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
 

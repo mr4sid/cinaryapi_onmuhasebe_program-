@@ -287,45 +287,30 @@ class SyncWorker(QObject):
 class App(QMainWindow):
     backup_completed_signal = Signal(bool, str, str)    
     def __init__(self):
-        super().__init__()  
-        self.backup_completed_signal.connect(self._handle_backup_completion)
-        self.ui_main_window_setup = Ui_MainWindow_Minimal()
-        self.ui_main_window_setup.setupUi(self)
-
+        super().__init__()
         self.setWindowTitle("Çınar Yapı Ön Muhasebe Programı")
         self.config = load_config()
 
         self.db_manager = None
-        self.is_online = False  
-        self._initialize_db_manager()
-        self.tab_widget = None
+        self.is_online = False
         self.open_cari_ekstre_windows = {}
-        self.current_user = None
-        
-        self.show_login_screen()
 
-        self._update_status_bar()
-        self.set_status_message("Uygulama başlatılıyor, sunucuya bağlanılıyor...")
-    
-    def show_login_screen(self):
-        """Uygulama başlangıcında giriş ekranını gösterir."""
-        login_widget = QWidget(self)
-        login_layout = QVBoxLayout(login_widget)
-        self.setCentralWidget(login_widget)
+        self.current_user = None
+        self.current_user_id = None
+        self.current_token = None
+        
+        self._initialize_db_manager()
 
         from arayuz import GirisEkrani
-        self.login_screen = GirisEkrani(self, self.db_manager, self.on_successful_login)
-        login_layout.addWidget(self.login_screen)
-
-        self.db_manager.app = self
-        self.db_manager.lokal_db.app = self
-
-        QTimer.singleShot(100, self._check_api_status_on_startup)
-
-    def on_successful_login(self, user_info):
-        """Başarılı giriş yapıldığında ana ekranı yükler."""
-        self.current_user = user_info
+        self.login_dialog = GirisEkrani(self, self.db_manager)
+        self.login_dialog.login_success.connect(self.on_successful_login)
         
+        if self.login_dialog.exec() == QDialog.Rejected:
+            sys.exit(0)
+
+        self.ui_main_window_setup = Ui_MainWindow_Minimal()
+        self.ui_main_window_setup.setupUi(self)
+
         self.ana_sayfa_widget = AnaSayfa(self, self.db_manager, self)
         self.tab_widget = QTabWidget(self)
         self.setCentralWidget(self.tab_widget)
@@ -354,15 +339,37 @@ class App(QMainWindow):
 
         self._setup_ui_connections()
         self._initial_load_data()
+        self._update_title_and_user_info()
 
-        self.setWindowTitle("Çınar Yapı Ön Muhasebe Programı")
-        self.ui_main_window_setup.setupUi(self)
-
-        self._update_status_bar()
-        if self.is_online:
+        if self.db_manager.is_online:
             self._start_background_sync()
         else:
             self.set_status_message("Çevrimdışı mod: API bağlantısı yok. Yerel veriler kullanılıyor.", "red")
+    
+    def show_login_screen(self):
+        """Uygulama başlangıcında giriş ekranını gösterir."""
+        login_widget = QWidget(self)
+        login_layout = QVBoxLayout(login_widget)
+        self.setCentralWidget(login_widget)
+
+        from arayuz import GirisEkrani
+        self.login_screen = GirisEkrani(self, self.db_manager, self.on_successful_login)
+        login_layout.addWidget(self.login_screen)
+
+        self.db_manager.app = self
+        self.db_manager.lokal_db.app = self
+
+        QTimer.singleShot(100, self._check_api_status_on_startup)
+
+    @Slot(object)
+    def on_successful_login(self, user_info):
+        """Başarılı giriş yapıldığında kullanıcı bilgilerini kaydeder."""
+        self.current_user = user_info.get('kullanici_adi')
+        self.current_user_id = user_info.get('kullanici_id')
+        self.current_token = user_info.get('access_token')
+        
+        # db_manager'a mevcut kullanıcı ID'sini ayarla
+        self.db_manager.set_current_user_id(self.current_user_id)
 
     def _check_api_status_on_startup(self):
         """Uygulama başlatıldıktan sonra API durumunu kontrol eder."""
@@ -525,14 +532,10 @@ class App(QMainWindow):
         logger.info(f"Durum Mesajı ({color}): {message}")
 
     def _stok_karti_penceresi_ac(self, urun_data):
-        """
-        Stok Kartı penceresini açar.
-        Bu metod, StokYonetimiSayfasi tarafından düzenleme modunda çağrılır.
-        """
         from pencereler import StokKartiPenceresi
         dialog = StokKartiPenceresi(
-            self.tab_widget, 
-            self.db,
+            self.tab_widget,
+            self.db_manager,
             self.stok_yonetimi_sayfasi.stok_listesini_yenile,
             urun_duzenle=urun_data,
             app_ref=self
@@ -567,8 +570,14 @@ class App(QMainWindow):
         # Eğer AnaSayfa üzerindeki butonlar show_tab'i çağırıyorsa, burada doğrudan bir bağlantıya gerek yok
         pass
 
-    def _initial_load_data(self): 
-        """Uygulama başlangıcında veya veri güncellendiğinde tüm sekmelerdeki verileri yükler."""
+    def _initial_load_data(self):
+        sirket_bilgileri = self.db_manager.sirket_bilgilerini_yukle(self.current_user_id) if self.current_user_id else None
+        if sirket_bilgileri:
+            self.sirket_adi = sirket_bilgileri.get('sirket_adi', 'Ön Muhasebe Programı')
+        else:
+            self.sirket_adi = 'Ön Muhasebe Programı (Offline)'
+        self.setWindowTitle(self.sirket_adi)
+
         if not self.db_manager:
             return
 
@@ -598,7 +607,6 @@ class App(QMainWindow):
         if hasattr(self.gelir_gider_sayfasi, 'gider_listesi_frame') and hasattr(self.gelir_gider_sayfasi.gider_listesi_frame, 'gg_listesini_yukle'):
             self.gelir_gider_sayfasi.gider_listesi_frame.gg_listesini_yukle()
 
-        # Raporlama Merkezi sayfasını da yükle
         if hasattr(self.raporlama_merkezi_sayfasi, 'raporu_olustur_ve_yenile'):
             self.raporlama_merkezi_sayfasi.raporu_olustur_ve_yenile()
 
@@ -670,8 +678,6 @@ class App(QMainWindow):
     def _rapor_olustur(self, rapor_tipi):
         try:
             self.show_tab("Raporlama Merkezi")
-            # Belirli bir rapor tipi seçimi için RaporlamaMerkeziSayfası'nda bir metot olması gerekebilir.
-            # Örneğin: self.raporlama_merkezi_sayfasi.select_report_tab(rapor_tipi)
             self.set_status_message(f"{rapor_tipi.capitalize()} raporu için Raporlama Merkezi açıldı.")
 
         except Exception as e:
@@ -796,13 +802,10 @@ class App(QMainWindow):
 
     def _yonetici_ayarlari_penceresi_ac(self):
         from pencereler import YoneticiAyarlariPenceresi
-        dialog = YoneticiAyarlariPenceresi(self, self.db_manager)
+        dialog = YoneticiAyarlariPenceresi(self, self.db_manager, app_ref=self)
         dialog.exec()
 
     def _veri_yonetimi_penceresi_ac(self):
-        """
-        Veri Yönetimi arayüzünü bir diyalog penceresi olarak açar.
-        """
         dialog = QDialog(self)
         dialog.setWindowTitle("Veri Yönetimi ve Senkronizasyon")
         dialog.setMinimumSize(800, 600)
@@ -810,9 +813,6 @@ class App(QMainWindow):
         dialog_layout = QVBoxLayout(dialog)
         veri_yonetimi_widget = VeriYonetimiSekmesi(dialog, self.db_manager, self)
         dialog_layout.addWidget(veri_yonetimi_widget)
-
-        # Sinyal ve slot bağlantıları
-        # Bu kısım, VeriYonetimiSekmesi'nin içinde butonlara işlevsellik eklerken kullanılacak
 
         dialog.exec()
         self.set_status_message("Veri Yönetimi penceresi açıldı.")

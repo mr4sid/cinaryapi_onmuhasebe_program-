@@ -1,4 +1,3 @@
-# api/rotalar/stoklar.py Dosyasının tam içeriği.
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
@@ -29,6 +28,7 @@ def create_stok(stok: modeller.StokCreate, db: Session = Depends(get_db)):
 def read_stoklar(
     skip: int = 0,
     limit: int = 25,
+    kullanici_id: int = Query(..., description="Stok listesini filtrelemek için kullanıcı ID"),
     arama: Optional[str] = None,
     aktif_durum: Optional[bool] = True,
     kritik_stok_altinda: Optional[bool] = False,
@@ -38,10 +38,7 @@ def read_stoklar(
     stokta_var: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
-    """
-    Stok listesini filtreleyerek döndürür.
-    """
-    query = db.query(semalar.Stok)
+    query = db.query(semalar.Stok).filter(semalar.Stok.kullanici_id == kullanici_id)
     
     if arama:
         search_filter = or_(
@@ -65,7 +62,6 @@ def read_stoklar(
     if urun_grubu_id:
         query = query.filter(semalar.Stok.urun_grubu_id == urun_grubu_id)
 
-    # YENİ EKLENEN FİLTRE: Stokta var/yok durumu
     if stokta_var is not None:
         if stokta_var:
             query = query.filter(semalar.Stok.miktar > 0)
@@ -82,18 +78,13 @@ def read_stoklar(
     ], "total": total_count}
 
 @router.get("/ozet", response_model=modeller.StokOzetResponse)
-def get_stok_ozet(db: Session = Depends(get_db)):
-    """
-    Tüm stokların özet bilgilerini (toplam miktar, maliyet, satış tutarı) döndürür.
-    """
-    query = db.query(semalar.Stok)
+def get_stok_ozet(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    query = db.query(semalar.Stok).filter(semalar.Stok.kullanici_id == kullanici_id)
     
-    # KDV hariç fiyatları kullanarak toplam maliyet ve satış tutarını hesapla
     toplam_miktar = query.with_entities(func.sum(semalar.Stok.miktar)).scalar() or 0
     toplam_alis_fiyati = query.with_entities(func.sum(semalar.Stok.alis_fiyati * semalar.Stok.miktar)).scalar() or 0
     toplam_satis_fiyati = query.with_entities(func.sum(semalar.Stok.satis_fiyati * semalar.Stok.miktar)).scalar() or 0
     
-    # Tüm aktif stokların sayısını al
     toplam_urun_sayisi = query.filter(semalar.Stok.aktif == True).count()
     
     return {
@@ -104,8 +95,8 @@ def get_stok_ozet(db: Session = Depends(get_db)):
     }
 
 @router.get("/{stok_id}", response_model=modeller.StokRead)
-def read_stok(stok_id: int, db: Session = Depends(get_db)):
-    stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id).first()
+def read_stok(stok_id: int, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id, semalar.Stok.kullanici_id == kullanici_id).first()
     if not stok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı")
     
@@ -125,8 +116,8 @@ def read_stok(stok_id: int, db: Session = Depends(get_db)):
     return stok_read_data
 
 @router.put("/{stok_id}", response_model=modeller.StokRead)
-def update_stok(stok_id: int, stok: modeller.StokUpdate, db: Session = Depends(get_db)):
-    db_stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id).first()
+def update_stok(stok_id: int, stok: modeller.StokUpdate, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    db_stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id, semalar.Stok.kullanici_id == kullanici_id).first()
     if not db_stok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı")
     for key, value in stok.model_dump(exclude_unset=True).items():
@@ -136,8 +127,8 @@ def update_stok(stok_id: int, stok: modeller.StokUpdate, db: Session = Depends(g
     return db_stok
 
 @router.delete("/{stok_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_stok(stok_id: int, db: Session = Depends(get_db)):
-    db_stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id).first()
+def delete_stok(stok_id: int, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    db_stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id, semalar.Stok.kullanici_id == kullanici_id).first()
     if not db_stok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı")
     db.delete(db_stok)
@@ -145,40 +136,39 @@ def delete_stok(stok_id: int, db: Session = Depends(get_db)):
     return
 
 @router.get("/{stok_id}/anlik_miktar", response_model=modeller.AnlikStokMiktariResponse)
-def get_anlik_stok_miktari_endpoint(stok_id: int, db: Session = Depends(get_db)):
-    stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id).first()
+def get_anlik_stok_miktari_endpoint(stok_id: int, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id, semalar.Stok.kullanici_id == kullanici_id).first()
     if not stok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı")
     
     return {"anlik_miktar": stok.miktar}
 
 @router.post("/{stok_id}/hareket", response_model=modeller.StokHareketRead)
-def create_stok_hareket(stok_id: int, hareket: modeller.StokHareketCreate, db: Session = Depends(get_db)):
-    db_stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id).first()
+def create_stok_hareket(stok_id: int, hareket: modeller.StokHareketCreate, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    db_stok = db.query(semalar.Stok).filter(semalar.Stok.id == stok_id, semalar.Stok.kullanici_id == kullanici_id).first()
     if not db_stok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı.")
     
     if hareket.miktar <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Miktar pozitif bir değer olmalıdır.")
 
-    db.begin_nested() # Transaction başlat
+    db.begin_nested()
 
     try:
-        # Stok miktarını güncelle
         stok_degisim_net = 0.0
         if hareket.islem_tipi in [
             semalar.StokIslemTipiEnum.GİRİŞ,
             semalar.StokIslemTipiEnum.SAYIM_FAZLASI,
-            semalar.StokIslemTipiEnum.SATIŞ_İADE, # Satış iadesi stoğu artırır
-            semalar.StokIslemTipiEnum.ALIŞ # Alış stoğu artırır
+            semalar.StokIslemTipiEnum.SATIŞ_İADE,
+            semalar.StokIslemTipiEnum.ALIŞ
         ]:
             stok_degisim_net = hareket.miktar
         elif hareket.islem_tipi in [
             semalar.StokIslemTipiEnum.ÇIKIŞ,
             semalar.StokIslemTipiEnum.SAYIM_EKSİĞİ,
             semalar.StokIslemTipiEnum.ZAYIAT,
-            semalar.StokIslemTipiEnum.SATIŞ, # Satış stoğu azaltır
-            semalar.StokIslemTipiEnum.ALIŞ_İADE # Alış iadesi stoğu azaltır
+            semalar.StokIslemTipiEnum.SATIŞ,
+            semalar.StokIslemTipiEnum.ALIŞ_İADE
         ]:
             stok_degisim_net = -hareket.miktar
         else:
@@ -199,7 +189,8 @@ def create_stok_hareket(stok_id: int, hareket: modeller.StokHareketCreate, db: S
             kaynak=semalar.KaynakTipEnum.MANUEL,
             kaynak_id=None,
             onceki_stok=onceki_stok_miktari,
-            sonraki_stok=db_stok.miktar
+            sonraki_stok=db_stok.miktar,
+            kullanici_id=kullanici_id
         )
         db.add(db_hareket)
 
@@ -215,6 +206,7 @@ def create_stok_hareket(stok_id: int, hareket: modeller.StokHareketCreate, db: S
 @router.get("/{stok_id}/hareketler", response_model=modeller.StokHareketListResponse)
 def get_stok_hareketleri_endpoint(
     stok_id: int,
+    kullanici_id: int = Query(..., description="Kullanıcı ID"),
     skip: int = 0,
     limit: int = 100,
     islem_tipi: str = Query(None),
@@ -222,7 +214,7 @@ def get_stok_hareketleri_endpoint(
     bitis_tarihi: str = Query(None),
     db: Session = Depends(get_db)
 ):
-    query = db.query(semalar.StokHareket).filter(semalar.StokHareket.stok_id == stok_id)
+    query = db.query(semalar.StokHareket).filter(semalar.StokHareket.stok_id == stok_id, semalar.StokHareket.kullanici_id == kullanici_id)
 
     if islem_tipi:
         query = query.filter(semalar.StokHareket.islem_tipi.cast(String) == islem_tipi)
@@ -242,11 +234,12 @@ def get_stok_hareketleri_endpoint(
     ], "total": total_count}
 
 @router.delete("/hareketler/{hareket_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_stok_hareket(hareket_id: int, db: Session = Depends(get_db)):
+def delete_stok_hareket(hareket_id: int, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
     db_hareket = db.query(semalar.StokHareket).filter(
         and_(
             semalar.StokHareket.id == hareket_id,
-            semalar.StokHareket.kaynak == "MANUEL"
+            semalar.StokHareket.kaynak == "MANUEL",
+            semalar.StokHareket.kullanici_id == kullanici_id
         )
     ).first()
 
@@ -256,7 +249,7 @@ def delete_stok_hareket(hareket_id: int, db: Session = Depends(get_db)):
             detail="Stok hareketi bulunamadı veya manuel olarak silinemez (otomatik oluşturulmuştur)."
         )
     
-    stok = db.query(semalar.Stok).filter(semalar.Stok.id == db_hareket.stok_id).first()
+    stok = db.query(semalar.Stok).filter(semalar.Stok.id == db_hareket.stok_id, semalar.Stok.kullanici_id == kullanici_id).first()
     if stok:
         if db_hareket.islem_tipi == semalar.StokIslemTipiEnum.GİRİŞ:
             stok.miktar -= db_hareket.miktar
@@ -271,11 +264,9 @@ def delete_stok_hareket(hareket_id: int, db: Session = Depends(get_db)):
 @router.post("/bulk_upsert", response_model=modeller.TopluIslemSonucResponse)
 def bulk_stok_upsert_endpoint(
     stok_listesi: List[modeller.StokCreate],
+    kullanici_id: int = Query(..., description="Kullanıcı ID"),
     db: Session = Depends(get_db)
 ):
-    """
-    Toplu olarak stok ekler veya günceller.
-    """
     db.begin_nested()
     try:
         yeni_eklenen = 0
@@ -288,17 +279,17 @@ def bulk_stok_upsert_endpoint(
         
         for stok_data in stok_listesi:
             try:
-                db_stok = db.query(semalar.Stok).filter(semalar.Stok.kod == stok_data.kod).first()
+                db_stok = db.query(semalar.Stok).filter(semalar.Stok.kod == stok_data.kod, semalar.Stok.kullanici_id == kullanici_id).first()
                 
                 if db_stok:
-                    # Stok zaten varsa güncelle
+                    if db_stok.kullanici_id != kullanici_id:
+                         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu stok kaydını güncelleme yetkiniz yok.")
                     for key, value in stok_data.model_dump(exclude_unset=True).items():
                         setattr(db_stok, key, value)
                     db.add(db_stok)
                     guncellenen += 1
                 else:
-                    # Stok yoksa yeni ekle
-                    yeni_stok = semalar.Stok(**stok_data.model_dump())
+                    yeni_stok = semalar.Stok(**stok_data.model_dump(), kullanici_id=kullanici_id)
                     db.add(yeni_stok)
                     db.flush()
                     yeni_eklenen += 1
@@ -323,11 +314,7 @@ def bulk_stok_upsert_endpoint(
                 hata_veren += 1
                 hatalar.append(f"Stok kodu '{stok_data.kod}' işlenirken hata: {e}")
 
-        # YENİ KOD: Pozitif miktarlı kalemler için Alış Faturası oluştur
         if pozitif_kalemler:
-            toplam_kdv_haric = sum(k['birim_fiyat'] * k['miktar'] for k in pozitif_kalemler)
-            toplam_kdv_dahil = sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * k['miktar'] for k in pozitif_kalemler)
-            
             fatura_no=f"TOPLU-ALIS-{datetime.now().strftime('%Y%m%d%H%M%S')}"
             tarih=datetime.now().strftime('%Y-%m-%d')
             
@@ -338,9 +325,10 @@ def bulk_stok_upsert_endpoint(
                 cari_id=1,
                 odeme_turu=semalar.OdemeTuruEnum.ETKISIZ_FATURA,
                 fatura_notlari="Toplu stok ekleme işlemiyle otomatik oluşturulan alış faturası.",
-                toplam_kdv_haric=toplam_kdv_haric,
-                toplam_kdv_dahil=toplam_kdv_dahil,
-                genel_toplam=toplam_kdv_dahil
+                toplam_kdv_haric=sum(k['birim_fiyat'] * k['miktar'] for k in pozitif_kalemler),
+                toplam_kdv_dahil=sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * k['miktar'] for k in pozitif_kalemler),
+                genel_toplam=sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * k['miktar'] for k in pozitif_kalemler),
+                kullanici_id=kullanici_id
             )
             db.add(db_fatura)
             db.flush()
@@ -368,15 +356,12 @@ def bulk_stok_upsert_endpoint(
                         kaynak=semalar.KaynakTipEnum.FATURA,
                         kaynak_id=db_fatura.id,
                         onceki_stok=db_stok.miktar - kalem_bilgisi['miktar'],
-                        sonraki_stok=db_stok.miktar
+                        sonraki_stok=db_stok.miktar,
+                        kullanici_id=kullanici_id
                     )
                     db.add(db_stok_hareket)
 
-        # YENİ KOD: Negatif miktarlı kalemler için Alış İade Faturası oluştur
         if negatif_kalemler:
-            toplam_kdv_haric = sum(k['birim_fiyat'] * abs(k['miktar']) for k in negatif_kalemler)
-            toplam_kdv_dahil = sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * abs(k['miktar']) for k in negatif_kalemler)
-            
             fatura_no=f"TOPLU-ALIS-IADE-{datetime.now().strftime('%Y%m%d%H%M%S')}"
             tarih=datetime.now().strftime('%Y-%m-%d')
             
@@ -387,9 +372,10 @@ def bulk_stok_upsert_endpoint(
                 cari_id=1,
                 odeme_turu=semalar.OdemeTuruEnum.ETKISIZ_FATURA,
                 fatura_notlari="Toplu stok ekleme işlemiyle otomatik oluşturulan alış iade faturası.",
-                toplam_kdv_haric=toplam_kdv_haric,
-                toplam_kdv_dahil=toplam_kdv_dahil,
-                genel_toplam=toplam_kdv_dahil
+                toplam_kdv_haric=sum(k['birim_fiyat'] * abs(k['miktar']) for k in negatif_kalemler),
+                toplam_kdv_dahil=sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * abs(k['miktar']) for k in negatif_kalemler),
+                genel_toplam=sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * abs(k['miktar']) for k in negatif_kalemler),
+                kullanici_id=kullanici_id
             )
             db.add(db_fatura_iade)
             db.flush()
@@ -417,7 +403,8 @@ def bulk_stok_upsert_endpoint(
                         kaynak=semalar.KaynakTipEnum.FATURA,
                         kaynak_id=db_fatura_iade.id,
                         onceki_stok=db_stok.miktar + abs(kalem_bilgisi['miktar']),
-                        sonraki_stok=db_stok.miktar
+                        sonraki_stok=db_stok.miktar,
+                        kullanici_id=kullanici_id
                     )
                     db.add(db_stok_hareket)
 

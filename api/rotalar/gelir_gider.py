@@ -1,32 +1,28 @@
-# api/rotalar/gelir_gider.py dosyasının içeriği
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import String, and_
 from typing import List, Optional
 from .. import semalar, modeller
 from ..veritabani import get_db
-from datetime import date, datetime # date ve datetime objeleri için
+from datetime import date, datetime
 
 router = APIRouter(
     prefix="/gelir_gider",
     tags=["Gelir ve Gider İşlemleri"]
 )
 
-# --- VERİ OKUMA (READ) ---
 @router.get("/", response_model=modeller.GelirGiderListResponse)
 def read_gelir_gider(
     skip: int = 0,
     limit: int = 20,
+    kullanici_id: int = Query(..., description="Kullanıcı ID"),
     tip_filtre: Optional[semalar.GelirGiderTipEnum] = None,
     baslangic_tarihi: Optional[date] = None,
     bitis_tarihi: Optional[date] = None,
     aciklama_filtre: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """
-    Gelir/gider listesini filtreleyerek döndürür.
-    """
-    query = db.query(semalar.GelirGider)
+    query = db.query(semalar.GelirGider).filter(semalar.GelirGider.kullanici_id == kullanici_id)
 
     if tip_filtre:
         query = query.filter(semalar.GelirGider.tip == tip_filtre)
@@ -52,16 +48,14 @@ def read_gelir_gider(
 
 @router.get("/count", response_model=int)
 def get_gelir_gider_count(
-    tip_filtre: Optional[str] = None, # 'GELİR' veya 'GİDER'
+    tip_filtre: Optional[str] = None,
     baslangic_tarihi: Optional[date] = None,
     bitis_tarihi: Optional[date] = None,
     aciklama_filtre: Optional[str] = None,
+    kullanici_id: int = Query(..., description="Kullanıcı ID"),
     db: Session = Depends(get_db)
 ):
-    """
-    Filtrelere göre toplam gelir/gider kayıt sayısını döndürür.
-    """
-    query = db.query(semalar.GelirGider)
+    query = db.query(semalar.GelirGider).filter(semalar.GelirGider.kullanici_id == kullanici_id)
 
     if tip_filtre:
         query = query.filter(semalar.GelirGider.tip == tip_filtre)
@@ -74,23 +68,10 @@ def get_gelir_gider_count(
             
     return query.count()
 
-# --- VERİ OLUŞTURMA (CREATE) ---
-class GelirGiderCreate(modeller.GelirGiderBase):
-    # ID ve Kaynak (genellikle manuel için kullanılır) kaldırılır
-    id: Optional[int] = None # Create işleminde ID olmaz
-    kaynak: Optional[str] = "MANUEL" # Varsayılan kaynak manuel
-
 @router.post("/", response_model=modeller.GelirGiderBase)
 def create_gelir_gider(kayit: modeller.GelirGiderCreate, db: Session = Depends(get_db)):
-    """
-    Yeni bir manuel gelir/gider kaydı oluşturur.
-    Kasa/Banka bakiyesini ve (eğer belirtilmişse) ilgili cari hesabı günceller.
-    """
     db.begin_nested()
     try:
-        # Düzeltme: Pydantic modelden gelen veriden 'kaynak' ve 'cari_tip' alanları çıkarıldı
-        # çünkü bunlar veritabanı modelinde doğrudan yer almıyor, ilişkisel olarak yönetiliyor.
-        # Bu alanlar, cari hareketleri oluşturmak için kullanılacak.
         kayit_data = kayit.model_dump(exclude={"kaynak", "cari_tip", "cari_id", "odeme_turu"})
 
         db_kayit = semalar.GelirGider(
@@ -98,17 +79,15 @@ def create_gelir_gider(kayit: modeller.GelirGiderCreate, db: Session = Depends(g
         )
         db.add(db_kayit)
 
-        # Kasa/banka bakiyesini güncelle
-        kasa_hesabi = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == kayit.kasa_banka_id).first()
+        kasa_hesabi = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == kayit.kasa_banka_id, semalar.KasaBanka.kullanici_id == kayit.kullanici_id).first()
         if not kasa_hesabi:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kasa/Banka hesabı bulunamadı.")
         
-        if kayit.tip == semalar.GelirGiderTipEnum.GELIR: # ENUM kullanıldı
+        if kayit.tip == semalar.GelirGiderTipEnum.GELIR:
             kasa_hesabi.bakiye += kayit.tutar
-        elif kayit.tip == semalar.GelirGiderTipEnum.GIDER: # ENUM kullanıldı
+        elif kayit.tip == semalar.GelirGiderTipEnum.GIDER:
             kasa_hesabi.bakiye -= kayit.tutar
         
-        # Eğer cari bilgisi verilmişse, cari hareket de oluştur
         if kayit.cari_id and kayit.cari_tip:
             islem_tipi = ""
             if kayit.cari_tip == semalar.CariTipiEnum.MUSTERI and kayit.tip == semalar.GelirGiderTipEnum.GELIR:
@@ -117,7 +96,6 @@ def create_gelir_gider(kayit: modeller.GelirGiderCreate, db: Session = Depends(g
                 islem_tipi = semalar.KaynakTipEnum.ODEME
             
             if islem_tipi:
-                # Düzeltme: 'cari_tip' yerine 'cari_turu' kullanıldı.
                 db_cari_hareket = semalar.CariHareket(
                     tarih=kayit.tarih,
                     cari_turu=kayit.cari_tip,
@@ -128,7 +106,8 @@ def create_gelir_gider(kayit: modeller.GelirGiderCreate, db: Session = Depends(g
                     aciklama=kayit.aciklama,
                     kaynak=semalar.KaynakTipEnum.MANUEL,
                     kasa_banka_id=kayit.kasa_banka_id,
-                    odeme_turu=kayit.odeme_turu
+                    odeme_turu=kayit.odeme_turu,
+                    kullanici_id=kayit.kullanici_id
                 )
                 db.add(db_cari_hareket)
 
@@ -144,35 +123,27 @@ def create_gelir_gider(kayit: modeller.GelirGiderCreate, db: Session = Depends(g
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Gelir/Gider kaydı oluşturulurken hata: {str(e)}")
         
-# --- VERİ SİLME (DELETE) ---
 @router.delete("/{kayit_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_gelir_gider(kayit_id: int, db: Session = Depends(get_db)):
-    """
-    Belirli bir ID'ye sahip manuel gelir/gider kaydını ve ilişkili etkilerini siler.
-    """
-    db_kayit = db.query(semalar.GelirGider).filter(semalar.GelirGider.id == kayit_id).first()
+def delete_gelir_gider(kayit_id: int, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    db_kayit = db.query(semalar.GelirGider).filter(semalar.GelirGider.id == kayit_id, semalar.GelirGider.kullanici_id == kullanici_id).first()
     if db_kayit is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gelir/Gider kaydı bulunamadı")
     
-    # DÜZELTME: `db_kayit.kaynak` özelliği mevcut olmadığından, bu kontrol kaldırıldı.
-    # Bu kontrol, veritabanı modelinizde `kaynak` alanı bulunduğunda geri eklenebilir.
-    
     db.begin_nested()
     try:
-        # Kasa/banka bakiyesini geri al
         if db_kayit.kasa_banka_id:
-            kasa_hesabi = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == db_kayit.kasa_banka_id).first()
+            kasa_hesabi = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == db_kayit.kasa_banka_id, semalar.KasaBanka.kullanici_id == kullanici_id).first()
             if kasa_hesabi:
                 if db_kayit.tip == semalar.GelirGiderTipEnum.GELIR:
                     kasa_hesabi.bakiye -= db_kayit.tutar
                 elif db_kayit.tip == semalar.GelirGiderTipEnum.GIDER:
                     kasa_hesabi.bakiye += db_kayit.tutar
         
-        # İlişkili olabilecek cari hareketi de sil (açıklama ve tutar eşleşmesine göre)
         cari_hareket = db.query(semalar.CariHareket).filter(
             semalar.CariHareket.aciklama == db_kayit.aciklama,
             semalar.CariHareket.tutar == db_kayit.tutar,
-            semalar.CariHareket.kaynak == semalar.KaynakTipEnum.MANUEL
+            semalar.CariHareket.kaynak == semalar.KaynakTipEnum.MANUEL,
+            semalar.CariHareket.kullanici_id == kullanici_id
         ).first()
 
         if cari_hareket:

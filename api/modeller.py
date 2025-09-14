@@ -93,6 +93,7 @@ class CariBase(BaseOrmModel):
 
 class MusteriCreate(CariBase):
     kod: Optional[str] = None
+    kullanici_id: int # Yeni eklendi
 
 class MusteriUpdate(CariBase):
     ad: Optional[str] = None
@@ -102,7 +103,8 @@ class MusteriUpdate(CariBase):
     vergi_dairesi: Optional[str] = None
     vergi_no: Optional[str] = None
     aktif: Optional[bool] = None
-    
+    kullanici_id: Optional[int] = None # Yeni eklendi
+
 class MusteriRead(CariBase):
     id: int
     kod: Optional[str] = None
@@ -152,7 +154,7 @@ class KasaBankaBase(BaseOrmModel):
     varsayilan_odeme_turu: Optional[str] = None # String olarak tutulacak
 
 class KasaBankaCreate(KasaBankaBase):
-    pass
+    kullanici_id: int # Yeni eklendi
 
 class KasaBankaUpdate(KasaBankaBase):
     hesap_adi: Optional[str] = None
@@ -164,7 +166,8 @@ class KasaBankaUpdate(KasaBankaBase):
     sube_adi: Optional[str] = None
     hesap_no: Optional[str] = None
     varsayilan_odeme_turu: Optional[str] = None # Güncellemede de optional olsun
-    
+    kullanici_id: Optional[int] = None # Yeni eklendi    
+
 class KasaBankaRead(KasaBankaBase):
     id: int
     aktif: bool
@@ -194,7 +197,7 @@ class StokBase(BaseOrmModel):
     mense_id: Optional[int] = None
     
 class StokCreate(StokBase):
-    pass
+    kullanici_id: int # Yeni eklendi
 
 class StokUpdate(StokBase):
     kod: Optional[str] = None
@@ -212,6 +215,7 @@ class StokUpdate(StokBase):
     urun_grubu_id: Optional[int] = None
     birim_id: Optional[int] = None
     mense_id: Optional[int] = None
+    kullanici_id: Optional[int] = None # Yeni eklendi
 
 class UrunKategoriRead(BaseOrmModel):
     id: int
@@ -261,7 +265,18 @@ class StokHareketBase(BaseOrmModel):
     kaynak_id: Optional[int] = None
 
 class StokHareketCreate(StokHareketBase):
-    pass
+    kullanici_id: int # Yeni eklendi
+
+class StokHareketUpdate(StokHareketBase):
+    stok_id: Optional[int] = None
+    tarih: Optional[date] = None
+    islem_tipi: Optional[StokIslemTipiEnum] = None
+    miktar: Optional[float] = None
+    birim_fiyat: Optional[float] = None
+    aciklama: Optional[str] = None
+    kaynak: Optional[str] = None
+    kaynak_id: Optional[int] = None
+    kullanici_id: Optional[int] = None # Yeni eklendi
 
 class StokHareketRead(StokHareketBase):
     id: int
@@ -327,8 +342,9 @@ class FaturaBase(BaseOrmModel):
 
 class FaturaCreate(FaturaBase):
     kalemler: List[FaturaKalemiCreate] = []
-    original_fatura_id: Optional[int] = None 
-    olusturan_kullanici_id: int 
+    original_fatura_id: Optional[int] = None
+    olusturan_kullanici_id: int
+    kullanici_id: int # Yeni eklendi
 
 class FaturaUpdate(FaturaBase):
     fatura_no: Optional[str] = None
@@ -344,6 +360,7 @@ class FaturaUpdate(FaturaBase):
     genel_iskonto_degeri: Optional[float] = None
     original_fatura_id: Optional[int] = None
     kalemler: Optional[List[FaturaKalemiCreate]] = None # Güncellemede kalemler de gönderilebilir
+    kullanici_id: Optional[int] = None # Yeni eklendi
 
 class FaturaRead(FaturaBase):
     id: int
@@ -424,6 +441,7 @@ class SiparisBase(BaseOrmModel):
 
 class SiparisCreate(SiparisBase):
     kalemler: List[SiparisKalemiCreate] = []
+    kullanici_id: int # Yeni eklendi
 
 class SiparisUpdate(SiparisBase):
     siparis_no: Optional[str] = None
@@ -439,6 +457,7 @@ class SiparisUpdate(SiparisBase):
     fatura_id: Optional[int] = None
     toplam_tutar: Optional[float] = None
     kalemler: Optional[List[SiparisKalemiCreate]] = None # Güncellemede kalemler de gönderilebilir
+    kullanici_id: Optional[int] = None # Yeni eklendi
 
 class SiparisRead(SiparisBase):
     id: int
@@ -479,7 +498,7 @@ class GelirGiderBase(BaseOrmModel):
     gider_siniflandirma_id: Optional[int] = None
 
 class GelirGiderCreate(GelirGiderBase):
-    pass
+    kullanici_id: int # Yeni eklendi
 
 class GelirGiderUpdate(GelirGiderBase):
     tarih: Optional[date] = None
@@ -492,6 +511,7 @@ class GelirGiderUpdate(GelirGiderBase):
     cari_tip: Optional[CariTipiEnum] = None
     gelir_siniflandirma_id: Optional[int] = None
     gider_siniflandirma_id: Optional[int] = None
+    kullanici_id: Optional[int] = None # Yeni eklendi
 
 class GelirGiderRead(GelirGiderBase):
     id: int
@@ -522,7 +542,7 @@ class CariHareketBase(BaseOrmModel):
     vade_tarihi: Optional[date] = None
 
 class CariHareketCreate(CariHareketBase):
-    pass
+    kullanici_id: int # Yeni eklendi
 
 class CariHareketUpdate(CariHareketBase):
     # Tüm alanlar optional, güncellenecek alanlar belirtilir
@@ -538,6 +558,7 @@ class CariHareketUpdate(CariHareketBase):
     odeme_turu: Optional[OdemeTuruEnum] = None
     kasa_banka_id: Optional[int] = None
     vade_tarihi: Optional[date] = None
+    kullanici_id: Optional[int] = None # Yeni eklendi
 
 class CariHareketRead(CariHareketBase):
     id: int
@@ -588,6 +609,11 @@ class KasaBankaHareketListResponse(BaseModel): # Liste yanıtı
 # Nitelik Modelleri (Kategori, Marka, Grup, Birim, Ülke, Gelir/Gider Sınıflandırma)
 class NitelikBase(BaseOrmModel):
     ad: str
+    kullanici_id: int # Yeni eklendi
+
+class NitelikUpdate(NitelikBase):
+    ad: Optional[str] = None
+    kullanici_id: Optional[int] = None # Yeni eklendi
 
 class UrunKategoriCreate(NitelikBase):
     pass
@@ -849,6 +875,7 @@ class Musteri(Base):
     vergi_no = Column(String, nullable=True)
     aktif = Column(Boolean)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True) # Yeni eklendix
 
 class Tedarikci(Base):
     __tablename__ = 'tedarikciler'
@@ -861,6 +888,7 @@ class Tedarikci(Base):
     vergi_no = Column(String, nullable=True)
     aktif = Column(Boolean)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True) # Yeni eklendi
 
 class Stok(Base):
     __tablename__ = 'stoklar'
@@ -881,6 +909,7 @@ class Stok(Base):
     urun_grubu_id = Column(Integer)
     birim_id = Column(Integer)
     mense_id = Column(Integer)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True) # Yeni eklendi
     
 class Fatura(Base):
     __tablename__ = 'faturalar'
@@ -904,6 +933,7 @@ class Fatura(Base):
     olusturan_kullanici_id = Column(Integer, nullable=True)
     son_guncelleme_tarihi_saat = Column(DateTime, nullable=True)
     son_guncelleyen_kullanici_id = Column(Integer, nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class FaturaKalemi(Base):
     __tablename__ = 'fatura_kalemleri'
@@ -932,6 +962,7 @@ class StokHareket(Base):
     kaynak_id = Column(Integer, nullable=True)
     onceki_stok = Column(Float, nullable=True)
     sonraki_stok = Column(Float, nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class Siparis(Base):
     __tablename__ = 'siparisler'
@@ -952,6 +983,7 @@ class Siparis(Base):
     olusturan_kullanici_id = Column(Integer, nullable=True)
     son_guncelleme_tarihi_saat = Column(DateTime, nullable=True)
     son_guncelleyen_kullanici_id = Column(Integer, nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class CariHareket(Base):
     __tablename__ = 'cari_hareketler'
@@ -970,41 +1002,49 @@ class CariHareket(Base):
     vade_tarihi = Column(Date, nullable=True)
     olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
     olusturan_kullanici_id = Column(Integer, nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class UrunKategori(Base):
     __tablename__ = 'urun_kategorileri'
     id = Column(Integer, primary_key=True)
     ad = Column(String)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class UrunMarka(Base):
     __tablename__ = 'urun_markalari'
     id = Column(Integer, primary_key=True)
     ad = Column(String)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class UrunGrubu(Base):
     __tablename__ = 'urun_gruplari'
     id = Column(Integer, primary_key=True)
     ad = Column(String)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class UrunBirimi(Base):
     __tablename__ = 'urun_birimleri'
     id = Column(Integer, primary_key=True)
     ad = Column(String)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class Ulke(Base):
     __tablename__ = 'ulkeler'
     id = Column(Integer, primary_key=True)
     ad = Column(String)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class GelirSiniflandirma(Base):
     __tablename__ = 'gelir_siniflandirmalari'
     id = Column(Integer, primary_key=True)
     ad = Column(String)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class GiderSiniflandirma(Base):
     __tablename__ = 'gider_siniflandirmalari'
     id = Column(Integer, primary_key=True)
     ad = Column(String)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class Nitelik(Base):
     __tablename__ = 'nitelikler'
@@ -1049,6 +1089,7 @@ class KasaBankaHesap(Base):
     hesap_adi = Column(String(100), unique=True, index=True, nullable=False)
     hesap_turu = Column(String(20), nullable=False)
     aktif_durum = Column(Boolean, default=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
 class GelirGider(Base):
     __tablename__ = 'gelir_gider'
@@ -1057,4 +1098,5 @@ class GelirGider(Base):
     tip = Column(String(20), index=True, nullable=False)
     tutar = Column(Float, default=0.0)
     aciklama = Column(Text, nullable=True)
-    siniflandirma = Column(String(100), nullable=True)            
+    siniflandirma = Column(String(100), nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)

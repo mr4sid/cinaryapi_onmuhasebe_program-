@@ -1,5 +1,4 @@
-# api/rotalar/sistem.py Dosyasının tam içeriği.
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -9,12 +8,10 @@ from ..veritabani import get_db, reset_db_connection
 router = APIRouter(prefix="/sistem", tags=["Sistem"])
 
 @router.get("/varsayilan_cariler/perakende_musteri_id", response_model=modeller.DefaultIdResponse)
-def get_perakende_musteri_id_endpoint(db: Session = Depends(get_db)):
-    # ID'si 'PERAKENDE_MUSTERI' olan kodu ara, bulunamazsa ID'si 1 olanı ara.
-    musteri = db.query(semalar.Musteri).filter(semalar.Musteri.kod == "PERAKENDE_MUSTERI").first()
+def get_perakende_musteri_id_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    musteri = db.query(semalar.Musteri).filter(semalar.Musteri.kod == "PERAKENDE_MUSTERI", semalar.Musteri.kullanici_id == kullanici_id).first()
     if not musteri:
-        musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == 1).first()
-
+        musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == 1, semalar.Musteri.kullanici_id == kullanici_id).first()
     if not musteri:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -23,12 +20,10 @@ def get_perakende_musteri_id_endpoint(db: Session = Depends(get_db)):
     return {"id": musteri.id}
 
 @router.get("/varsayilan_cariler/genel_tedarikci_id", response_model=modeller.DefaultIdResponse)
-def get_genel_tedarikci_id_endpoint(db: Session = Depends(get_db)):
-    # ID'si 'GENEL_TEDARIKCI' olan kodu ara, bulunamazsa ID'si 1 olanı ara.
-    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.kod == "GENEL_TEDARIKCI").first()
+def get_genel_tedarikci_id_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.kod == "GENEL_TEDARIKCI", semalar.Tedarikci.kullanici_id == kullanici_id).first()
     if not tedarikci:
-        tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == 1).first()
-
+        tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == 1, semalar.Tedarikci.kullanici_id == kullanici_id).first()
     if not tedarikci:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -37,8 +32,7 @@ def get_genel_tedarikci_id_endpoint(db: Session = Depends(get_db)):
     return {"id": tedarikci.id}
 
 @router.get("/varsayilan_kasa_banka/{odeme_turu}", response_model=modeller.KasaBankaRead)
-def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, db: Session = Depends(get_db)):
-    # Ödeme türüne göre varsayılan hesap tipini belirle
+def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
     hesap_tipi = None
     if odeme_turu.upper() == "NAKİT":
         hesap_tipi = semalar.KasaBankaTipiEnum.KASA
@@ -50,14 +44,10 @@ def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, db: Session = Depends(ge
             detail=f"Desteklenmeyen ödeme türü: {odeme_turu}. 'Nakit' veya 'Banka' olmalıdır."
         )
 
-    # Varsayılan hesap koduna göre ara
-    varsayilan_kod = f"VARSAYILAN_{hesap_tipi.value}"
-    hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.kod == varsayilan_kod).first()
-
-    # Eğer varsayılan kodla bir hesap bulunamazsa, ilgili türdeki ilk hesabı al
+    varsayilan_kod = f"VARSAYILAN_{hesap_tipi.value}_{kullanici_id}"
+    hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.kod == varsayilan_kod, semalar.KasaBanka.kullanici_id == kullanici_id).first()
     if not hesap:
-        hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.tip == hesap_tipi).first()
-
+        hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.tip == hesap_tipi, semalar.KasaBanka.kullanici_id == kullanici_id).first()
     if not hesap:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -66,9 +56,8 @@ def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, db: Session = Depends(ge
     return hesap
 
 @router.get("/bilgiler", response_model=modeller.SirketRead)
-def get_sirket_bilgileri_endpoint(db: Session = Depends(get_db)):
-    # Sirket bilgilerini çek
-    sirket_bilgisi = db.query(semalar.Sirket).first()
+def get_sirket_bilgileri_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    sirket_bilgisi = db.query(semalar.Sirket).filter(semalar.Sirket.kullanici_id == kullanici_id).first()
     if not sirket_bilgisi:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -77,15 +66,13 @@ def get_sirket_bilgileri_endpoint(db: Session = Depends(get_db)):
     return sirket_bilgisi
 
 @router.put("/bilgiler", response_model=modeller.SirketRead)
-def update_sirket_bilgileri_endpoint(sirket_update: modeller.SirketCreate, db: Session = Depends(get_db)):
-    # Sirket bilgilerini güncelle veya oluştur
-    sirket_bilgisi = db.query(semalar.Sirket).first()
+def update_sirket_bilgileri_endpoint(sirket_update: modeller.SirketCreate, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    sirket_bilgisi = db.query(semalar.Sirket).filter(semalar.Sirket.kullanici_id == kullanici_id).first()
     if not sirket_bilgisi:
-        # Şirket bilgisi yoksa, yeni oluştur
+        sirket_update.kullanici_id = kullanici_id
         db_sirket = semalar.Sirket(**sirket_update.model_dump())
         db.add(db_sirket)
     else:
-        # Varsa güncelle
         for key, value in sirket_update.model_dump(exclude_unset=True).items():
             setattr(sirket_bilgisi, key, value)
     
@@ -94,9 +81,8 @@ def update_sirket_bilgileri_endpoint(sirket_update: modeller.SirketCreate, db: S
     return sirket_bilgisi
 
 @router.get("/next_fatura_number/{fatura_turu}", response_model=modeller.NextFaturaNoResponse)
-def get_next_fatura_number_endpoint(fatura_turu: str, db: Session = Depends(get_db)):
-    # Fatura türüne göre en yüksek fatura numarasını bul
-    last_fatura = db.query(semalar.Fatura).filter(semalar.Fatura.fatura_turu == fatura_turu.upper()) \
+def get_next_fatura_number_endpoint(fatura_turu: str, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    last_fatura = db.query(semalar.Fatura).filter(semalar.Fatura.fatura_turu == fatura_turu.upper(), semalar.Fatura.kullanici_id == kullanici_id) \
                                        .order_by(semalar.Fatura.fatura_no.desc()).first()
 
     prefix = ""
@@ -114,17 +100,16 @@ def get_next_fatura_number_endpoint(fatura_turu: str, db: Session = Depends(get_
             current_sequence = int(current_sequence_str)
             next_sequence = current_sequence + 1
         except ValueError:
-            # Eğer numara formatı bozuksa, baştan başla
             pass
 
-    next_fatura_no = f"{prefix}{next_sequence:09d}" # SF000000001 formatı
+    next_fatura_no = f"{prefix}{next_sequence:09d}"
     return {"fatura_no": next_fatura_no}
 
 @router.get("/next_musteri_code", response_model=dict)
-def get_next_musteri_code_endpoint(db: Session = Depends(get_db)):
-    last_musteri = db.query(semalar.Musteri).order_by(semalar.Musteri.kod.desc()).first()
+def get_next_musteri_code_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    last_musteri = db.query(semalar.Musteri).filter(semalar.Musteri.kullanici_id == kullanici_id).order_by(semalar.Musteri.kod.desc()).first()
 
-    prefix = "M" # Prefix for customer codes
+    prefix = "M"
     next_sequence = 1
     if last_musteri and last_musteri.kod and last_musteri.kod.startswith(prefix):
         try:
@@ -132,17 +117,16 @@ def get_next_musteri_code_endpoint(db: Session = Depends(get_db)):
             current_sequence = int(current_sequence_str)
             next_sequence = current_sequence + 1
         except ValueError:
-            # If format is broken, start from 1
             pass
 
-    next_musteri_code = f"{prefix}{next_sequence:09d}" # M000000001 format
+    next_musteri_code = f"{prefix}{next_sequence:09d}"
     return {"next_code": next_musteri_code}
 
 @router.get("/next_tedarikci_code", response_model=dict)
-def get_next_tedarikci_code_endpoint(db: Session = Depends(get_db)):
-    last_tedarikci = db.query(semalar.Tedarikci).order_by(semalar.Tedarikci.kod.desc()).first()
+def get_next_tedarikci_code_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    last_tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.kullanici_id == kullanici_id).order_by(semalar.Tedarikci.kod.desc()).first()
 
-    prefix = "T" # Prefix for supplier codes
+    prefix = "T"
     next_sequence = 1
     if last_tedarikci and last_tedarikci.kod and last_tedarikci.kod.startswith(prefix):
         try:
@@ -150,17 +134,16 @@ def get_next_tedarikci_code_endpoint(db: Session = Depends(get_db)):
             current_sequence = int(current_sequence_str)
             next_sequence = current_sequence + 1
         except ValueError:
-            # If format is broken, start from 1
             pass
 
-    next_tedarikci_code = f"{prefix}{next_sequence:09d}" # T000000001 format
+    next_tedarikci_code = f"{prefix}{next_sequence:09d}"
     return {"next_code": next_tedarikci_code}
 
 @router.get("/next_stok_code", response_model=dict)
-def get_next_stok_code_endpoint(db: Session = Depends(get_db)):
-    last_stok = db.query(semalar.Stok).order_by(semalar.Stok.kod.desc()).first()
+def get_next_stok_code_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    last_stok = db.query(semalar.Stok).filter(semalar.Stok.kullanici_id == kullanici_id).order_by(semalar.Stok.kod.desc()).first()
 
-    prefix = "STK" # Prefix for stock codes
+    prefix = "STK"
     next_sequence = 1
     if last_stok and last_stok.kod and last_stok.kod.startswith(prefix):
         try:
@@ -168,24 +151,19 @@ def get_next_stok_code_endpoint(db: Session = Depends(get_db)):
             current_sequence = int(current_sequence_str)
             next_sequence = current_sequence + 1
         except ValueError:
-            # If format is broken, start from 1
             pass
 
-    next_stok_code = f"{prefix}{next_sequence:09d}" # STK000000001 format
+    next_stok_code = f"{prefix}{next_sequence:09d}"
     return {"next_code": next_stok_code}
 
 @router.get("/next_siparis_kodu", response_model=modeller.NextSiparisKoduResponse)
-def get_next_siparis_kodu_endpoint(db: Session = Depends(get_db)):
-    """
-    API'den bir sonraki sipariş kodunu oluşturup döner.
-    Format: SIPARIS-000001 gibi.
-    """
-    son_siparis = db.query(semalar.Siparis).order_by(semalar.Siparis.id.desc()).first()
+def get_next_siparis_kodu_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+    son_siparis = db.query(semalar.Siparis).filter(semalar.Siparis.kullanici_id == kullanici_id).order_by(semalar.Siparis.id.desc()).first()
     
     prefix = "S-"
     next_number = 1
     
-    if son_siparis and son_siparis.siparis_no.startswith(prefix):
+    if son_siparis and son_siparis.siparis_no and son_siparis.siparis_no.startswith(prefix):
         try:
             last_number_str = son_siparis.siparis_no.split('-')[1]
             last_number = int(last_number_str)
@@ -198,9 +176,7 @@ def get_next_siparis_kodu_endpoint(db: Session = Depends(get_db)):
 
 @router.get("/status", response_model=dict)
 def get_sistem_status(db: Session = Depends(get_db)):
-    """API'nin ve veritabanı bağlantısının durumunu kontrol eder."""
     try:
-        # Veritabanı bağlantısını basit bir sorgu ile test et
         db.execute(text("SELECT 1"))
         return {"status": "ok", "database": "connected"}
     except Exception as e:
@@ -211,6 +187,5 @@ def get_sistem_status(db: Session = Depends(get_db)):
 
 @router.post("/veritabani_baglantilarini_kapat")
 async def veritabani_baglantilarini_kapat():
-    """Tüm veritabanı bağlantılarını kapatır. Sadece yönetim amaçlıdır."""
     reset_db_connection()
     return PlainTextResponse("Veritabanı bağlantıları başarıyla kapatıldı.")
