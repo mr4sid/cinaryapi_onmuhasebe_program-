@@ -26,8 +26,8 @@ class FaturaService:
         self.db = db_manager
         self.app = app_ref
         logger.info("FaturaService başlatıldı.")
-        # DÜZELTME: Kullanıcı ID'sini başlangıçta alıyoruz
-        self.current_user_id = self.app.current_user[0] if self.app and hasattr(self.app, 'current_user') else None
+        # DÜZELTME: Kullanıcı ID'sini sözlükten alıyoruz
+        self.current_user_id = self.app.current_user.get("id") if self.app and hasattr(self.app, 'current_user') else None
 
     def fatura_olustur(self, fatura_no, tarih, fatura_tipi, cari_id, kalemler_data, odeme_turu,
                          kasa_banka_id=None, misafir_adi=None, fatura_notlari=None, vade_tarihi=None,
@@ -119,13 +119,12 @@ class FaturaService:
             return False, f"Siparişi faturaya dönüştürülürken beklenmeyen bir hata oluştu: {e}"
 
 class CariService:
-    def __init__(self, db_manager, app_ref):
+    def __init__(self, db_manager, app):
         self.db = db_manager
-        self.app = app_ref
+        self.app = app
+        self.current_user_id = self.app.current_user.get("id") if self.app and hasattr(self.app, 'current_user') else None
         logger.info("CariService başlatıldı.")
-        self.current_user_id = self.app.current_user[0] if self.app and hasattr(self.app, 'current_user') else None
-
-
+        
     def musteri_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
         params = {
             "skip": skip,
@@ -212,7 +211,8 @@ class TopluIslemService:
             "urun_birimleri": {},
             "ulkeler": {}
         }
-        self.current_user_id = self.app.current_user[0] if self.app and hasattr(self.app, 'current_user') else None
+        # DÜZELTME: Kullanıcı ID'sini sözlükten güvenli bir şekilde al
+        self.current_user_id = self.app.current_user.get("id") if self.app and hasattr(self.app, 'current_user') else None
         self._load_nitelik_cache()
     
     def _load_nitelik_cache(self):
@@ -632,9 +632,11 @@ class LokalVeritabaniServisi:
         finally:
             db.close()
             
-    def senkronize_veriler(self, sunucu_adresi: str):
+    def senkronize_veriler(self, sunucu_adresi: str, kullanici_id: Optional[int] = None):
         if not sunucu_adresi:
             return False, "Sunucu adresi belirtilmedi. Senkronizasyon atlandı."
+        if kullanici_id is None:
+            return False, "Kullanıcı kimliği belirtilmedi. Senkronizasyon atlandı."
             
         lokal_db = None
         try:
@@ -690,7 +692,7 @@ class LokalVeritabaniServisi:
             }
 
             for endpoint, model in endpoints.items():
-                response = requests.get(f"{sunucu_adresi}/{endpoint}", params={"limit": 999999})
+                response = requests.get(f"{sunucu_adresi}/{endpoint}", params={"limit": 999999, "kullanici_id": kullanici_id})
                 response.raise_for_status()
                 response_data = response.json()
                 if isinstance(response_data, dict) and "items" in response_data:
@@ -778,12 +780,23 @@ class LokalVeritabaniServisi:
             with self.SessionLocal() as session:
                 kullanici_id = user_data.get("id")
                 kullanici = session.query(modeller.Kullanici).filter(modeller.Kullanici.id == kullanici_id).first()
+
+                # Modelde olmayan anahtarları filtrele
+                valid_user_data = {
+                    key: value for key, value in user_data.items()
+                    if key in [column.name for column in modeller.Kullanici.__table__.columns]
+                }
+                
+                # Sadece token ve token_tipi bilgisini ek olarak sakla
+                token = user_data.get("access_token")
+                token_tipi = user_data.get("token_type")
+
                 if kullanici:
-                    kullanici.kullanici_adi = user_data.get("kullanici_adi")
-                    kullanici.yetki = user_data.get("yetki")
-                    kullanici.token = user_data.get("access_token")
-                    kullanici.token_tipi = user_data.get("token_type")
-                    kullanici.aktif = user_data.get("aktif")
+                    # Kullanıcı verilerini ve token'ı güncelle
+                    for key, value in valid_user_data.items():
+                        setattr(kullanici, key, value)
+                    setattr(kullanici, 'token', token)
+                    setattr(kullanici, 'token_tipi', token_tipi)
                     kullanici.son_giris_tarihi = datetime.now()
                     logger.info(f"Kullanıcı verisi güncellendi: {kullanici.kullanici_adi}")
                 else:
@@ -791,14 +804,16 @@ class LokalVeritabaniServisi:
                         id=kullanici_id,
                         kullanici_adi=user_data.get("kullanici_adi"),
                         yetki=user_data.get("yetki"),
-                        token=user_data.get("access_token"),
-                        token_tipi=user_data.get("token_type"),
                         aktif=user_data.get("aktif"),
                         olusturma_tarihi=datetime.now(),
-                        son_giris_tarihi=datetime.now()
+                        son_giris_tarihi=datetime.now(),
+                        # Token bilgilerini doğrudan modele atama
+                        token=token,
+                        token_tipi=token_tipi
                     )
                     session.add(yeni_kullanici)
                     logger.info(f"Yeni kullanıcı yerel veritabanına kaydedildi: {yeni_kullanici.kullanici_adi}")
+                
                 session.commit()
                 return True
         except Exception as e:

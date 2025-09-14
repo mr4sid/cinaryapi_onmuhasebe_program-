@@ -110,14 +110,16 @@ class OnMuhasebe:
             try:
                 requests.get(f"{self.api_base_url}/sistem/status", timeout=5)
                 self.is_online = True
-                logger.info("API bağlantısı başarılı. Çevrimiçi mod aktif.")
-                self.app.set_status_message("API bağlantısı başarılı. Çevrimiçi mod aktif.", "green")
+                if self.app:
+                    self.app.set_status_message("API bağlantısı başarılı. Çevrimiçi mod aktif.", "green")
                 return True
             except (ConnectionError, Timeout, RequestException) as e:
                 self.is_online = False
+                if self.app:
+                    self.app.set_status_message("API'ye bağlanılamadı. Çevrimdışı mod aktif.", "red")
                 logger.error(f"API'ye bağlanılamadı. Çevrimdışı moda geçiliyor. Hata: {e}")
-                self.app.set_status_message("API'ye bağlanılamadı. Çevrimdışı mod aktif.", "red")
                 return False
+        self.is_online = False
         return False
 
     def _make_api_request(self, method: str, path: str, params: dict = None, json: dict = None):
@@ -191,34 +193,46 @@ class OnMuhasebe:
             return False, f"Şirket bilgileri kaydedilirken hata: {e}"
 
     # --- KULLANICI YÖNETİMİ ---
-    def kullanici_dogrula(self, kullanici_adi, sifre):
-        # 1. Çevrimiçi ise, API üzerinden doğrulamayı dene
-        if self.is_online:
-            try:
-                response = self._make_api_request("POST", "/dogrulama/login", json={"kullanici_adi": kullanici_adi, "sifre": sifre})
-                if response:
-                    # Başarılı API doğrulaması sonrası kullanıcıyı yerel DB'ye kaydet/güncelle
-                    self.lokal_db.kullanici_kaydet(response)
+    def kullanici_dogrula(self, kullanici_adi: str, sifre: str) -> Optional[Dict[str, Any]]:
+        if self.check_online_status():
+            return self._kullanici_dogrula_api(kullanici_adi, sifre)
+        else:
+            if self.app:
+                self.app.set_status_message("API bağlantısı yok. Yerel veritabanından deniyor.", "orange")
+            return self._kullanici_dogrula_lokal(kullanici_adi, sifre)
+
+    def _kullanici_dogrula_api(self, kullanici_adi: str, sifre: str) -> Optional[Dict[str, Any]]:
+        """API üzerinden kullanıcı doğrulama işlemini yapar."""
+        try:
+            response = self._make_api_request("POST", "/dogrulama/login", json={"kullanici_adi": kullanici_adi, "sifre": sifre})
+            if response:
+                self.lokal_db.kullanici_kaydet(response)
+                if self.app:
                     self.app.set_status_message("API üzerinden doğrulama başarılı.", "green")
-                    return response.get("access_token"), response.get("token_type")
-            except (ValueError, ConnectionError, Exception) as e:
-                logger.error(f"Kullanıcı doğrulama API üzerinden başarısız: {e}")
-                self.app.set_status_message("API bağlantısı yok. Yerel doğrulama deneniyor.", "orange")
-                self.is_online = False
-        
-        # 2. Çevrimdışı ise veya API doğrulaması başarısız olursa, yerel DB'de doğrulamayı dene
+                return response
+        except (ValueError, ConnectionError, Exception) as e:
+            logger.error(f"Kullanıcı doğrulama API üzerinden başarısız: {e}")
+            if self.app:
+                self.app.set_status_message("API'den doğrulama başarısız. Yerel doğrulama deneniyor.", "orange")
+        return None
+
+    def _kullanici_dogrula_lokal(self, kullanici_adi: str, sifre: str) -> Optional[Dict[str, Any]]:
+        """Yerel veritabanında kullanıcı doğrulama işlemini yapar."""
         try:
             kullanici = self.lokal_db.kullanici_dogrula(kullanici_adi, sifre)
             if kullanici:
-                self.app.set_status_message("Çevrimdışı doğrulama başarılı.", "green")
-                return kullanici.get("access_token", "OFFLINE_TOKEN"), kullanici.get("token_type", "bearer")
+                if self.app:
+                    self.app.set_status_message("Çevrimdışı doğrulama başarılı.", "green")
+                return kullanici
             else:
-                self.app.set_status_message("Çevrimdışı doğrulama başarısız. Kullanıcı adı veya şifre hatalı.", "red")
-                return None, None
+                if self.app:
+                    self.app.set_status_message("Çevrimdışı doğrulama başarısız. Kullanıcı adı veya şifre hatalı.", "red")
+                return None
         except Exception as e:
             logger.error(f"Kullanıcı doğrulama yerel DB'de başarısız: {e}")
-            self.app.set_status_message(f"Yerel doğrulama sırasında hata: {e}", "red")
-            return None, None
+            if self.app:
+                self.app.set_status_message(f"Yerel doğrulama sırasında hata: {e}", "red")
+        return None
 
     def kullanici_listele(self):
         """API'den kullanıcı listesini çeker. Yanıtı 'items' listesi olarak döndürür."""

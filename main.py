@@ -285,10 +285,12 @@ class SyncWorker(QObject):
             self.is_finished.emit(success, message)
 
 class App(QMainWindow):
-    backup_completed_signal = Signal(bool, str, str)    
-    def __init__(self):
-        super().__init__()  
-        self.backup_completed_signal.connect(self._handle_backup_completion)
+    def __init__(self, current_user: dict):
+        super().__init__()
+        # DÜZELTME: Kullanıcı ID'sini sözlükten alıyoruz
+        self.current_user = current_user
+        self.current_user_id = current_user.get("id")
+        
         self.ui_main_window_setup = Ui_MainWindow_Minimal()
         self.ui_main_window_setup.setupUi(self)
 
@@ -296,15 +298,22 @@ class App(QMainWindow):
         self.config = load_config()
 
         self.db_manager = None
-        self.is_online = False  # Yeni durum değişkeni
-        self._initialize_db_manager() # Bu metot artık uygulamayı durdurmayacak
+        self.is_online = False
+        self._initialize_db_manager()
+
         self.tab_widget = QTabWidget(self)
         self.setCentralWidget(self.tab_widget)
-
-        # Hata veren satırın çözümü:
         self.open_cari_ekstre_windows = {}
-        self.current_user = None
 
+        self._setup_ui_elements()
+        self._setup_ui_connections()
+        self._initial_load_data()
+        self._start_background_sync()
+        self._update_status_bar()
+        self.set_status_message("Uygulama başlatılıyor, sunucuya bağlanılıyor...")
+
+    def _setup_ui_elements(self):
+        """Kullanıcı girişi başarılı olduktan sonra arayüz elemanlarını oluşturur."""
         self.ana_sayfa_widget = AnaSayfa(self, self.db_manager, self)
         self.tab_widget.addTab(self.ana_sayfa_widget, "Ana Sayfa")
 
@@ -317,7 +326,6 @@ class App(QMainWindow):
         self.tedarikci_yonetimi_sayfasi = TedarikciYonetimiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.tedarikci_yonetimi_sayfasi, "Tedarikçi Yönetimi")
 
-        # Hata burada başlıyordu. FaturaListesiSayfasi'na 'SATIŞ' ve 'ALIŞ' stringleri yerine sabitler gönderilmeli.
         self.fatura_listesi_sayfasi = FaturaListesiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.fatura_listesi_sayfasi, "Faturalar")
 
@@ -342,64 +350,6 @@ class App(QMainWindow):
         self.fatura_service = FaturaService(self.db_manager, self)
         self.toplu_islem_service = TopluIslemService(self.db_manager, self)
         self.cari_service = CariService(self.db_manager, self)
-
-        self._setup_ui_connections() 
-        self._initial_load_data()
-        self._start_background_sync()
-        # Yeni Menü eylemleri bağlantıları
-        self.actionStok_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
-            'pencereler.StokKartiPenceresi',
-            self.stok_yonetimi_sayfasi.stok_listesini_yenile
-        ))
-        self.actionM_teri_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
-            'pencereler.YeniMusteriEklePenceresi',
-            self.musteri_yonetimi_sayfasi.musteri_listesini_yenile
-        ))
-        self.actionTedarik_i_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
-            'pencereler.YeniTedarikciEklePenceresi',
-            self.tedarikci_yonetimi_sayfasi.tedarikci_listesini_yenile
-        ))
-        self.actionKasa_Banka_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
-            'pencereler.YeniKasaBankaEklePenceresi',
-            self.kasa_banka_yonetimi_sayfasi.hesap_listesini_yenile
-        ))
-        self.actionGelir_Gider_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
-            'pencereler.YeniGelirGiderEklePenceresi',
-            self.gelir_gider_sayfasi.gelir_listesi_frame.gg_listesini_yukle # Hem gelir hem gider listesini yenilemeli
-        ))
-        self.actionFatura_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
-            'pencereler.FaturaPenceresi',
-            self.fatura_listesi_sayfasi.fatura_listesini_yukle
-        ))
-        self.action_rsiparis.triggered.connect(lambda: self._open_dialog_with_callback(
-            'pencereler.SiparisPenceresi',
-            self.siparis_listesi_sayfasi.siparis_listesini_yukle
-        ))
-        self.actionCari_Hareketler.triggered.connect(self._cari_hareketler_penceresi_ac)
-        self.actionNitelik_Y_netimi.triggered.connect(lambda: self._open_dialog_with_callback(
-            'pencereler.UrunNitelikYonetimiPenceresi',
-            lambda: (self.stok_yonetimi_sayfasi._yukle_filtre_comboboxlari_stok_yonetimi(), self.stok_yonetimi_sayfasi.stok_listesini_yenile())
-        ))
-        self.actionToplu_Veri_Aktar_m.triggered.connect(lambda: self._open_dialog_with_callback(
-            'pencereler.TopluVeriEklePenceresi'
-        ))
-        self.actionVeri_Yonetimi.triggered.connect(self._veri_yonetimi_penceresi_ac)
-        self.actionM_teri_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.actionTedarik_i_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.actionStok_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.actionFatura_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.actionKasa_Banka_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.actionGelir_Gider_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.actionCari_Hareket_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.actionSiparis_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.actionNitelik_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-
-        self.actionYedekle.triggered.connect(self._yedekle)
-        self.actionGeri_Y_kle.triggered.connect(self._geri_yukle)
-        self.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
-        self.actionY_netici_Ayarlar.triggered.connect(self._yonetici_ayarlari_penceresi_ac)
-        self._update_status_bar()
-        self.set_status_message("Uygulama başlatılıyor, sunucuya bağlanılıyor...")
 
     def _start_background_sync(self):
         """Senkronizasyon işlemini arkaplan thread'inde başlatır."""
@@ -631,9 +581,12 @@ class App(QMainWindow):
 
         if hasattr(self.tedarikci_yonetimi_sayfasi, 'tedarikci_listesini_yenile'):
             self.tedarikci_yonetimi_sayfasi.tedarikci_listesini_yenile()
-
-        if hasattr(self.fatura_listesi_sayfasi, 'fatura_listesini_yukle'):
-            self.fatura_listesi_sayfasi.fatura_listesini_yukle()
+        
+        # DÜZELTME: Fatura listesi sayfasını yükleme mantığı
+        if hasattr(self.fatura_listesi_sayfasi.satis_fatura_frame, 'fatura_listesini_yukle'):
+            self.fatura_listesi_sayfasi.satis_fatura_frame.fatura_listesini_yukle()
+        if hasattr(self.fatura_listesi_sayfasi.alis_fatura_frame, 'fatura_listesini_yukle'):
+            self.fatura_listesi_sayfasi.alis_fatura_frame.fatura_listesini_yukle()
 
         if hasattr(self.siparis_listesi_sayfasi, 'siparis_listesini_yukle'):
             self.siparis_listesi_sayfasi.siparis_listesini_yukle()
@@ -647,12 +600,11 @@ class App(QMainWindow):
         if hasattr(self.gelir_gider_sayfasi, 'gider_listesi_frame') and hasattr(self.gelir_gider_sayfasi.gider_listesi_frame, 'gg_listesini_yukle'):
             self.gelir_gider_sayfasi.gider_listesi_frame.gg_listesini_yukle()
 
-        # Raporlama Merkezi sayfasını da yükle
         if hasattr(self.raporlama_merkezi_sayfasi, 'raporu_olustur_ve_yenile'):
             self.raporlama_merkezi_sayfasi.raporu_olustur_ve_yenile()
 
         logger.info("Ana ekran verileri API'den başarıyla yüklendi (AnaSayfa'nın metodları aracılığıyla).")
-        
+
     def _set_default_dates(self):
         # Bu metod ilgili sayfalara taşınacak.
         pass
@@ -899,7 +851,23 @@ if __name__ == "__main__":
     palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
     palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
     app.setPalette(palette)
+    from arayuz import GirisEkrani
+    db_manager_login = OnMuhasebe(api_base_url=load_config()["api_base_url"], app_ref=None)
+    login_screen = GirisEkrani(None, db_manager_login)
 
-    window = App()
-    window.show()
-    sys.exit(app.exec())
+    def on_successful_login(user_data):
+        """Giriş başarılı olduğunda ana uygulamayı başlatır ve kullanıcı bilgilerini iletir."""
+        global main_window
+        # App sınıfına kullanıcı verilerini gönderiyoruz
+        main_window = App(user_data)
+        # Yeni bir referans ataması yapıyoruz
+        db_manager_login.app = main_window 
+        main_window.show()
+        login_screen.accept()
+
+    login_screen.login_success.connect(on_successful_login)
+
+    if login_screen.exec() == QDialog.Accepted:
+        sys.exit(app.exec())
+    else:
+        sys.exit(0)

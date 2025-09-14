@@ -855,14 +855,17 @@ class Sirket(Base):
     sirket_logo_yolu = Column(String, nullable=True)
 
 class Kullanici(Base):
-    __tablename__ = 'kullanicilar'
-    id = Column(Integer, primary_key=True)
-    kullanici_adi = Column(String, unique=True)
+    __tablename__ = "kullanicilar"
+
+    id = Column(Integer, primary_key=True, index=True)
+    kullanici_adi = Column(String(50), unique=True, index=True)
     hashed_sifre = Column(String)
     yetki = Column(String)
-    aktif = Column(Boolean)
+    aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
     son_giris_tarihi = Column(DateTime, nullable=True)
+    token = Column(String, nullable=True)
+    token_tipi = Column(String, nullable=True)
 
 class Musteri(Base):
     __tablename__ = 'musteriler'

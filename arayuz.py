@@ -176,15 +176,13 @@ class AnaSayfa(QWidget):
         return card_frame
 
     def guncelle_sirket_adi(self):
-        # TODO: Bu metot, şirket bilgilerini API'den çekecek şekilde güncellenecek.
-        # Şimdilik hata vermemesi için statik bir değer atıyoruz.
         sirket_adi = "Şirket Adı (API'den Gelecek)"
         self.sirket_adi_label.setText(f"Hoş Geldiniz, {sirket_adi}")
 
     def guncelle_ozet_bilgiler(self):
         """Dashboard'daki tüm özet bilgileri API'den çeker ve günceller."""
         try:
-            ozet_data = self.db.get_dashboard_summary(self.app.current_user_id)
+            ozet_data = self.db.get_dashboard_summary(kullanici_id=self.app.current_user_id)
             if ozet_data:
                 self.lbl_toplam_satis_degeri.setText(self.db._format_currency(ozet_data.get('toplam_satislar', 0.0)))
                 self.lbl_toplam_alis_degeri.setText(self.db._format_currency(ozet_data.get('toplam_alislar', 0.0)))
@@ -212,39 +210,45 @@ class AnaSayfa(QWidget):
             simdi = datetime.now()
             gecmis_bir_yil = simdi - timedelta(days=365)
             aylik_satis_ozeti = self.db.get_monthly_sales_summary(
-                self.app.current_user_id,
-                gecmis_bir_yil.strftime('%Y-%m-%d'),
-                simdi.strftime('%Y-%m-%d')
+                kullanici_id=self.app.current_user_id,
+                baslangic_tarihi=gecmis_bir_yil.strftime('%Y-%m-%d'),
+                bitis_tarihi=simdi.strftime('%Y-%m-%d')
             )
             
-            aylar = [item['ay_adi'] for item in aylik_satis_ozeti]
-            satislar = [item['toplam_satis'] for item in aylik_satis_ozeti]
-            alislar = [item['toplam_alis'] for item in aylik_satis_ozeti]
+            if not isinstance(aylik_satis_ozeti, list):
+                aylik_satis_ozeti = []
             
-            x = np.arange(len(aylar))
-            width = 0.35
+            aylar = [item.get('ay_adi', '-') for item in aylik_satis_ozeti]
+            satislar = [item.get('toplam_satis', 0) for item in aylik_satis_ozeti]
+            alislar = [item.get('toplam_alis', 0) for item in aylik_satis_ozeti]
             
-            rects1 = ax.bar(x - width/2, satislar, width, label='Satış', color='green')
-            rects2 = ax.bar(x + width/2, alislar, width, label='Alış', color='red')
+            if not aylar:
+                ax.text(0.5, 0.5, "Grafik verisi bulunamadı.", horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, fontsize=12)
+            else:
+                x = np.arange(len(aylar))
+                width = 0.35
+                
+                rects1 = ax.bar(x - width/2, satislar, width, label='Satış', color='green')
+                rects2 = ax.bar(x + width/2, alislar, width, label='Alış', color='red')
 
-            ax.set_ylabel('Tutar (TL)')
-            ax.set_title('Aylık Satış ve Alış Özeti')
-            ax.set_xticks(x)
-            ax.set_xticklabels(aylar, rotation=45, ha="right")
-            ax.legend()
-            
-            def autolabel(rects):
-                for rect in rects:
-                    height = rect.get_height()
-                    if height > 0:
-                        ax.annotate(f'{height:,.0f}',
-                                    xy=(rect.get_x() + rect.get_width() / 2, height),
-                                    xytext=(0, 3),
-                                    textcoords="offset points",
-                                    ha='center', va='bottom', fontsize=8)
+                ax.set_ylabel('Tutar (TL)')
+                ax.set_title('Aylık Satış ve Alış Özeti')
+                ax.set_xticks(x)
+                ax.set_xticklabels(aylar, rotation=45, ha="right")
+                ax.legend()
+                
+                def autolabel(rects):
+                    for rect in rects:
+                        height = rect.get_height()
+                        if height > 0:
+                            ax.annotate(f'{height:,.0f}',
+                                        xy=(rect.get_x() + rect.get_width() / 2, height),
+                                        xytext=(0, 3),
+                                        textcoords="offset points",
+                                        ha='center', va='bottom', fontsize=8)
 
-            autolabel(rects1)
-            autolabel(rects2)
+                autolabel(rects1)
+                autolabel(rects2)
 
             fig.tight_layout()
             self.aylik_grafik_canvas.draw()
@@ -482,7 +486,7 @@ class StokYonetimiSayfasi(QWidget):
     def _yukle_filtre_comboboxlari_stok_yonetimi(self):
         try:
             # Kategorileri yükle
-            kategoriler_response = self.db.kategori_listele()
+            kategoriler_response = self.db.kategori_listele(kullanici_id=self.app.current_user_id)
             # API yanıtının bir sözlük veya liste olabileceğini kontrol ediyoruz
             kategoriler_list = kategoriler_response.get("items", []) if isinstance(kategoriler_response, dict) else kategoriler_response
             self.kategoriler = [{"id": k.get("id"), "ad": k.get("ad")} for k in kategoriler_list]
@@ -492,7 +496,8 @@ class StokYonetimiSayfasi(QWidget):
                 self.kategori_filter_cb.addItem(kategori["ad"], userData=kategori["id"])
 
             # Markaları yükle
-            markalar_response = self.db.marka_listele()
+            # DÜZELTME: marka_listele metoduna kullanici_id parametresini ekle
+            markalar_response = self.db.marka_listele(kullanici_id=self.app.current_user_id)
             # API yanıtının bir sözlük veya liste olabileceğini kontrol ediyoruz
             markalar_list = markalar_response.get("items", []) if isinstance(markalar_response, dict) else markalar_response
             self.markalar = [{"id": m.get("id"), "ad": m.get("ad")} for m in markalar_list]
@@ -502,7 +507,8 @@ class StokYonetimiSayfasi(QWidget):
                 self.marka_filter_cb.addItem(marka["ad"], userData=marka["id"])
 
             # Ürün Gruplarını yükle
-            urun_gruplari_response = self.db.urun_grubu_listele()
+            # DÜZELTME: urun_grubu_listele metoduna kullanici_id parametresini ekle
+            urun_gruplari_response = self.db.urun_grubu_listele(kullanici_id=self.app.current_user_id)
             # API yanıtının bir sözlük veya liste olabileceğini kontrol ediyoruz
             urun_gruplari_list = urun_gruplari_response.get("items", []) if isinstance(urun_gruplari_response, dict) else urun_gruplari_response
             self.urun_gruplari = [{"id": g.get("id"), "ad": g.get("ad")} for g in urun_gruplari_list]
@@ -527,12 +533,10 @@ class StokYonetimiSayfasi(QWidget):
         self.after_timer.singleShot(300, self.stok_listesini_yenile)
 
     def stok_listesini_yenile(self):
-        """API'den güncel stok listesini çeker ve TreeView'i günceller."""
         self.tree_stok.clear()
         try:
-            # DÜZELTME: API çağrısına `kullanici_id` parametresi eklendi.
             stok_listesi_response = self.db.stok_listesi_al(
-                kullanici_id=self.app.current_user[0] if hasattr(self.app, 'current_user') else None,
+                kullanici_id=self.app.current_user_id,
                 arama=self.arama_entry.text(),
                 aktif_durum=self.aktif_urun_checkBox.isChecked(),
                 kritik_stok_altinda=self.kritik_stok_altinda_checkBox.isChecked(),
@@ -834,16 +838,15 @@ class KasaBankaYonetimiSayfasi(QWidget):
         """API'den güncel kasa/banka listesini çeker ve TreeView'i günceller."""
         self.tree_kb.clear()
         try:
-            # DÜZELTME: API çağrısına `kullanici_id` parametresi eklendi.
             hesaplar_response = self.db.kasa_banka_listesi_al(
-                kullanici_id=self.app.current_user[0] if hasattr(self.app, 'current_user') else None,
+                kullanici_id=self.app.current_user.get("id"),
                 arama=self.arama_entry_kb.text(),
                 hesap_turu=self.tip_filtre_kb.currentText() if self.tip_filtre_kb.currentText() != "TÜMÜ" else None,
                 aktif_durum=self.aktif_hesap_checkBox.isChecked()
             )
             
             if not isinstance(hesaplar_response, dict) or "items" not in hesaplar_response:
-                 raise ValueError("API'den geçersiz kasa/banka listesi yanıtı alındı.")
+                raise ValueError("API'den geçersiz kasa/banka listesi yanıtı alındı.")
 
             hesaplar = hesaplar_response["items"]
             
@@ -1144,14 +1147,12 @@ class MusteriYonetimiSayfasi(QWidget):
         self.ekstre_button.setEnabled(bool(selected_items))
 
     def musteri_listesini_yenile(self):
-        """API'den güncel müşteri listesini çeker ve TreeView'i günceller."""
         self.tree.clear()
         try:
-            # DÜZELTME: API çağrısına `kullanici_id` parametresi eklendi.
             musteriler_response = self.db.musteri_listesi_al(
-                kullanici_id=self.app.current_user[0] if hasattr(self.app, 'current_user') else None,
+                kullanici_id=self.app.current_user_id,
                 arama=self.arama_entry.text(),
-                aktif_durum=True # Varsayılan olarak aktif müşterileri göster
+                aktif_durum=True
             )
 
             if not isinstance(musteriler_response, dict) or "items" not in musteriler_response:
@@ -1494,14 +1495,12 @@ class TedarikciYonetimiSayfasi(QWidget):
         self.ekstre_button_ted.setEnabled(bool(selected_items))
 
     def tedarikci_listesini_yenile(self):
-        """API'den güncel tedarikçi listesini çeker ve TreeView'i günceller."""
         self.tree.clear()
         try:
-            # DÜZELTME: API çağrısına `kullanici_id` parametresi eklendi.
             tedarikciler_response = self.db.tedarikci_listesi_al(
-                kullanici_id=self.app.current_user[0] if hasattr(self.app, 'current_user') else None,
+                kullanici_id=self.app.current_user_id,
                 arama=self.arama_entry.text(),
-                aktif_durum=True # Varsayılan olarak aktif tedarikçileri göster
+                aktif_durum=True
             )
 
             if not isinstance(tedarikciler_response, dict) or "items" not in tedarikciler_response:
@@ -1736,11 +1735,9 @@ class FaturaListesiSayfasi(QWidget):
     def fatura_listesini_yukle(self):
         self.app.set_status_message("Fatura listesi güncelleniyor...")
         self.fatura_tree.clear()
-
         try:
-            # DÜZELTME: API çağrısına `kullanici_id` parametresi eklendi.
             fatura_listesi_response = self.db.fatura_listesi_al(
-                kullanici_id=self.app.current_user[0] if hasattr(self.app, 'current_user') else None,
+                kullanici_id=self.app.current_user_id,
                 arama=self.arama_fatura_entry.text(),
                 fatura_turu=self.fatura_tipi_filter_cb.currentText() if self.fatura_tipi_filter_cb.currentText() != "TÜMÜ" else None,
                 odeme_turu=self.odeme_turu_filter_cb.currentText() if self.odeme_turu_filter_cb.currentText() != "TÜMÜ" else None,
@@ -2066,11 +2063,10 @@ class SiparisListesiSayfasi(QWidget):
             siparis_tipi_filter_val = "SATIŞ_SIPARIS"
         elif selected_siparis_tipi_filter == "ALIŞ_SIPARIS":
             siparis_tipi_filter_val = "ALIŞ_SIPARIS"
-        
+            
         try:
-            # DÜZELTME: Veriler artık yerel veritabanından `kullanici_id` filtresiyle çekiliyor.
             with lokal_db_servisi.get_db() as db:
-                siparisler_query = db.query(Siparis).filter(Siparis.kullanici_id == self.app.current_user[0])
+                siparisler_query = db.query(Siparis).filter(Siparis.kullanici_id == self.app.current_user_id)
 
                 if bas_t:
                     siparisler_query = siparisler_query.filter(Siparis.tarih >= bas_t)
@@ -2609,17 +2605,19 @@ class BaseFaturaListesi(QWidget):
         self.kasa_banka_filter_cb.addItem("TÜMÜ", userData=None)
         
         try:
-            # Cari verilerini çekme
-            # Bu çağrı hem API'den dict listesi hem de yerelden SQLAlchemy nesneleri listesi döndürebilir.
             cariler = []
             if self.fatura_tipi == self.db.FATURA_TIP_SATIS:
-                cariler = self.db.musteri_listesi_al()
-                if isinstance(cariler, dict):
-                    cariler = cariler.get('items', [])
+                cariler_response = self.db.musteri_listesi_al(kullanici_id=self.app.current_user_id) 
+                if isinstance(cariler_response, dict):
+                    cariler = cariler_response.get('items', [])
+                else:
+                    cariler = cariler_response
             elif self.fatura_tipi == self.db.FATURA_TIP_ALIS:
-                cariler = self.db.tedarikci_listesi_al()
-                if isinstance(cariler, dict):
-                    cariler = cariler.get('items', [])
+                cariler_response = self.db.tedarikci_listesi_al(kullanici_id=self.app.current_user_id)
+                if isinstance(cariler_response, dict):
+                    cariler = cariler_response.get('items', [])
+                else:
+                    cariler = cariler_response
 
             for cari in cariler:
                 display_text = ""
@@ -2647,7 +2645,7 @@ class BaseFaturaListesi(QWidget):
                 self.odeme_turu_filter_cb.addItem(odeme_turu, userData=odeme_turu)
 
             # Kasa/Banka hesaplarını çekme
-            kasalar_bankalar = self.db.kasa_banka_listesi_al()
+            kasalar_bankalar = self.db.kasa_banka_listesi_al(kullanici_id=self.app.current_user_id)
             if isinstance(kasalar_bankalar, dict):
                 kasalar_bankalar = kasalar_bankalar.get('items', [])
             
@@ -5865,17 +5863,16 @@ class BaseGelirGiderListesi(QWidget):
             baslangic_tarihi = self.bas_tarih_entry.text()
             bitis_tarihi = self.bit_tarih_entry.text()
 
-            filters = {
+            params_to_send = {
                 "skip": (self.mevcut_sayfa - 1) * self.kayit_sayisi_per_sayfa,
                 "limit": self.kayit_sayisi_per_sayfa,
                 "aciklama_filtre": arama_terimi,
                 "baslangic_tarihi": baslangic_tarihi,
                 "bitis_tarihi": bitis_tarihi,
                 "tip_filtre": self.islem_tipi if self.islem_tipi != "TÜMÜ" else None,
+                "kullanici_id": self.app.current_user_id # DÜZELTME: kullanici_id parametresini ekle
             }
-
-            params_to_send = {k: v for k, v in filters.items() if v is not None and str(v).strip() != ""}
-
+            
             gg_listeleme_sonucu = self.db.gelir_gider_listesi_al(**params_to_send)
 
             if isinstance(gg_listeleme_sonucu, dict) and "items" in gg_listeleme_sonucu:
@@ -6017,11 +6014,11 @@ class BaseFinansalIslemSayfasi(QWidget):
         self.db = db_manager
         self.app = app_ref
         self.islem_tipi = islem_tipi
-        self.main_layout = QVBoxLayout(self) # Ana layout QVBoxLayout
+        self.main_layout = QVBoxLayout(self)
 
         self.tum_cariler_cache = []
-        self.cari_map = {} # Display text -> ID map
-        self.kasa_banka_map = {} # Kasa/Banka display text -> ID map
+        self.cari_map = {}
+        self.kasa_banka_map = {}
 
         if self.islem_tipi == 'TAHSILAT':
             self.cari_tip = self.db.CARI_TIP_MUSTERI
@@ -6029,11 +6026,11 @@ class BaseFinansalIslemSayfasi(QWidget):
             self.cari_tip = self.db.CARI_TIP_TEDARIKCI
         else:
             self.cari_tip = None
-
+        
         # Başlık
         baslik_text = "Müşteriden Tahsilat Girişi" if self.islem_tipi == 'TAHSILAT' else "Tedarikçiye Ödeme Girişi"
         self.main_layout.addWidget(QLabel(baslik_text, font=QFont("Segoe UI", 16, QFont.Bold)), 
-                                   alignment=Qt.AlignCenter)
+                                alignment=Qt.AlignCenter)
 
         # Giriş Formu Çerçevesi
         entry_frame = QFrame(self)
@@ -6046,17 +6043,16 @@ class BaseFinansalIslemSayfasi(QWidget):
         entry_layout.addWidget(QLabel(cari_label_text), 0, 0, Qt.AlignCenter)
 
         self.cari_combo = QComboBox()
-        self.cari_combo.setEditable(True) # Kullanıcının yazmasına izin ver
-        self.cari_combo.setFixedWidth(250) # Genişlik ayarı
-        # ComboBox'a metin yazıldığında veya seçim değiştiğinde sinyalleri bağla
-        self.cari_combo.currentTextChanged.connect(self._filtre_carileri_anlik) # Yazdıkça filtrele
-        self.cari_combo.activated.connect(self._on_cari_selected) # Seçim yapıldığında
-        self.cari_combo.lineEdit().editingFinished.connect(self._cari_secimi_dogrula) # Odak kaybolduğunda
+        self.cari_combo.setEditable(True)
+        self.cari_combo.setFixedWidth(250)
+        self.cari_combo.currentTextChanged.connect(self._filtre_carileri_anlik)
+        self.cari_combo.activated.connect(self._on_cari_selected)
+        self.cari_combo.lineEdit().editingFinished.connect(self._cari_secimi_dogrula)
         entry_layout.addWidget(self.cari_combo, 0, 1, Qt.AlignCenter)
 
         self.lbl_cari_bakiye = QLabel("Bakiye: Yükleniyor...")
         self.lbl_cari_bakiye.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        entry_layout.addWidget(self.lbl_cari_bakiye, 0, 2, 1, 2, Qt.AlignCenter) # 2 sütun kapla
+        entry_layout.addWidget(self.lbl_cari_bakiye, 0, 2, 1, 2, Qt.AlignCenter)
 
         # Tarih
         entry_layout.addWidget(QLabel("Tarih (*):"), 1, 0, Qt.AlignCenter)
@@ -6072,14 +6068,11 @@ class BaseFinansalIslemSayfasi(QWidget):
         entry_layout.addWidget(QLabel("Tutar (TL) (*):"), 2, 0, Qt.AlignCenter)
         self.tutar_entry = QLineEdit()
         self.tutar_entry.setPlaceholderText("0,00")
-
-        # QDoubleValidator ataması: minimum 0.0, maksimum 999999999.0, 2 ondalık basamak
         tutar_validator = QDoubleValidator(0.0, 999999999.0, 2, self)
         tutar_validator.setNotation(QDoubleValidator.StandardNotation)
-
         self.tutar_entry.setValidator(tutar_validator)
-        self.tutar_entry.textChanged.connect(lambda: format_and_validate_numeric_input(self.tutar_entry, self.parent().app))
-        self.tutar_entry.editingFinished.connect(lambda: format_and_validate_numeric_input(self.tutar_entry, self.parent().app))
+        self.tutar_entry.textChanged.connect(lambda: format_and_validate_numeric_input(self.tutar_entry, self.app))
+        self.tutar_entry.editingFinished.connect(lambda: format_and_validate_numeric_input(self.tutar_entry, self.app))
         entry_layout.addWidget(self.tutar_entry, 2, 1, Qt.AlignCenter)
 
         # Ödeme Şekli
@@ -6089,32 +6082,30 @@ class BaseFinansalIslemSayfasi(QWidget):
                                         self.db.ODEME_TURU_EFT_HAVALE, self.db.ODEME_TURU_CEK, 
                                         self.db.ODEME_TURU_SENET])
         self.odeme_sekli_combo.setCurrentText(self.db.ODEME_TURU_NAKIT)
-        self.odeme_sekli_combo.currentIndexChanged.connect(self._odeme_sekli_degisince) # Sinyali bağla
+        self.odeme_sekli_combo.currentIndexChanged.connect(self._odeme_sekli_degisince)
         entry_layout.addWidget(self.odeme_sekli_combo, 3, 1, Qt.AlignCenter)
 
         # İşlem Kasa/Banka
         entry_layout.addWidget(QLabel("İşlem Kasa/Banka (*):"), 4, 0, Qt.AlignCenter)
         self.kasa_banka_combo = QComboBox()
         self.kasa_banka_combo.setPlaceholderText("Kasa veya Banka seçin...")
-        # Değerler _yukle_kasa_banka_hesaplarini metodunda eklenecek
-        entry_layout.addWidget(self.kasa_banka_combo, 4, 1, 1, 2, Qt.AlignCenter) # 1 satır, 2 sütun kapla
+        entry_layout.addWidget(self.kasa_banka_combo, 4, 1, 1, 2, Qt.AlignCenter)
 
         # Açıklama
         entry_layout.addWidget(QLabel("Açıklama (*):"), 5, 0, Qt.AlignTop | Qt.AlignCenter)
         self.aciklama_text = QTextEdit()
         self.aciklama_text.setPlaceholderText("Açıklama girin...")
-        entry_layout.addWidget(self.aciklama_text, 5, 1, 1, 3) # 1 satır, 3 sütun kapla
+        entry_layout.addWidget(self.aciklama_text, 5, 1, 1, 3)
 
-        entry_layout.setColumnStretch(1, 1) # İkinci sütun genişlesin
+        entry_layout.setColumnStretch(1, 1)
 
         # Kaydet Butonu
         button_frame = QFrame(self)
         button_layout = QHBoxLayout(button_frame)
         self.main_layout.addWidget(button_frame)
-        
         kaydet_button = QPushButton("Kaydet")
-        kaydet_button.clicked.connect(self.kaydet_islem) # kaydet_islem artık sınıfın bir metodu
-        button_layout.addWidget(kaydet_button, alignment=Qt.AlignCenter) # Ortala
+        kaydet_button.clicked.connect(self.kaydet_islem)
+        button_layout.addWidget(kaydet_button, alignment=Qt.AlignCenter)
 
         # Hızlı İşlem Listesi (Son İşlemler)
         recent_transactions_frame = QFrame(self)
@@ -6131,7 +6122,6 @@ class BaseFinansalIslemSayfasi(QWidget):
         self.tree_recent_transactions.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tree_recent_transactions.setSortingEnabled(True)
         
-        # Sütun ayarları
         col_defs_recent = [
             ("Tarih", 90, Qt.AlignCenter),
             ("Tip", 70, Qt.AlignCenter),
@@ -6145,21 +6135,16 @@ class BaseFinansalIslemSayfasi(QWidget):
             self.tree_recent_transactions.headerItem().setFont(i, QFont("Segoe UI", 9, QFont.Bold))
 
         self.tree_recent_transactions.header().setStretchLastSection(False)
-        self.tree_recent_transactions.header().setSectionResizeMode(3, QHeaderView.Stretch) # Açıklama sütunu genişlesin
+        self.tree_recent_transactions.header().setSectionResizeMode(3, QHeaderView.Stretch)
 
         recent_transactions_layout.addWidget(self.tree_recent_transactions)
 
-        # Buradaki çağrıları doğru yerlere taşıyoruz.
-        # İlk yüklemede, bu metodlar tüm widgetlar tanımlandıktan sonra çağrılmalı.
         self._yukle_ve_cachele_carileri()
         self._yukle_kasa_banka_hesaplarini()
 
-        # cari_combo boş değilse ilk öğeyi seçin.
         if self.cari_combo.count() > 0:
             self.cari_combo.setCurrentIndex(0)
         self._on_cari_selected()
-
-        # İlk olarak ödeme şeklini tetikleyerek varsayılan kasa/bankayı ayarla
         self._odeme_sekli_degisince()
         
     def _yukle_ve_cachele_carileri(self):
@@ -6305,14 +6290,15 @@ class BaseFinansalIslemSayfasi(QWidget):
 
     def _odeme_sekli_degisince(self):
         selected_odeme_sekli = self.odeme_sekli_combo.currentText()
-        varsayilan_kb_db = self.db.get_kasa_banka_by_odeme_turu(selected_odeme_sekli)
+        # DÜZELTME: get_kasa_banka_by_odeme_turu metoduna kullanici_id parametresini ekle
+        varsayilan_kb_db = self.db.get_kasa_banka_by_odeme_turu(selected_odeme_sekli, kullanici_id=self.app.current_user.get("id"))
 
         self.kasa_banka_combo.blockSignals(True)
         self.kasa_banka_combo.clear()
 
-        # Doğrudan requests yerine db_manager metodu kullanıldı
-        hesaplar_response = self.db.kasa_banka_listesi_al(limit=10000) # Tümünü çekmek için yüksek limit
-        hesaplar = hesaplar_response.get("items", []) # 'items' anahtarından listeyi al <-- BURASI GÜNCELLENDİ
+        # DÜZELTME: kasa_banka_listesi_al metoduna kullanici_id parametresini ekle
+        hesaplar_response = self.db.kasa_banka_listesi_al(kullanici_id=self.app.current_user.get("id"), limit=10000)
+        hesaplar = hesaplar_response.get("items", [])
 
         display_values_kb = []
         if hesaplar:
@@ -6342,7 +6328,9 @@ class BaseFinansalIslemSayfasi(QWidget):
                 self.kasa_banka_combo.setCurrentIndex(0)
             else:
                 self.kasa_banka_combo.clear()
-        else: # Hiç hesap yoksa
+                self.kasa_banka_combo.setPlaceholderText("Hesap Yok")
+                self.kasa_banka_combo.setEnabled(False)
+        else:
             self.kasa_banka_combo.clear()
             self.kasa_banka_combo.setPlaceholderText("Hesap Yok")
             self.kasa_banka_combo.setEnabled(False)
@@ -7313,7 +7301,7 @@ class RaporlamaMerkeziSayfasi(QWidget):
     def _update_genel_bakis_tab(self, bas_t_str, bit_t_str):
         try:
             # Dashboard özeti verilerini çek
-            dashboard_summary = self.db.get_dashboard_summary(bas_t_str, bit_t_str) or {}
+            dashboard_summary = self.db.get_dashboard_summary(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
             
             toplam_satislar = dashboard_summary.get("toplam_satislar", 0.0)
             toplam_alislar = dashboard_summary.get("toplam_alislar", 0.0)
@@ -7333,7 +7321,7 @@ class RaporlamaMerkeziSayfasi(QWidget):
             self.lbl_metric_overdue_payables.setText(self.db._format_currency(vadesi_gecmis_borclar_toplami))
 
             # Kâr/Zarar verilerini çek
-            kar_zarar_data = self.db.get_kar_zarar_verileri(bas_t_str, bit_t_str) or {}
+            kar_zarar_data = self.db.get_kar_zarar_verileri(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
             self.lbl_genel_bakis_donem_gelir.setText(self.db._format_currency(kar_zarar_data.get("diger_gelirler", 0.0)))
             self.lbl_genel_bakis_donem_gider.setText(self.db._format_currency(kar_zarar_data.get("diger_giderler", 0.0)))
             self.lbl_genel_bakis_brut_kar.setText(self.db._format_currency(kar_zarar_data.get("brut_kar", 0.0)))
@@ -7456,12 +7444,14 @@ class RaporlamaMerkeziSayfasi(QWidget):
         )
 
     def _update_kar_zarar_tab(self, bas_t_str, bit_t_str):
-        gross_profit, cogs, gross_profit_rate = self.db.get_gross_profit_and_cost(bas_t_str, bit_t_str)
+        # DÜZELTME: get_gross_profit_and_cost metoduna kullanici_id parametresini ekle
+        gross_profit, cogs, gross_profit_rate = self.db.get_gross_profit_and_cost(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str)
         self.lbl_brut_kar.setText(self.db._format_currency(gross_profit))
         self.lbl_cogs.setText(self.db._format_currency(cogs))
         self.lbl_brut_kar_orani.setText(f"%{gross_profit_rate:,.2f}")
 
-        monthly_gross_profit_data = self.db.get_monthly_gross_profit_summary(bas_t_str, bit_t_str)
+        # DÜZELTME: get_monthly_gross_profit_summary metoduna da kullanici_id parametresini ekle
+        monthly_gross_profit_data = self.db.get_monthly_gross_profit_summary(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str)
 
         all_periods_set = set()
         for item in monthly_gross_profit_data: all_periods_set.add(item.get('ay_yil'))
@@ -7799,7 +7789,7 @@ class GelirGiderSayfasi(QWidget):
             selected_widget.gg_listesini_yukle()
         
 class GirisEkrani(QDialog):
-    login_success = Signal(object)
+    login_success = Signal(object) # Yeni sinyal tanımlandı
 
     def __init__(self, parent_app, db_manager):
         super().__init__(parent_app)
