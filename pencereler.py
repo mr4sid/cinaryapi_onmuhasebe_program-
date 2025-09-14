@@ -133,6 +133,8 @@ class CariHesapEkstresiPenceresi(QDialog):
         self.parent_list_refresh_func = parent_list_refresh_func
         self.hareket_detay_map = {}
         self.kasa_banka_map = {}
+        # DÜZELTME: Kullanıcı ID'sini başlangıçta alıyoruz
+        self.current_user_id = self.app.current_user[0] if self.app and hasattr(self.app, 'current_user') else None
 
         self.setWindowTitle(f"Cari Hesap Ekstresi: {self.cari_ad_gosterim}")
         self.setWindowState(Qt.WindowMaximized)
@@ -197,13 +199,15 @@ class CariHesapEkstresiPenceresi(QDialog):
             cari_telefon = ""
             
             if self.cari_tip == self.db.CARI_TIP_MUSTERI:
-                cari_data = self.db.musteri_getir_by_id(self.cari_id)
+                # DÜZELTME: musteri_getir_by_id metoduna kullanici_id parametresi eklendi
+                cari_data = self.db.musteri_getir_by_id(self.cari_id, self.current_user_id)
                 if cari_data:
                     cari_adi = cari_data.get("ad", "Bilinmeyen Müşteri")
                     cari_telefon = cari_data.get("telefon", "")
                 
             elif self.cari_tip == self.db.CARI_TIP_TEDARIKCI:
-                cari_data = self.db.tedarikci_getir_by_id(self.cari_id)
+                # DÜZELTME: tedarikci_getir_by_id metoduna kullanici_id parametresi eklendi
+                cari_data = self.db.tedarikci_getir_by_id(self.cari_id, self.current_user_id)
                 if cari_data:
                     cari_adi = cari_data.get("ad", "Bilinmeyen Tedarikçi")
                     cari_telefon = cari_data.get("telefon", "")
@@ -258,7 +262,8 @@ class CariHesapEkstresiPenceresi(QDialog):
             params = {
                 'cari_id': self.cari_id
             }
-            siparisler_data_response = self.db.siparis_listesi_al(**params) 
+            # DÜZELTME: siparis_listesi_al metoduna kullanici_id parametresi eklendi
+            siparisler_data_response = self.db.siparis_listesi_al(kullanici_id=self.current_user_id, **params) 
             siparisler_data = siparisler_data_response.get("items", []) 
 
             for siparis in siparisler_data:
@@ -281,7 +286,8 @@ class CariHesapEkstresiPenceresi(QDialog):
                 fatura_no_text = "-"
                 if siparis.get('fatura_id'):
                     try:
-                        fatura_data = self.db.fatura_getir_by_id(siparis.get('fatura_id'))
+                        # DÜZELTME: fatura_getir_by_id metoduna kullanici_id parametresi eklendi
+                        fatura_data = self.db.fatura_getir_by_id(siparis.get('fatura_id'), self.current_user_id)
                         fatura_no_text = fatura_data.get('fatura_no', '-')
                     except Exception:
                         fatura_no_text = "Hata"
@@ -421,9 +427,11 @@ class CariHesapEkstresiPenceresi(QDialog):
             try:
                 success, message = False, "Bilinmeyen hata."
                 if self.cari_tip == self.db.CARI_TIP_MUSTERI:
-                    success, message = self.db.musteri_sil(self.cari_id)
+                    # DÜZELTME: musteri_sil metoduna kullanici_id parametresi eklendi
+                    success, message = self.db.musteri_sil(self.cari_id, self.current_user_id)
                 elif self.cari_tip == self.db.CARI_TIP_TEDARIKCI:
-                    success, message = self.db.tedarikci_sil(self.cari_id)
+                    # DÜZELTME: tedarikci_sil metoduna kullanici_id parametresi eklendi
+                    success, message = self.db.tedarikci_sil(self.cari_id, self.current_user_id)
                 
                 if success:
                     QMessageBox.information(self, "Başarılı", message)
@@ -688,9 +696,11 @@ class CariHesapEkstresiPenceresi(QDialog):
         try:
             cari_detail = None
             if self.cari_tip == self.db.CARI_TIP_MUSTERI:
-                cari_detail = self.db.musteri_getir_by_id(self.cari_id)
+                # DÜZELTME: musteri_getir_by_id metoduna kullanici_id eklendi
+                cari_detail = self.db.musteri_getir_by_id(self.cari_id, self.current_user_id)
             else:
-                cari_detail = self.db.tedarikci_getir_by_id(self.cari_id)
+                # DÜZELTME: tedarikci_getir_by_id metoduna kullanici_id eklendi
+                cari_detail = self.db.tedarikci_getir_by_id(self.cari_id, self.current_user_id)
 
             if not cari_detail:
                 self.app.set_status_message(f"Hata: Cari bilgiler yüklenemedi. ID {self.cari_id} bulunamadı.", "red")
@@ -703,9 +713,11 @@ class CariHesapEkstresiPenceresi(QDialog):
             self.lbl_cari_detay_vergi.setText(vergi_info)
 
             # API'den özet verilerini çekme
+            # DÜZELTME: get_cari_ekstre_ozet metoduna kullanici_id parametresi eklendi
             ekstre_ozet_data = self.db.get_cari_ekstre_ozet(
                 self.cari_id, self.cari_tip,
-                self.bas_tarih_entry.text(), self.bitis_tarih_entry.text()
+                self.bas_tarih_entry.text(), self.bitis_tarih_entry.text(),
+                kullanici_id=self.current_user_id
             )
             
             self.lbl_donem_basi_bakiye.setText(self.db._format_currency(ekstre_ozet_data.get("donem_basi_bakiye", 0.0)))
@@ -749,7 +761,6 @@ class CariHesapEkstresiPenceresi(QDialog):
         except Exception as e:
             logging.error(f"Cari özet bilgileri yüklenirken hata oluştu: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Cari özet bilgileri yüklenemedi. Detay: {e}", "red")
-
 
     def _cari_bilgileri_guncelle(self):
         try:
@@ -820,11 +831,12 @@ class CariHesapEkstresiPenceresi(QDialog):
             "kasa_banka_id": kasa_banka_id,
             "cari_id": self.cari_id,
             "cari_tip": self.cari_tip,
-            "odeme_turu": odeme_turu
+            "odeme_turu": odeme_turu,
+            "kullanici_id": self.current_user_id # DÜZELTME: kullanici_id eklendi
         }
 
         try:
-            success = self.db.gelir_gider_ekle(gelir_gider_data)
+            success = self.db.gelir_gider_ekle(gelir_gider_data, self.current_user_id) # DÜZELTME: kullanici_id eklendi
             if success:
                 self.app.set_status_message(f"Hızlı {islem_turu.lower()} kaydı başarıyla oluşturuldu.", "green")
                 self.ot_tutar_entry.clear()
@@ -860,9 +872,11 @@ class CariHesapEkstresiPenceresi(QDialog):
                     "aciklama": not_str,
                     "islem_turu": "VERESİYE_BORÇ",
                     "islem_yone": "BORC",
-                    "kaynak": self.db.KAYNAK_TIP_VERESIYE_BORC_MANUEL
+                    "kaynak": self.db.KAYNAK_TIP_VERESIYE_BORC_MANUEL,
+                    "kullanici_id": self.current_user_id # DÜZELTME: kullanici_id eklendi
                 }
-                success = self.db.cari_hareket_ekle_manuel(data)
+                # DÜZELTME: cari_hareket_ekle_manuel metoduna kullanici_id eklendi
+                success = self.db.cari_hareket_ekle_manuel(data, self.current_user_id)
 
                 if success:
                     QMessageBox.information(self, "Başarılı", "Veresiye borç başarıyla eklendi.")
@@ -983,8 +997,9 @@ class CariHesapEkstresiPenceresi(QDialog):
             return
         
         # API'den gelen veriyi çek
+        # DÜZELTME: cari_hesap_ekstresi_al metoduna kullanici_id eklendi
         hareketler_listesi, devreden_bakiye, success_db, message_db = self.db.cari_hesap_ekstresi_al(
-            self.cari_id, self.cari_tip, bas_tarih_str, bitis_tarih_str
+            self.cari_id, self.cari_tip, bas_tarih_str, bitis_tarih_str, self.current_user_id
         )
 
         if not success_db:
@@ -1013,14 +1028,19 @@ class CariHesapEkstresiPenceresi(QDialog):
         current_bakiye = devreden_bakiye
         
         for hareket in hareketler_listesi:
-            self._ekstreye_satir_ekle(hareket, current_bakiye)
-            
             # Borç ve alacak yönüne göre çalışan bakiyeyi güncelle
-            if self.cari_tip == 'MUSTERI' or self.cari_tip == 'TEDARIKCI':
-                if hareket['islem_yone'] == 'BORC':
-                    current_bakiye += hareket['tutar']
-                elif hareket['islem_yone'] == 'ALACAK':
-                    current_bakiye -= hareket['tutar']
+            if self.cari_tip == 'MUSTERI':
+                if hareket.get('islem_yone') == 'BORC':
+                    current_bakiye += hareket.get('tutar', 0)
+                elif hareket.get('islem_yone') == 'ALACAK':
+                    current_bakiye -= hareket.get('tutar', 0)
+            elif self.cari_tip == 'TEDARIKCI':
+                if hareket.get('islem_yone') == 'BORC':
+                    current_bakiye -= hareket.get('tutar', 0)
+                elif hareket.get('islem_yone') == 'ALACAK':
+                    current_bakiye += hareket.get('tutar', 0)
+
+            self._ekstreye_satir_ekle(hareket, current_bakiye)
 
         self.app.set_status_message(f"{self.cari_ad_gosterim} için {len(hareketler_listesi)} hareket yüklendi.", "blue")
 
@@ -1091,8 +1111,12 @@ class CariHesapEkstresiPenceresi(QDialog):
         item = self.ekstre_tree.itemAt(pos)
         if not item: return
 
-        item_id = int(item.text(0))
-        if item.text(3) == "DEVİR": return
+        item_id_str = item.text(0)
+        if not item_id_str: return
+        try:
+            item_id = int(item_id_str)
+        except ValueError:
+            return
 
         hareket_detayi = self.hareket_detay_map.get(item_id)
         if not hareket_detayi: return
@@ -1101,7 +1125,9 @@ class CariHesapEkstresiPenceresi(QDialog):
 
         context_menu = QMenu(self)
         
-        if ref_tip in [self.db.KAYNAK_TIP_MANUEL, self.db.KAYNAK_TIP_TAHSILAT, self.db.KAYNAK_TIP_ODEME, self.db.KAYNAK_TIP_VERESIYE_BORC_MANUEL, self.db.KAYNAK_TIP_FATURA, self.db.KAYNAK_TIP_IADE_FATURA, self.db.KAYNAK_TIP_FATURA_SATIS_PESIN, self.db.KAYNAK_TIP_FATURA_ALIS_PESIN]:
+        # DÜZELTME: Sadece manuel eklenen veya fatura kaynaklı işlemler için silme seçeneği
+        if ref_tip in [self.db.KAYNAK_TIP_TAHSILAT, self.db.KAYNAK_TIP_ODEME, self.db.KAYNAK_TIP_VERESIYE_BORC_MANUEL] or \
+           ref_tip in [self.db.KAYNAK_TIP_FATURA, self.db.KAYNAK_TIP_IADE_FATURA, self.db.KAYNAK_TIP_FATURA_SATIS_PESIN, self.db.KAYNAK_TIP_FATURA_ALIS_PESIN]:
             context_menu.addAction("İşlemi Sil").triggered.connect(self.secili_islemi_sil)
         
         if ref_tip in [self.db.KAYNAK_TIP_FATURA, self.db.KAYNAK_TIP_IADE_FATURA, self.db.KAYNAK_TIP_FATURA_SATIS_PESIN, self.db.KAYNAK_TIP_FATURA_ALIS_PESIN]:
@@ -1131,13 +1157,13 @@ class CariHesapEkstresiPenceresi(QDialog):
         
         confirm_msg = f"'{aciklama_text}' açıklamalı işlemi silmek istediğinizden emin misiniz?\nBu işlem geri alınamaz."
         
-        # Güncellendi: Mantık, fatura ve manuel işlemlerin silinmesini ayırır.
         if ref_tip in [self.db.KAYNAK_TIP_FATURA, self.db.KAYNAK_TIP_IADE_FATURA, self.db.KAYNAK_TIP_FATURA_SATIS_PESIN, self.db.KAYNAK_TIP_FATURA_ALIS_PESIN]:
             confirm_msg = f"'{fatura_no}' numaralı FATURA ve ilişkili tüm hareketlerini silmek istediğinizden emin misiniz?\nBu işlem geri alınamaz."
             reply = QMessageBox.question(self, "Silme Onayı", confirm_msg, QMessageBox.Yes | QMessageBox.No)
             if reply == QMessageBox.Yes:
                 try:
-                    success, message = self.db.fatura_sil(ref_id)
+                    # DÜZELTME: fatura_sil metoduna kullanici_id parametresi eklendi
+                    success, message = self.db.fatura_sil(ref_id, self.current_user_id)
                     if success:
                         QMessageBox.information(self, "Başarılı", message)
                         self._ozet_ve_liste_yenile()
@@ -1149,13 +1175,13 @@ class CariHesapEkstresiPenceresi(QDialog):
                 self.app.set_status_message("Silme işlemi iptal edildi.", "blue")
                 return
         
-        # YENİ EKLENDİ: Manuel ve cari hareketleri silme mantığı
         elif ref_tip in [self.db.KAYNAK_TIP_TAHSILAT, self.db.KAYNAK_TIP_ODEME, self.db.KAYNAK_TIP_VERESIYE_BORC_MANUEL, self.db.KAYNAK_TIP_MANUEL]:
             confirm_msg = f"'{aciklama_text}' açıklamalı işlemi silmek istediğinizden emin misiniz?\nBu işlem geri alınamaz."
             reply = QMessageBox.question(self, "Silme Onayı", confirm_msg, QMessageBox.Yes | QMessageBox.No)
             if reply == QMessageBox.Yes:
                 try:
-                    success, message = self.db.gelir_gider_sil(hareket_id) # Bu metot Gelir/Gider kayıtlarını silmek için kullanılır.
+                    # DÜZELTME: gelir_gider_sil metoduna kullanici_id parametresi eklendi
+                    success, message = self.db.gelir_gider_sil(hareket_id, self.current_user_id)
                     if success:
                         QMessageBox.information(self, "Başarılı", message)
                         self._ozet_ve_liste_yenile()
@@ -1202,7 +1228,8 @@ class CariHesapEkstresiPenceresi(QDialog):
         if ref_tip in [self.db.KAYNAK_TIP_FATURA, self.db.KAYNAK_TIP_IADE_FATURA, self.db.KAYNAK_TIP_FATURA_SATIS_PESIN, self.db.KAYNAK_TIP_FATURA_ALIS_PESIN]:
             if ref_id:
                 from pencereler import FaturaGuncellemePenceresi
-                FaturaGuncellemePenceresi(self, self.db, ref_id, self._ozet_ve_liste_yenile).exec()
+                # DÜZELTME: FaturaGuncellemePenceresi'ne ana uygulama referansı (self.app) gönderildi
+                FaturaGuncellemePenceresi(self.app, self.db, ref_id, self._ozet_ve_liste_yenile).exec()
             else:
                 QMessageBox.information(self, "Detay", "Fatura referansı bulunamadı.")
         else:
@@ -1226,6 +1253,7 @@ class CariHesapEkstresiPenceresi(QDialog):
         if ref_tip_str in [self.db.KAYNAK_TIP_FATURA, self.db.KAYNAK_TIP_IADE_FATURA, self.db.KAYNAK_TIP_FATURA_SATIS_PESIN, self.db.KAYNAK_TIP_FATURA_ALIS_PESIN]:
             if ref_id:
                 from pencereler import FaturaDetayPenceresi
+                # DÜZELTME: FaturaDetayPenceresi'ne ana uygulama referansı (self.app) gönderildi
                 FaturaDetayPenceresi(self.app, self.db, ref_id).exec()
             else:
                 QMessageBox.information(self, "Detay", "Fatura referansı bulunamadı.")
@@ -1355,11 +1383,13 @@ class FaturaDetayPenceresi(QDialog):
         if self.main_layout.layout():
             self.clear_layout(self.main_layout)
         try:
-            self.fatura_ana = self.db.fatura_getir_by_id(self.fatura_id)
+            # DÜZELTME: fatura_getir_by_id metoduna kullanici_id parametresi eklendi
+            self.fatura_ana = self.db.fatura_getir_by_id(self.fatura_id, self.app.current_user[0])
             if not self.fatura_ana:
                 raise Exception("Fatura ana bilgileri API'den alınamadı.")
             
-            self.fatura_kalemleri_db = self.db.fatura_kalemleri_al(self.fatura_id)
+            # DÜZELTME: fatura_kalemleri_al metoduna kullanici_id parametresi eklendi
+            self.fatura_kalemleri_db = self.db.fatura_kalemleri_al(self.fatura_id, self.app.current_user[0])
             if not self.fatura_kalemleri_db:
                 logging.warning(f"Fatura ID {self.fatura_id} için fatura kalemi bulunamadı.")
         except Exception as e:
@@ -1389,7 +1419,8 @@ class FaturaDetayPenceresi(QDialog):
         genel_iskonto_degeri_db = self.db.safe_float(self.fatura_ana.get('genel_iskonto_degeri'))
         
         try:
-            kullanicilar_list = self.db.kullanici_listele()
+            # DÜZELTME: kullanici_listele metoduna kullanici_id parametresi eklendi
+            kullanicilar_list = self.db.kullanici_listele(kullanici_id=self.app.current_user[0])
             kullanicilar_map = {k.get('id'): k.get('kullanici_adi') for k in kullanicilar_list.get('items', [])}
         except Exception as e:
             logger.error(f"Kullanıcı listesi API'den alınamadı: {e}")
@@ -1405,11 +1436,13 @@ class FaturaDetayPenceresi(QDialog):
         else:
             cari_bilgi_db = None
             if self.fatura_ana.get('fatura_turu') in [self.db.FATURA_TIP_SATIS, self.db.FATURA_TIP_SATIS_IADE]:
-                cari_bilgi_db = self.db.musteri_getir_by_id(c_id)
+                # DÜZELTME: musteri_getir_by_id metoduna kullanici_id parametresi eklendi
+                cari_bilgi_db = self.db.musteri_getir_by_id(c_id, self.app.current_user[0])
                 if cari_bilgi_db and cari_bilgi_db.get('kod'):
                     cari_adi_text = f"{cari_bilgi_db.get('ad')} (Kod: {cari_bilgi_db.get('kod')})"
             elif self.fatura_ana.get('fatura_turu') in [self.db.FATURA_TIP_ALIS, self.db.FATURA_TIP_ALIS_IADE]:
-                cari_bilgi_db = self.db.tedarikci_getir_by_id(c_id)
+                # DÜZELTME: tedarikci_getir_by_id metoduna kullanici_id parametresi eklendi
+                cari_bilgi_db = self.db.tedarikci_getir_by_id(c_id, self.app.current_user[0])
                 if cari_bilgi_db and cari_bilgi_db.get('kod'):
                     cari_adi_text = f"{cari_bilgi_db.get('ad')} (Kod: {cari_bilgi_db.get('kod')})"
 
@@ -1871,11 +1904,13 @@ class SiparisDetayPenceresi(QDialog):
             self.clear_layout(self.main_layout)
 
         try:
-            self.siparis_ana = self.db.siparis_getir_by_id(self.siparis_id)
+            # DÜZELTME: siparis_getir_by_id metoduna kullanici_id parametresi eklendi
+            self.siparis_ana = self.db.siparis_getir_by_id(self.siparis_id, self.app.current_user[0])
             if not self.siparis_ana:
                 raise Exception("Sipariş ana bilgileri API'den alınamadı.")
             
-            self.siparis_kalemleri_db = self.db.siparis_kalemleri_al(self.siparis_id)
+            # DÜZELTME: siparis_kalemleri_al metoduna kullanici_id parametresi eklendi
+            self.siparis_kalemleri_db = self.db.siparis_kalemleri_al(self.siparis_id, self.app.current_user[0])
             if not self.siparis_kalemleri_db:
                 logging.warning(f"Sipariş ID {self.siparis_id} için sipariş kalemi bulunamadı.")
         except Exception as e:
@@ -1890,7 +1925,8 @@ class SiparisDetayPenceresi(QDialog):
         
         # Kullanıcı bilgileri
         try:
-            kullanicilar_list = self.db.kullanici_listele()
+            # DÜZELTME: kullanici_listele metoduna kullanici_id parametresi eklendi
+            kullanicilar_list = self.db.kullanici_listele(self.app.current_user[0])
             kullanicilar_map = {k.get('id'): k.get('kullanici_adi') for k in kullanicilar_list}
         except Exception as e:
             logger.error(f"Kullanıcı listesi API'den alınamadı: {e}")
@@ -1902,10 +1938,12 @@ class SiparisDetayPenceresi(QDialog):
         # Cari Bilgisi
         cari_adi_text = "Bilinmiyor"
         if self.siparis_ana.get('cari_tip') == 'MUSTERI':
-            cari_bilgi = self.db.musteri_getir_by_id(self.siparis_ana.get('cari_id'))
+            # DÜZELTME: musteri_getir_by_id metoduna kullanici_id parametresi eklendi
+            cari_bilgi = self.db.musteri_getir_by_id(self.siparis_ana.get('cari_id'), self.app.current_user[0])
             cari_adi_text = f"{cari_bilgi.get('ad')}" if cari_bilgi else "Bilinmiyor"
         elif self.siparis_ana.get('cari_tip') == 'TEDARIKCI':
-            cari_bilgi = self.db.tedarikci_getir_by_id(self.siparis_ana.get('cari_id'))
+            # DÜZELTME: tedarikci_getir_by_id metoduna kullanici_id parametresi eklendi
+            cari_bilgi = self.db.tedarikci_getir_by_id(self.siparis_ana.get('cari_id'), self.app.current_user[0])
             cari_adi_text = f"{cari_bilgi.get('ad')}" if cari_bilgi else "Bilinmiyor"
 
         # --- Arayüz Oluşturma ---
@@ -2111,6 +2149,7 @@ class SiparisDetayPenceresi(QDialog):
             self.db,
             fatura_tipi_for_dialog,
             self.siparis_ana.get('cari_id'),
+            self.app.current_user[0], # DÜZELTME: kullanici_id parametresi eklendi
             self._faturaya_donustur_on_dialog_confirm
         )
         dialog.exec()

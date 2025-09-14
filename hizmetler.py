@@ -26,9 +26,11 @@ class FaturaService:
         self.db = db_manager
         self.app = app_ref
         logger.info("FaturaService başlatıldı.")
+        # DÜZELTME: Kullanıcı ID'sini başlangıçta alıyoruz
+        self.current_user_id = self.app.current_user[0] if self.app and hasattr(self.app, 'current_user') else None
 
     def fatura_olustur(self, fatura_no, tarih, fatura_tipi, cari_id, kalemler_data, odeme_turu,
-                         olusturan_kullanici_id, kasa_banka_id=None, misafir_adi=None, fatura_notlari=None, vade_tarihi=None,
+                         kasa_banka_id=None, misafir_adi=None, fatura_notlari=None, vade_tarihi=None,
                          genel_iskonto_tipi=None, genel_iskonto_degeri=None, original_fatura_id=None):
         fatura_data = {
             "fatura_no": fatura_no,
@@ -44,7 +46,8 @@ class FaturaService:
             "genel_iskonto_tipi": genel_iskonto_tipi,
             "genel_iskonto_degeri": genel_iskonto_degeri,
             "original_fatura_id": original_fatura_id,
-            "olusturan_kullanici_id": olusturan_kullanici_id
+            "olusturan_kullanici_id": self.current_user_id, # DÜZELTME: self.current_user_id kullanıldı
+            "kullanici_id": self.current_user_id # DÜZELTME: kullanici_id parametresi eklendi
         }
 
         try:
@@ -80,10 +83,12 @@ class FaturaService:
             "vade_tarihi": vade_tarihi,
             "genel_iskonto_tipi": genel_iskonto_tipi,
             "genel_iskonto_degeri": genel_iskonto_degeri,
-            "kalemler": kalemler_data
+            "kalemler": kalemler_data,
+            "kullanici_id": self.current_user_id # DÜZELTME: kullanici_id parametresi eklendi
         }
         try:
-            response_data = self.db.fatura_guncelle(fatura_id, fatura_data)
+            # DÜZELTME: db.fatura_guncelle metoduna kullanici_id parametresi eklendi
+            response_data = self.db.fatura_guncelle(fatura_id, fatura_data, self.current_user_id)
             return True, response_data.get("message", "Fatura başarıyla güncellendi.")
         except ValueError as e:
             logger.error(f"Fatura güncellenirken API hatası: {e}")
@@ -92,7 +97,8 @@ class FaturaService:
             logger.error(f"Fatura güncellenirken beklenmeyen bir hata oluştu: {e}")
             return False, f"Fatura güncellenirken beklenmeyen bir hata oluştu: {e}"
 
-    def siparis_faturaya_donustur(self, siparis_id: int, fatura_donusum_data: dict):
+    def siparis_faturaya_donustur(self, siparis_id: int, fatura_donusum_data: dict, kullanici_id: int):
+        fatura_donusum_data['kullanici_id'] = kullanici_id # DÜZELTME: kullanici_id eklendi
         try:
             response = requests.post(f"{self.db.api_base_url}/siparisler/{siparis_id}/faturaya_donustur", json=fatura_donusum_data)
             response.raise_for_status()
@@ -117,6 +123,8 @@ class CariService:
         self.db = db_manager
         self.app = app_ref
         logger.info("CariService başlatıldı.")
+        self.current_user_id = self.app.current_user[0] if self.app and hasattr(self.app, 'current_user') else None
+
 
     def musteri_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
         params = {
@@ -128,21 +136,24 @@ class CariService:
         cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
 
         try:
-            return self.db.musteri_listesi_al(**cleaned_params)
+            # DÜZELTME: musteri_listesi_al metoduna kullanici_id eklendi
+            return self.db.musteri_listesi_al(kullanici_id=self.current_user_id, **cleaned_params)
         except Exception as e:
             logger.error(f"Müşteri listesi CariService üzerinden alınırken hata: {e}")
             raise
 
     def musteri_getir_by_id(self, musteri_id: int):
         try:
-            return self.db.musteri_getir_by_id(musteri_id)
+            # DÜZELTME: musteri_getir_by_id metoduna kullanici_id eklendi
+            return self.db.musteri_getir_by_id(musteri_id, kullanici_id=self.current_user_id)
         except Exception as e:
             logger.error(f"Müşteri ID {musteri_id} CariService üzerinden çekilirken hata: {e}")
             raise
 
     def musteri_sil(self, musteri_id: int):
         try:
-            return self.db.musteri_sil(musteri_id)
+            # DÜZELTME: musteri_sil metoduna kullanici_id eklendi
+            return self.db.musteri_sil(musteri_id, kullanici_id=self.current_user_id)
         except Exception as e:
             logger.error(f"Müşteri ID {musteri_id} CariService üzerinden silinirken hata: {e}")
             raise
@@ -157,30 +168,35 @@ class CariService:
         cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
 
         try:
-            return self.db.tedarikci_listesi_al(**cleaned_params)
+            # DÜZELTME: tedarikci_listesi_al metoduna kullanici_id eklendi
+            return self.db.tedarikci_listesi_al(kullanici_id=self.current_user_id, **cleaned_params)
         except Exception as e:
             logger.error(f"Tedarikçi listesi CariService üzerinden alınırken hata: {e}")
             raise
 
     def tedarikci_getir_by_id(self, tedarikci_id: int):
         try:
-            return self.db.tedarikci_getir_by_id(tedarikci_id)
+            # DÜZELTME: tedarikci_getir_by_id metoduna kullanici_id eklendi
+            return self.db.tedarikci_getir_by_id(tedarikci_id, kullanici_id=self.current_user_id)
         except Exception as e:
             logger.error(f"Tedarikçi ID {tedarikci_id} CariService üzerinden çekilirken hata: {e}")
             raise
 
     def tedarikci_sil(self, tedarikci_id: int):
         try:
-            return self.db.tedarikci_sil(tedarikci_id)
+            # DÜZELTME: tedarikci_sil metoduna kullanici_id eklendi
+            return self.db.tedarikci_sil(tedarikci_id, kullanici_id=self.current_user_id)
         except Exception as e:
             logger.error(f"Tedarikçi ID {tedarikci_id} CariService üzerinden silinirken hata: {e}")
             raise
 
     def cari_getir_by_id(self, cari_id: int, cari_tipi: str):
         if cari_tipi == self.db.CARI_TIP_MUSTERI:
-            return self.musteri_getir_by_id(cari_id)
+            # DÜZELTME: musteri_getir_by_id metoduna kullanici_id eklendi
+            return self.musteri_getir_by_id(cari_id, kullanici_id=self.current_user_id)
         elif cari_tipi == self.db.CARI_TIP_TEDARIKCI:
-            return self.tedarikci_getir_by_id(cari_id)
+            # DÜZELTME: tedarikci_getir_by_id metoduna kullanici_id eklendi
+            return self.tedarikci_getir_by_id(cari_id, kullanici_id=self.current_user_id)
         else:
             raise ValueError("Geçersiz cari tipi belirtildi. 'MUSTERI' veya 'TEDARIKCI' olmalı.")
 
@@ -196,16 +212,18 @@ class TopluIslemService:
             "urun_birimleri": {},
             "ulkeler": {}
         }
+        self.current_user_id = self.app.current_user[0] if self.app and hasattr(self.app, 'current_user') else None
         self._load_nitelik_cache()
     
     def _load_nitelik_cache(self):
         try:
             # Her bir nitelik listesi için veriyi çek ve önbelleğe al
-            kategoriler_response = self.db.kategori_listele()
-            markalar_response = self.db.marka_listele()
-            urun_gruplari_response = self.db.urun_grubu_listele()
-            urun_birimleri_response = self.db.urun_birimi_listele()
-            ulkeler_response = self.db.ulke_listele()
+            # DÜZELTME: tüm nitelik listeleme metotlarına kullanici_id eklendi
+            kategoriler_response = self.db.kategori_listele(kullanici_id=self.current_user_id)
+            markalar_response = self.db.marka_listele(kullanici_id=self.current_user_id)
+            urun_gruplari_response = self.db.urun_grubu_listele(kullanici_id=self.current_user_id)
+            urun_birimleri_response = self.db.urun_birimi_listele(kullanici_id=self.current_user_id)
+            ulkeler_response = self.db.ulke_listele(kullanici_id=self.current_user_id)
 
             kategoriler = kategoriler_response.get("items", []) if isinstance(kategoriler_response, dict) else kategoriler_response or []
             markalar = markalar_response.get("items", []) if isinstance(markalar_response, dict) else markalar_response or []
@@ -235,7 +253,8 @@ class TopluIslemService:
 
         mevcut_musteri_kod_map = {}
         try:
-            mevcut_musteriler_response = self.db.musteri_listesi_al(limit=10000)
+            # DÜZELTME: musteri_listesi_al metoduna kullanici_id eklendi
+            mevcut_musteriler_response = self.db.musteri_listesi_al(kullanici_id=self.current_user_id, limit=10000)
             mevcut_musteriler = mevcut_musteriler_response.get('items', [])
             for musteri in mevcut_musteriler:
                 mevcut_musteri_kod_map[musteri.get('kod')] = musteri
@@ -297,7 +316,8 @@ class TopluIslemService:
 
         mevcut_tedarikci_kod_map = {}
         try:
-            mevcut_tedarikciler_response = self.db.tedarikci_listesi_al(limit=10000)
+            # DÜZELTME: tedarikci_listesi_al metoduna kullanici_id eklendi
+            mevcut_tedarikciler_response = self.db.tedarikci_listesi_al(kullanici_id=self.current_user_id, limit=10000)
             mevcut_tedarikciler = mevcut_tedarikciler_response.get('items', [])
             for tedarikci in mevcut_tedarikciler:
                 mevcut_tedarikci_kod_map[tedarikci.get('kod')] = tedarikci
@@ -360,7 +380,8 @@ class TopluIslemService:
 
         mevcut_stok_kodu_map = {}
         try:
-            mevcut_stoklar_response = self.db.stok_listesi_al(limit=10000)
+            # DÜZELTME: stok_listesi_al metoduna kullanici_id eklendi
+            mevcut_stoklar_response = self.db.stok_listesi_al(kullanici_id=self.current_user_id, limit=10000)
             mevcut_stoklar = mevcut_stoklar_response.get('items', [])
             for stok in mevcut_stoklar:
                 mevcut_stok_kodu_map[stok.get('kod')] = stok
@@ -458,8 +479,11 @@ class TopluIslemService:
 
         for musteri_data in musteri_listesi:
             try:
-                mevcut_musteri_response = self.db._make_api_request("GET", f"/musteriler/", params={"arama": musteri_data.get('kod')})
+                # DÜZELTME: musteri_listesi_al metoduna kullanici_id eklendi
+                mevcut_musteri_response = self.db._make_api_request("GET", f"/musteriler/", params={"arama": musteri_data.get('kod'), "kullanici_id": self.current_user_id})
                 mevcut_musteri = [m for m in mevcut_musteri_response.get("items", []) if m.get('kod') == musteri_data.get('kod')]
+                
+                musteri_data['kullanici_id'] = self.current_user_id # DÜZELTME: kullanici_id ekleniyor
                 
                 if mevcut_musteri:
                     success, msg = self.db.musteri_guncelle(mevcut_musteri[0].get('id'), musteri_data)
@@ -486,8 +510,11 @@ class TopluIslemService:
 
         for tedarikci_data in tedarikci_listesi:
             try:
-                mevcut_tedarikci_response = self.db._make_api_request("GET", f"/tedarikciler/", params={"arama": tedarikci_data.get('kod')})
+                # DÜZELTME: tedarikci_listesi_al metoduna kullanici_id eklendi
+                mevcut_tedarikci_response = self.db._make_api_request("GET", f"/tedarikciler/", params={"arama": tedarikci_data.get('kod'), "kullanici_id": self.current_user_id})
                 mevcut_tedarikci = [t for t in mevcut_tedarikci_response.get("items", []) if t.get('kod') == tedarikci_data.get('kod')]
+
+                tedarikci_data['kullanici_id'] = self.current_user_id # DÜZELTME: kullanici_id ekleniyor
 
                 if mevcut_tedarikci:
                     success, msg = self.db.tedarikci_guncelle(mevcut_tedarikci[0].get('id'), tedarikci_data)
@@ -514,28 +541,20 @@ class TopluIslemService:
         try:
             payload = []
             for stok in stok_listesi:
-                payload.append({
-                    "kod": stok.get("kod"),
-                    "ad": stok.get("ad"),
-                    "miktar": stok.get("miktar"),
-                    "alis_fiyati": stok.get("alis_fiyati"),
-                    "satis_fiyati": stok.get("satis_fiyati"),
-                    "kdv_orani": stok.get("kdv_orani"),
-                    "min_stok_seviyesi": stok.get("min_stok_seviyesi"),
-                    "aktif": stok.get("aktif")
-                })
+                # DÜZELTME: Her stok verisine kullanici_id ekleniyor
+                stok['kullanici_id'] = self.current_user_id
+                payload.append(stok)
 
-            response = requests.post(f"{self.db.api_base_url}/stoklar/bulk_upsert", json=payload)
-            response.raise_for_status()
-            response_data = response.json()
+            # DÜZELTME: API çağrısı, db_manager üzerinden yapılır.
+            response_data = self.db.bulk_stok_upsert(payload, self.current_user_id)
             
             yeni_eklenen_stok_idleri = response_data.get("yeni_eklenen_stok_idleri", [])
             
-            fatura_hizmeti = FaturaService(self.db)
+            fatura_hizmeti = FaturaService(self.db, self.app)
             
             if yeni_eklenen_stok_idleri:
                 for stok_id in yeni_eklenen_stok_idleri:
-                    yeni_stok_data = next((s for s in stok_listesi if s.get('id') == stok_id), None)
+                    yeni_stok_data = next((s for s in stok_listesi if s.get('kod') == stok_id), None)
                     if yeni_stok_data:
                         kalemler_data = [{
                             "urun_id": stok_id,
@@ -561,14 +580,6 @@ class TopluIslemService:
                 "hatalar": response_data.get("hatalar", [])
             }
 
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"API isteği sırasında hata oluştu: {e.response.text}", exc_info=True)
-            return {
-                "yeni_eklenen_sayisi": 0,
-                "guncellenen_sayisi": 0,
-                "hata_sayisi": len(stok_listesi),
-                "hatalar": [f"API isteği sırasında bir hata oluştu: {e.response.text}"]
-            }
         except Exception as e:
             logger.error(f"Toplu stok ekleme/güncelleme sırasında beklenmedik hata: {e}", exc_info=True)
             return {

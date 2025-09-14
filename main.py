@@ -287,98 +287,119 @@ class SyncWorker(QObject):
 class App(QMainWindow):
     backup_completed_signal = Signal(bool, str, str)    
     def __init__(self):
-        super().__init__()
+        super().__init__()  
+        self.backup_completed_signal.connect(self._handle_backup_completion)
+        self.ui_main_window_setup = Ui_MainWindow_Minimal()
+        self.ui_main_window_setup.setupUi(self)
+
         self.setWindowTitle("Çınar Yapı Ön Muhasebe Programı")
         self.config = load_config()
 
         self.db_manager = None
-        self.is_online = False
-        self.open_cari_ekstre_windows = {}
-
-        self.current_user = None
-        self.current_user_id = None
-        self.current_token = None
-        
-        self._initialize_db_manager()
-
-        from arayuz import GirisEkrani
-        self.login_dialog = GirisEkrani(self, self.db_manager)
-        self.login_dialog.login_success.connect(self.on_successful_login)
-        
-        if self.login_dialog.exec() == QDialog.Rejected:
-            sys.exit(0)
-
-        self.ui_main_window_setup = Ui_MainWindow_Minimal()
-        self.ui_main_window_setup.setupUi(self)
-
-        self.ana_sayfa_widget = AnaSayfa(self, self.db_manager, self)
+        self.is_online = False  # Yeni durum değişkeni
+        self._initialize_db_manager() # Bu metot artık uygulamayı durdurmayacak
         self.tab_widget = QTabWidget(self)
         self.setCentralWidget(self.tab_widget)
+
+        # Hata veren satırın çözümü:
+        self.open_cari_ekstre_windows = {}
+        self.current_user = None
+
+        self.ana_sayfa_widget = AnaSayfa(self, self.db_manager, self)
         self.tab_widget.addTab(self.ana_sayfa_widget, "Ana Sayfa")
 
         self.stok_yonetimi_sayfasi = StokYonetimiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.stok_yonetimi_sayfasi, "Stok Yönetimi")
+
         self.musteri_yonetimi_sayfasi = MusteriYonetimiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.musteri_yonetimi_sayfasi, "Müşteri Yönetimi")
+
         self.tedarikci_yonetimi_sayfasi = TedarikciYonetimiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.tedarikci_yonetimi_sayfasi, "Tedarikçi Yönetimi")
+
+        # Hata burada başlıyordu. FaturaListesiSayfasi'na 'SATIŞ' ve 'ALIŞ' stringleri yerine sabitler gönderilmeli.
         self.fatura_listesi_sayfasi = FaturaListesiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.fatura_listesi_sayfasi, "Faturalar")
+
         self.siparis_listesi_sayfasi = SiparisListesiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.siparis_listesi_sayfasi, "Sipariş Yönetimi")
+        
         self.kasa_banka_yonetimi_sayfasi = KasaBankaYonetimiSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.kasa_banka_yonetimi_sayfasi, "Kasa/Banka")
+
         self.finansal_islemler_sayfasi = FinansalIslemlerSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.finansal_islemler_sayfasi, "Finansal İşlemler")
+
         self.gelir_gider_sayfasi = GelirGiderSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.gelir_gider_sayfasi, "Gelir/Gider")
+
         self.raporlama_merkezi_sayfasi = RaporlamaMerkeziSayfasi(self, self.db_manager, self)
         self.tab_widget.addTab(self.raporlama_merkezi_sayfasi, "Raporlama Merkezi")
+        
         self.urun_nitelik_yonetimi_sekmesi = UrunNitelikYonetimiSekmesi(self, self.db_manager, self)
         self.tab_widget.addTab(self.urun_nitelik_yonetimi_sekmesi, "Nitelik Yönetimi")
-
-        self._setup_ui_connections()
-        self._initial_load_data()
-        self._update_title_and_user_info()
-
-        if self.db_manager.is_online:
-            self._start_background_sync()
-        else:
-            self.set_status_message("Çevrimdışı mod: API bağlantısı yok. Yerel veriler kullanılıyor.", "red")
-    
-    def show_login_screen(self):
-        """Uygulama başlangıcında giriş ekranını gösterir."""
-        login_widget = QWidget(self)
-        login_layout = QVBoxLayout(login_widget)
-        self.setCentralWidget(login_widget)
-
-        from arayuz import GirisEkrani
-        self.login_screen = GirisEkrani(self, self.db_manager, self.on_successful_login)
-        login_layout.addWidget(self.login_screen)
-
-        self.db_manager.app = self
-        self.db_manager.lokal_db.app = self
-
-        QTimer.singleShot(100, self._check_api_status_on_startup)
-
-    @Slot(object)
-    def on_successful_login(self, user_info):
-        """Başarılı giriş yapıldığında kullanıcı bilgilerini kaydeder."""
-        self.current_user = user_info.get('kullanici_adi')
-        self.current_user_id = user_info.get('kullanici_id')
-        self.current_token = user_info.get('access_token')
         
-        # db_manager'a mevcut kullanıcı ID'sini ayarla
-        self.db_manager.set_current_user_id(self.current_user_id)
+        self.fatura_service = FaturaService(self.db_manager, self)
+        self.toplu_islem_service = TopluIslemService(self.db_manager, self)
+        self.cari_service = CariService(self.db_manager, self)
 
-    def _check_api_status_on_startup(self):
-        """Uygulama başlatıldıktan sonra API durumunu kontrol eder."""
-        if self.db_manager.check_online_status():
-            self.db_manager.is_online = True
-            if self.centralWidget() is self.login_screen:
-                self._start_background_sync()
-        else:
-            self.db_manager.is_online = False
+        self._setup_ui_connections() 
+        self._initial_load_data()
+        self._start_background_sync()
+        # Yeni Menü eylemleri bağlantıları
+        self.actionStok_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.StokKartiPenceresi',
+            self.stok_yonetimi_sayfasi.stok_listesini_yenile
+        ))
+        self.actionM_teri_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.YeniMusteriEklePenceresi',
+            self.musteri_yonetimi_sayfasi.musteri_listesini_yenile
+        ))
+        self.actionTedarik_i_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.YeniTedarikciEklePenceresi',
+            self.tedarikci_yonetimi_sayfasi.tedarikci_listesini_yenile
+        ))
+        self.actionKasa_Banka_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.YeniKasaBankaEklePenceresi',
+            self.kasa_banka_yonetimi_sayfasi.hesap_listesini_yenile
+        ))
+        self.actionGelir_Gider_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.YeniGelirGiderEklePenceresi',
+            self.gelir_gider_sayfasi.gelir_listesi_frame.gg_listesini_yukle # Hem gelir hem gider listesini yenilemeli
+        ))
+        self.actionFatura_Kart.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.FaturaPenceresi',
+            self.fatura_listesi_sayfasi.fatura_listesini_yukle
+        ))
+        self.action_rsiparis.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.SiparisPenceresi',
+            self.siparis_listesi_sayfasi.siparis_listesini_yukle
+        ))
+        self.actionCari_Hareketler.triggered.connect(self._cari_hareketler_penceresi_ac)
+        self.actionNitelik_Y_netimi.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.UrunNitelikYonetimiPenceresi',
+            lambda: (self.stok_yonetimi_sayfasi._yukle_filtre_comboboxlari_stok_yonetimi(), self.stok_yonetimi_sayfasi.stok_listesini_yenile())
+        ))
+        self.actionToplu_Veri_Aktar_m.triggered.connect(lambda: self._open_dialog_with_callback(
+            'pencereler.TopluVeriEklePenceresi'
+        ))
+        self.actionVeri_Yonetimi.triggered.connect(self._veri_yonetimi_penceresi_ac)
+        self.actionM_teri_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionTedarik_i_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionStok_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionFatura_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionKasa_Banka_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionGelir_Gider_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionCari_Hareket_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionSiparis_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionNitelik_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+
+        self.actionYedekle.triggered.connect(self._yedekle)
+        self.actionGeri_Y_kle.triggered.connect(self._geri_yukle)
+        self.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
+        self.actionY_netici_Ayarlar.triggered.connect(self._yonetici_ayarlari_penceresi_ac)
+        self._update_status_bar()
+        self.set_status_message("Uygulama başlatılıyor, sunucuya bağlanılıyor...")
 
     def _start_background_sync(self):
         """Senkronizasyon işlemini arkaplan thread'inde başlatır."""
@@ -532,10 +553,14 @@ class App(QMainWindow):
         logger.info(f"Durum Mesajı ({color}): {message}")
 
     def _stok_karti_penceresi_ac(self, urun_data):
+        """
+        Stok Kartı penceresini açar.
+        Bu metod, StokYonetimiSayfasi tarafından düzenleme modunda çağrılır.
+        """
         from pencereler import StokKartiPenceresi
         dialog = StokKartiPenceresi(
-            self.tab_widget,
-            self.db_manager,
+            self.tab_widget, 
+            self.db,
             self.stok_yonetimi_sayfasi.stok_listesini_yenile,
             urun_duzenle=urun_data,
             app_ref=self
@@ -561,23 +586,38 @@ class App(QMainWindow):
     def _initialize_db_manager(self):
         """
         OnMuhasebe yöneticisini başlatır.
+        API bağlantısı başarısız olursa uygulamayı durdurmaz, çevrimdışı moda geçer.
         """
-        self.db_manager = OnMuhasebe(api_base_url=self.config["api_base_url"], app_ref=self)
-        self.db_manager.app = self
-        self.db_manager.lokal_db.app = self
+        try:
+            # API bağlantısını test ediyoruz.
+            # Veritabanı yöneticisi içinde sadece API bağlantısını test eden bir metot eklemek daha mantıklı olabilir.
+            # Şimdilik, doğrudan OnMuhasebe'yi API URL'si ile başlatıyoruz ve hatayı yakalıyoruz.
+            self.db_manager = OnMuhasebe(api_base_url=self.config["api_base_url"], app_ref=self)
+            self.is_online = True
+            logger.info("Veritabanı yöneticisi API modu ile başarıyla başlatıldı.")
+            self.set_status_message("API bağlantısı başarılı.", "green")
+
+        except ConnectionError as e:
+            QMessageBox.warning(self, "API Bağlantı Hatası",
+                                f"API'ye bağlanılamadı: {e}\n"
+                                "Uygulama çevrimdışı (offline) modda başlatılacaktır. Veri senkronizasyonu yapılamayacaktır.")
+            logger.critical(f"Uygulama başlatılırken API bağlantı hatası: {e}. Offline moda geçiliyor.")
+            self.db_manager = OnMuhasebe(api_base_url=None, app_ref=self) # API URL'si olmadan başlat
+            self.is_online = False
+            self.set_status_message("Çevrimdışı mod: API bağlantısı yok. Yerel veriler kullanılıyor.", "orange")
+        except Exception as e:
+            QMessageBox.critical(self, "Uygulama Başlatma Hatası",
+                                 f"Veritabanı yöneticisi başlatılırken beklenmeyen bir hata oluştu: {e}\n"
+                                 "Uygulama kapanacak.")
+            logger.critical(f"Uygulama başlatılırken beklenmeyen hata: {e}")
+            sys.exit(1)
 
     def _setup_ui_connections(self):
         # Eğer AnaSayfa üzerindeki butonlar show_tab'i çağırıyorsa, burada doğrudan bir bağlantıya gerek yok
         pass
 
-    def _initial_load_data(self):
-        sirket_bilgileri = self.db_manager.sirket_bilgilerini_yukle(self.current_user_id) if self.current_user_id else None
-        if sirket_bilgileri:
-            self.sirket_adi = sirket_bilgileri.get('sirket_adi', 'Ön Muhasebe Programı')
-        else:
-            self.sirket_adi = 'Ön Muhasebe Programı (Offline)'
-        self.setWindowTitle(self.sirket_adi)
-
+    def _initial_load_data(self): 
+        """Uygulama başlangıcında veya veri güncellendiğinde tüm sekmelerdeki verileri yükler."""
         if not self.db_manager:
             return
 
@@ -607,6 +647,7 @@ class App(QMainWindow):
         if hasattr(self.gelir_gider_sayfasi, 'gider_listesi_frame') and hasattr(self.gelir_gider_sayfasi.gider_listesi_frame, 'gg_listesini_yukle'):
             self.gelir_gider_sayfasi.gider_listesi_frame.gg_listesini_yukle()
 
+        # Raporlama Merkezi sayfasını da yükle
         if hasattr(self.raporlama_merkezi_sayfasi, 'raporu_olustur_ve_yenile'):
             self.raporlama_merkezi_sayfasi.raporu_olustur_ve_yenile()
 
@@ -678,6 +719,8 @@ class App(QMainWindow):
     def _rapor_olustur(self, rapor_tipi):
         try:
             self.show_tab("Raporlama Merkezi")
+            # Belirli bir rapor tipi seçimi için RaporlamaMerkeziSayfası'nda bir metot olması gerekebilir.
+            # Örneğin: self.raporlama_merkezi_sayfasi.select_report_tab(rapor_tipi)
             self.set_status_message(f"{rapor_tipi.capitalize()} raporu için Raporlama Merkezi açıldı.")
 
         except Exception as e:
@@ -802,10 +845,13 @@ class App(QMainWindow):
 
     def _yonetici_ayarlari_penceresi_ac(self):
         from pencereler import YoneticiAyarlariPenceresi
-        dialog = YoneticiAyarlariPenceresi(self, self.db_manager, app_ref=self)
+        dialog = YoneticiAyarlariPenceresi(self, self.db_manager)
         dialog.exec()
 
     def _veri_yonetimi_penceresi_ac(self):
+        """
+        Veri Yönetimi arayüzünü bir diyalog penceresi olarak açar.
+        """
         dialog = QDialog(self)
         dialog.setWindowTitle("Veri Yönetimi ve Senkronizasyon")
         dialog.setMinimumSize(800, 600)
@@ -813,6 +859,9 @@ class App(QMainWindow):
         dialog_layout = QVBoxLayout(dialog)
         veri_yonetimi_widget = VeriYonetimiSekmesi(dialog, self.db_manager, self)
         dialog_layout.addWidget(veri_yonetimi_widget)
+
+        # Sinyal ve slot bağlantıları
+        # Bu kısım, VeriYonetimiSekmesi'nin içinde butonlara işlevsellik eklerken kullanılacak
 
         dialog.exec()
         self.set_status_message("Veri Yönetimi penceresi açıldı.")

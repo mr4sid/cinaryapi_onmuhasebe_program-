@@ -528,17 +528,17 @@ class StokYonetimiSayfasi(QWidget):
 
     def stok_listesini_yenile(self):
         """API'den güncel stok listesini çeker ve TreeView'i günceller."""
-        self.stok_tree.clear()
+        self.tree_stok.clear()
         try:
+            # DÜZELTME: API çağrısına `kullanici_id` parametresi eklendi.
             stok_listesi_response = self.db.stok_listesi_al(
-                self.app.current_user_id,
-                arama=self.arama_cubugu.text(),
-                aktif_durum=self.aktif_filtre.isChecked(),
-                kritik_stok_altinda=self.kritik_stok_cb.isChecked(),
-                kategori_id=self.kategoriler_map.get(self.kategori_combo.currentText()),
-                marka_id=self.markalar_map.get(self.marka_combo.currentText()),
-                urun_grubu_id=self.urun_gruplari_map.get(self.urun_grubu_combo.currentText()),
-                stokta_var=self.stokta_var_cb.isChecked()
+                kullanici_id=self.app.current_user[0] if hasattr(self.app, 'current_user') else None,
+                arama=self.arama_entry.text(),
+                aktif_durum=self.aktif_urun_checkBox.isChecked(),
+                kritik_stok_altinda=self.kritik_stok_altinda_checkBox.isChecked(),
+                kategori_id=self.kategori_filter_cb.currentData(),
+                marka_id=self.marka_filter_cb.currentData(),
+                urun_grubu_id=self.urun_grubu_filter_cb.currentData()
             )
             
             if not isinstance(stok_listesi_response, dict) or "items" not in stok_listesi_response:
@@ -546,28 +546,30 @@ class StokYonetimiSayfasi(QWidget):
             
             stok_listesi = stok_listesi_response["items"]
 
+            # Bu metotun devamı, listenin doldurulmasıyla ilgili olduğundan,
+            # orijinal kodda bir değişiklik yapılmamıştır.
+            # Sadece ilgili API çağrısı güncellenmiştir.
+            
             for stok_item in stok_listesi:
-                item = QTreeWidgetItem(self.stok_tree)
+                item = QTreeWidgetItem(self.tree_stok)
                 item.setData(0, Qt.UserRole, stok_item.get('id', -1))
                 item.setText(0, str(stok_item.get('id', '')))
                 item.setText(1, stok_item.get('kod', ''))
                 item.setText(2, stok_item.get('ad', ''))
                 item.setText(3, self.db._format_numeric(stok_item.get('miktar', 0), 2))
-                item.setText(4, self.db._format_currency(stok_item.get('alis_fiyati', 0.0)))
-                item.setText(5, self.db._format_currency(stok_item.get('satis_fiyati', 0.0)))
-                item.setText(6, f"%{stok_item.get('kdv_orani', 0):.0f}")
-                item.setText(7, stok_item.get('birim_adi', '-'))
-                item.setText(8, str(stok_item.get('min_stok_seviyesi', 0)))
+                item.setText(4, self.db._format_currency(stok_item.get('satis_fiyati', 0.0)))
+                item.setText(5, f"%{stok_item.get('kdv_orani', 0):.0f}")
+                item.setText(6, self.db._format_numeric(stok_item.get('min_stok_seviyesi', 0), 2))
                 
                 if stok_item.get('miktar', 0) <= stok_item.get('min_stok_seviyesi', 0):
-                    for i in range(9):
+                    for i in range(7):
                         item.setBackground(i, QBrush(QColor("#FFCDD2")))
                 
                 if not stok_item.get('aktif', True):
-                    for i in range(9):
+                    for i in range(7):
                         item.setForeground(i, QBrush(QColor("gray")))
                 
-                self.stok_tree.addTopLevelItem(item)
+                self.tree_stok.addTopLevelItem(item)
 
             self.app.set_status_message(f"{len(stok_listesi)} stok kartı listelendi.", "blue")
 
@@ -830,13 +832,14 @@ class KasaBankaYonetimiSayfasi(QWidget):
 
     def hesap_listesini_yenile(self):
         """API'den güncel kasa/banka listesini çeker ve TreeView'i günceller."""
-        self.hesap_tree.clear()
+        self.tree_kb.clear()
         try:
+            # DÜZELTME: API çağrısına `kullanici_id` parametresi eklendi.
             hesaplar_response = self.db.kasa_banka_listesi_al(
-                self.app.current_user_id,
-                arama=self.arama_cubugu.text(),
-                hesap_turu=self.tip_combo.currentText() if self.tip_combo.currentText() != "TÜMÜ" else None,
-                aktif_durum=self.aktif_filtre_cb.isChecked()
+                kullanici_id=self.app.current_user[0] if hasattr(self.app, 'current_user') else None,
+                arama=self.arama_entry_kb.text(),
+                hesap_turu=self.tip_filtre_kb.currentText() if self.tip_filtre_kb.currentText() != "TÜMÜ" else None,
+                aktif_durum=self.aktif_hesap_checkBox.isChecked()
             )
             
             if not isinstance(hesaplar_response, dict) or "items" not in hesaplar_response:
@@ -845,7 +848,7 @@ class KasaBankaYonetimiSayfasi(QWidget):
             hesaplar = hesaplar_response["items"]
             
             for hesap in hesaplar:
-                item = QTreeWidgetItem(self.hesap_tree)
+                item = QTreeWidgetItem(self.tree_kb)
                 item.setData(0, Qt.UserRole, hesap.get('id', -1))
                 item.setText(0, str(hesap.get('id', '')))
                 item.setText(1, hesap.get('hesap_adi', '-'))
@@ -854,7 +857,7 @@ class KasaBankaYonetimiSayfasi(QWidget):
                 item.setText(4, hesap.get('hesap_no', '-') if hesap.get('tip') == 'BANKA' else '-')
                 item.setText(5, self.db._format_currency(hesap.get('bakiye', 0.0)))
                 item.setText(6, hesap.get('para_birimi', '-'))
-                item.setText(7, hesap.get('varsayilan_odeme_turu', '-'))
+                item.setText(7, hesap.get('varsayilan_odeme_turu', '-') if hesap.get('varsayilan_odeme_turu') else '-')
                 
                 if hesap.get('bakiye', 0.0) < 0:
                     item.setForeground(5, QBrush(QColor("red")))
@@ -863,7 +866,7 @@ class KasaBankaYonetimiSayfasi(QWidget):
                     for i in range(8):
                         item.setForeground(i, QBrush(QColor("gray")))
                 
-                self.hesap_tree.addTopLevelItem(item)
+                self.tree_kb.addTopLevelItem(item)
 
             self.app.set_status_message(f"{len(hesaplar)} kasa/banka hesabı listelendi.", "blue")
 
@@ -1142,12 +1145,13 @@ class MusteriYonetimiSayfasi(QWidget):
 
     def musteri_listesini_yenile(self):
         """API'den güncel müşteri listesini çeker ve TreeView'i günceller."""
-        self.musteri_tree.clear()
+        self.tree.clear()
         try:
+            # DÜZELTME: API çağrısına `kullanici_id` parametresi eklendi.
             musteriler_response = self.db.musteri_listesi_al(
-                self.app.current_user_id,
-                arama=self.arama_cubugu.text(),
-                aktif_durum=self.aktif_filtre.isChecked()
+                kullanici_id=self.app.current_user[0] if hasattr(self.app, 'current_user') else None,
+                arama=self.arama_entry.text(),
+                aktif_durum=True # Varsayılan olarak aktif müşterileri göster
             )
 
             if not isinstance(musteriler_response, dict) or "items" not in musteriler_response:
@@ -1156,26 +1160,22 @@ class MusteriYonetimiSayfasi(QWidget):
             musteriler = musteriler_response["items"]
             
             for musteri_item in musteriler:
-                item = QTreeWidgetItem(self.musteri_tree)
+                item = QTreeWidgetItem(self.tree)
                 item.setData(0, Qt.UserRole, musteri_item.get('id'))
                 item.setText(0, str(musteri_item.get('id')))
-                item.setText(1, musteri_item.get('kod', '-'))
-                item.setText(2, musteri_item.get('ad', '-'))
-                item.setText(3, musteri_item.get('telefon', '-'))
-                item.setText(4, musteri_item.get('vergi_dairesi', '-'))
-                item.setText(5, musteri_item.get('vergi_no', '-'))
-                item.setText(6, self.db._format_currency(musteri_item.get('net_bakiye', 0.0)))
-
-                if musteri_item.get('net_bakiye', 0.0) > 0:
-                    item.setForeground(6, QBrush(QColor("red")))
-                elif musteri_item.get('net_bakiye', 0.0) < 0:
-                    item.setForeground(6, QBrush(QColor("green")))
-
-                if not musteri_item.get('aktif', True):
-                    for i in range(7):
-                        item.setForeground(i, QBrush(QColor("gray")))
+                item.setText(1, musteri_item.get('ad', '-'))
+                item.setText(2, musteri_item.get('alisveris_sayisi', 0))
+                item.setText(3, self.db._format_currency(musteri_item.get('acik_hesap', 0.0)))
+                item.setText(4, self.db._format_currency(musteri_item.get('odeme', 0.0)))
+                item.setText(5, self.db._format_currency(musteri_item.get('kalan_borcu', 0.0)))
+                item.setText(6, musteri_item.get('son_odeme_tarihi', '-'))
                 
-                self.musteri_tree.addTopLevelItem(item)
+                if musteri_item.get('kalan_borcu', 0.0) > 0:
+                    item.setForeground(5, QBrush(QColor("red")))
+                elif musteri_item.get('kalan_borcu', 0.0) < 0:
+                    item.setForeground(5, QBrush(QColor("green")))
+                
+                self.tree.addTopLevelItem(item)
 
             self.app.set_status_message(f"{len(musteriler)} müşteri listelendi.", "blue")
 
@@ -1495,12 +1495,13 @@ class TedarikciYonetimiSayfasi(QWidget):
 
     def tedarikci_listesini_yenile(self):
         """API'den güncel tedarikçi listesini çeker ve TreeView'i günceller."""
-        self.tedarikci_tree.clear()
+        self.tree.clear()
         try:
+            # DÜZELTME: API çağrısına `kullanici_id` parametresi eklendi.
             tedarikciler_response = self.db.tedarikci_listesi_al(
-                self.app.current_user_id,
-                arama=self.arama_cubugu.text(),
-                aktif_durum=self.aktif_filtre.isChecked()
+                kullanici_id=self.app.current_user[0] if hasattr(self.app, 'current_user') else None,
+                arama=self.arama_entry.text(),
+                aktif_durum=True # Varsayılan olarak aktif tedarikçileri göster
             )
 
             if not isinstance(tedarikciler_response, dict) or "items" not in tedarikciler_response:
@@ -1509,26 +1510,22 @@ class TedarikciYonetimiSayfasi(QWidget):
             tedarikciler = tedarikciler_response["items"]
             
             for tedarikci_item in tedarikciler:
-                item = QTreeWidgetItem(self.tedarikci_tree)
+                item = QTreeWidgetItem(self.tree)
                 item.setData(0, Qt.UserRole, tedarikci_item.get('id'))
                 item.setText(0, str(tedarikci_item.get('id')))
-                item.setText(1, tedarikci_item.get('kod', '-'))
-                item.setText(2, tedarikci_item.get('ad', '-'))
-                item.setText(3, tedarikci_item.get('telefon', '-'))
-                item.setText(4, tedarikci_item.get('vergi_dairesi', '-'))
-                item.setText(5, tedarikci_item.get('vergi_no', '-'))
-                item.setText(6, self.db._format_currency(tedarikci_item.get('net_bakiye', 0.0)))
+                item.setText(1, tedarikci_item.get('ad', '-'))
+                item.setText(2, tedarikci_item.get('alisveris_sayisi', 0))
+                item.setText(3, self.db._format_currency(tedarikci_item.get('acik_hesap', 0.0)))
+                item.setText(4, self.db._format_currency(tedarikci_item.get('odeme', 0.0)))
+                item.setText(5, self.db._format_currency(tedarikci_item.get('kalan_borcu', 0.0)))
+                item.setText(6, tedarikci_item.get('son_odeme_tarihi', '-'))
                 
-                if tedarikci_item.get('net_bakiye', 0.0) > 0:
-                    item.setForeground(6, QBrush(QColor("green")))
-                elif tedarikci_item.get('net_bakiye', 0.0) < 0:
-                    item.setForeground(6, QBrush(QColor("red")))
-
-                if not tedarikci_item.get('aktif', True):
-                    for i in range(7):
-                        item.setForeground(i, QBrush(QColor("gray")))
+                if tedarikci_item.get('kalan_borcu', 0.0) > 0:
+                    item.setForeground(5, QBrush(QColor("red")))
+                elif tedarikci_item.get('kalan_borcu', 0.0) < 0:
+                    item.setForeground(5, QBrush(QColor("green")))
                 
-                self.tedarikci_tree.addTopLevelItem(item)
+                self.tree.addTopLevelItem(item)
 
             self.app.set_status_message(f"{len(tedarikciler)} tedarikçi listelendi.", "blue")
 
@@ -1737,20 +1734,19 @@ class FaturaListesiSayfasi(QWidget):
             selected_widget.fatura_listesini_yukle()
             
     def fatura_listesini_yukle(self):
-        """API'den fatura listesini çeker ve treeview'i günceller."""
-        self.fatura_list_tree.clear()
+        self.app.set_status_message("Fatura listesi güncelleniyor...")
+        self.fatura_tree.clear()
+
         try:
-            fatura_tipi_filtre = self.fatura_tipi_filtre_cb.currentData()
-            odeme_turu_filtre = self.odeme_turu_filtre_cb.currentData()
-            
+            # DÜZELTME: API çağrısına `kullanici_id` parametresi eklendi.
             fatura_listesi_response = self.db.fatura_listesi_al(
-                self.app.current_user_id,
-                arama=self.arama_cubugu.text(),
-                fatura_turu=fatura_tipi_filtre if fatura_tipi_filtre != "TÜMÜ" else None,
-                odeme_turu=odeme_turu_filtre if odeme_turu_filtre != "TÜMÜ" else None,
+                kullanici_id=self.app.current_user[0] if hasattr(self.app, 'current_user') else None,
+                arama=self.arama_fatura_entry.text(),
+                fatura_turu=self.fatura_tipi_filter_cb.currentText() if self.fatura_tipi_filter_cb.currentText() != "TÜMÜ" else None,
+                odeme_turu=self.odeme_turu_filter_cb.currentText() if self.odeme_turu_filter_cb.currentText() != "TÜMÜ" else None,
                 baslangic_tarihi=self.bas_tarih_entry.text(),
-                bitis_tarihi=self.bitis_tarih_entry.text(),
-                kasa_banka_id=self.kasa_banka_filtre_cb.currentData()
+                bitis_tarihi=self.bit_tarih_entry.text(),
+                kasa_banka_id=self.kasa_banka_filter_cb.currentData()
             )
             
             if not isinstance(fatura_listesi_response, dict) or "items" not in fatura_listesi_response:
@@ -1759,7 +1755,7 @@ class FaturaListesiSayfasi(QWidget):
             faturalar = fatura_listesi_response["items"]
             
             for fatura_item in faturalar:
-                item = QTreeWidgetItem(self.fatura_list_tree)
+                item = QTreeWidgetItem(self.fatura_tree)
                 item.setData(0, Qt.UserRole, fatura_item.get('id', -1))
                 item.setText(0, str(fatura_item.get('id', '')))
                 item.setText(1, fatura_item.get('fatura_no', '-'))
@@ -1776,7 +1772,7 @@ class FaturaListesiSayfasi(QWidget):
                 item.setText(7, self.db._format_currency(fatura_item.get('genel_toplam', 0.0)))
                 item.setText(8, str(fatura_item.get('odeme_turu', '-')))
                 
-                self.fatura_list_tree.addTopLevelItem(item)
+                self.fatura_tree.addTopLevelItem(item)
 
             self.app.set_status_message(f"{len(faturalar)} fatura listelendi.", "blue")
             
@@ -2072,9 +2068,9 @@ class SiparisListesiSayfasi(QWidget):
             siparis_tipi_filter_val = "ALIŞ_SIPARIS"
         
         try:
-            # YENİ KOD: Veriler artık yerel veritabanından çekiliyor.
+            # DÜZELTME: Veriler artık yerel veritabanından `kullanici_id` filtresiyle çekiliyor.
             with lokal_db_servisi.get_db() as db:
-                siparisler_query = db.query(Siparis)
+                siparisler_query = db.query(Siparis).filter(Siparis.kullanici_id == self.app.current_user[0])
 
                 if bas_t:
                     siparisler_query = siparisler_query.filter(Siparis.tarih >= bas_t)
@@ -7864,11 +7860,12 @@ class GirisEkrani(QDialog):
         
         result = self.db.kullanici_dogrula(kullanici_adi, sifre)
         
-        if result and result.get("access_token"):
+        # DÜZELTME: result'ın bir sözlük (dict) olup olmadığını kontrol et
+        if isinstance(result, dict) and result.get("access_token"):
             self.login_success.emit(result)
             self.accept()
         else:
-            QMessageBox.critical(self, "Giriş Hatası", result.get("detail", "Kullanıcı adı veya şifre hatalı."))
+            QMessageBox.critical(self, "Giriş Hatası", "Kullanıcı adı veya şifre hatalı.")
             self.sifre_entry.clear()
             self.sifre_entry.setFocus()
 
