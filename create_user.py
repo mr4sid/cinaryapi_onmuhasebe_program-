@@ -21,7 +21,7 @@ def create_initial_user():
     
     # Oluşturulacak kullanıcı bilgileri
     user_data = {
-        "kullanici_adi": "admin2",
+        "kullanici_adi": "admin3",
         "sifre": "755397",
         "yetki": "ADMIN"
     }

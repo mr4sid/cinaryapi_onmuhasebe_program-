@@ -4,7 +4,11 @@ from sqlalchemy.orm import Session
 from .. import modeller, semalar
 from ..veritabani import get_db
 from passlib.context import CryptContext
+from ..guvenlik import create_access_token # DÜZELTİLDİ: Yeni import
+from datetime import timedelta
+from ..config import ACCESS_TOKEN_EXPIRE_MINUTES
 
+# DÜZELTİLDİ: prefix '/' ile başlıyor
 router = APIRouter(prefix="/dogrulama", tags=["Kimlik Doğrulama"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -31,22 +35,25 @@ def authenticate_user(user_login: modeller.KullaniciLogin, db: Session = Depends
             detail="Hatalı kullanıcı adı veya şifre",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    # DÜZELTİLDİ: Geçerli bir JWT oluşturuyoruz
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.kullanici_adi}, expires_delta=access_token_expires
+    )
 
-    return {"access_token": user.kullanici_adi, "token_type": "bearer", "kullanici_id": user.id} # Yeni eklendi
+    return {"access_token": access_token, "token_type": "bearer", "kullanici_id": user.id} # Yeni eklendi
 
 @router.post("/register_temp", response_model=modeller.KullaniciRead)
 def register_temporary_user(user_create: modeller.KullaniciCreate, db: Session = Depends(get_db)):
     db_user = db.query(semalar.Kullanici).filter(semalar.Kullanici.kullanici_adi == user_create.kullanici_adi).first()
     if db_user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kullanıcı adı zaten mevcut")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kullanıcı adı zaten mevcut.")
     
     hashed_password = hash_password(user_create.sifre)
-    db_user = semalar.Kullanici(
-        kullanici_adi=user_create.kullanici_adi,
-        hashed_sifre=hashed_password,
-        aktif=True
-    )
+    db_user = semalar.Kullanici(kullanici_adi=user_create.kullanici_adi, hashed_sifre=hashed_password, rol=user_create.rol)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    return db_user
+    
+    return modeller.KullaniciRead.model_validate(db_user, from_attributes=True)

@@ -12,6 +12,7 @@ from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Text, DateTime, MetaData
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import func, case
 from requests.exceptions import ConnectionError, Timeout, RequestException # Yeni import
 from api.modeller import Base, Nitelik
 
@@ -82,99 +83,85 @@ class OnMuhasebe:
     USER_ROLE_SALES = "SALES"
     USER_ROLE_USER = "USER"
 
-    def __init__(self, api_base_url=API_BASE_URL, data_dir=None, app_ref=None):
-        """
-        Veritabanı bağlantılarını ve API iletişimini yöneten sınıf.
-        Uygulama anında başlar ve API bağlantı kontrolü daha sonra yapılır.
-        """
+    def __init__(self, app_ref, api_base_url):
         self.app = app_ref
         self.api_base_url = api_base_url
-        self.data_dir = data_dir or os.path.join(os.path.dirname(__file__), 'data')
+        self.access_token = None
+        self.current_user_id = None
         self.is_online = False
-        self.lokal_db = lokal_db_servisi
-        
-        # Yerel veritabanını her zaman anında başlat
+        self.timeout = 10
+
+        # Lokal veritabanı bağlantısını başlat
         try:
+            self.lokal_db = lokal_db_servisi  # DÜZELTİLDİ: Nesne zaten başlatıldığı için () kaldırıldı.
             self.lokal_db.initialize_database()
             logger.info("Yerel veritabanı başarıyla başlatıldı.")
         except Exception as e:
-            logger.critical(f"Yerel veritabanı başlatılırken kritik bir hata oluştu: {e}")
+            logger.critical(f"Yerel veritabanı başlatılırken kritik bir hata oluştu: {e}", exc_info=True)
             raise
+
+        self.check_online_status()
 
     def check_online_status(self):
         """
-        API bağlantısını test eder ve çevrimiçi/çevrimdışı mod durumunu ayarlar.
-        Bu metodun uygulama başlatıldıktan sonra çağrılması gerekir.
+        API bağlantısını kontrol eder ve self.is_online bayrağını ayarlar.
         """
-        if self.api_base_url:
-            try:
-                requests.get(f"{self.api_base_url}/sistem/status", timeout=5)
+        try:
+            response = requests.get(f"{self.api_base_url}/sistem/status", timeout=5)
+            response.raise_for_status()
+            if response.status_code == 200:
                 self.is_online = True
-                if self.app:
-                    self.app.set_status_message("API bağlantısı başarılı. Çevrimiçi mod aktif.", "green")
-                return True
-            except (ConnectionError, Timeout, RequestException) as e:
+                logger.info("API bağlantısı başarıyla kuruldu.")
+            else:
                 self.is_online = False
-                if self.app:
-                    self.app.set_status_message("API'ye bağlanılamadı. Çevrimdışı mod aktif.", "red")
-                logger.error(f"API'ye bağlanılamadı. Çevrimdışı moda geçiliyor. Hata: {e}")
-                return False
-        self.is_online = False
-        return False
+                logger.warning(f"API bağlantısı kurulamadı. Durum kodu: {response.status_code}")
+        except (ConnectionError, Timeout, RequestException) as e:
+            logger.warning(f"API bağlantısı kurulamadı. Çevrimdışı modda başlatılıyor. Hata: {e}")
+            self.is_online = False
+        except Exception as e:
+            logger.error(f"Beklenmedik bir hata oluştu: {e}", exc_info=True)
+            self.is_online = False
 
-    def _make_api_request(self, method: str, path: str, params: dict = None, json: dict = None):
+    def _make_api_request(self, method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None, headers: Optional[Dict] = None, files=None):
         """
-        Merkezi API isteği yapıcı metot. Çevrimdışı modda None döner.
+        API'ye kontrollü bir şekilde istek gönderir.
         """
         if not self.is_online:
-            logger.warning(f"Çevrimdışı mod: API isteği iptal edildi: {method} {path}")
-            return None  # API'ye bağlanılamazsa None dön
+            logger.warning(f"Çevrimdışı mod: API isteği iptal edildi: {method} {endpoint}")
+            return None
 
-        url = f"{self.api_base_url}{path}"
-        
+        # Headers'a oturum açma tokenını ekleyin (eğer varsa)
+        api_headers = {"Content-Type": "application/json"}
+        if self.access_token:
+            api_headers["Authorization"] = f"Bearer {self.access_token}"
+
+        if headers:
+            api_headers.update(headers)
+
+        url = f"{self.api_base_url}{endpoint}"
         try:
-            # ... (mevcut _make_api_request metot içeriği)
-            if method.upper() == "GET":
-                response = requests.get(url, params=params, timeout=10) # Timeout eklendi
-            elif method.upper() == "POST":
-                response = requests.post(url, json=json, timeout=10)
-            elif method.upper() == "PUT":
-                response = requests.put(url, json=json, timeout=10)
-            elif method.upper() == "DELETE":
-                response = requests.delete(url, params=params, timeout=10)
+            # POST isteği için 'data' parametresini 'json' olarak gönder.
+            if method.upper() == 'POST' or method.upper() == 'PUT':
+                response = requests.request(method, url, json=data, params=params, headers=api_headers, files=files, timeout=self.timeout)
             else:
-                raise ValueError(f"Desteklenmeyen HTTP metodu: {method}")
+                response = requests.request(method, url, params=params, headers=api_headers, files=files, timeout=self.timeout)
 
             response.raise_for_status()
 
             if response.text:
-                response_json = response.json()
-                return response_json
-            
-            return {}
-        except requests.exceptions.RequestException as e:
-            # Eğer API'ye bağlantı kurulamıyorsa
-            if isinstance(e, (ConnectionError, Timeout)):
+                return response.json()
+            else:
+                return {}
+
+        except (ConnectionError, Timeout, RequestException) as e:
+            logger.error(f"API isteği sırasında hata oluştu: {url}. Hata: {e}")
+            self.is_online = False
+            if self.app:
                 self.app.set_status_message("API bağlantısı kesildi. Çevrimdışı moda geçiliyor.", "red")
-                self.is_online = False
-                return None
-            
-            # Diğer HTTP hataları
-            error_detail = str(e)
-            if e.response is not None:
-                try:
-                    error_detail = e.response.json().get('detail', error_detail)
-                except ValueError:
-                    error_detail = f"API'den beklenen JSON yanıtı alınamadı. Yanıt: {e.response.text[:200]}..."
-            
-            logger.error(f"API isteği sırasında genel hata oluştu: {url}. Hata: {error_detail}", exc_info=True)
-            raise ValueError(f"API isteği sırasında bir hata oluştu: {error_detail}") from e
-        except ValueError as e:
-            logger.error(f"API isteği sırasında bir değer hatası oluştu: {e}", exc_info=True)
-            raise e
+            return None
         except Exception as e:
-            logger.error(f"API isteği sırasında beklenmeyen bir hata oluştu: {url}. Hata: {e}", exc_info=True)
-            raise ValueError(f"API isteği sırasında beklenmeyen bir hata oluştu: {e}") from e
+            logger.error(f"API isteği sırasında genel hata oluştu: {url}. Hata: {e}", exc_info=True)
+            return None
                 
     # --- ŞİRKET BİLGİLERİ ---
     def sirket_bilgilerini_yukle(self):
@@ -193,46 +180,131 @@ class OnMuhasebe:
             return False, f"Şirket bilgileri kaydedilirken hata: {e}"
 
     # --- KULLANICI YÖNETİMİ ---
-    def kullanici_dogrula(self, kullanici_adi: str, sifre: str) -> Optional[Dict[str, Any]]:
-        if self.check_online_status():
-            return self._kullanici_dogrula_api(kullanici_adi, sifre)
+    def kullanici_dogrula(self, kullanici_adi: str, sifre: str) -> Optional[dict]:
+        """
+        Kullanıcıyı API üzerinden veya çevrimdışı modda yerel veritabanı üzerinden doğrular.
+        """
+        # API Bağlantısı varsa, önce API üzerinden doğrulamayı dene
+        if self.is_online:
+            logger.info("API üzerinden kullanıcı doğrulaması deneniyor...")
+            try:
+                login_data = {"kullanici_adi": kullanici_adi, "sifre": sifre}
+                response_data = self._make_api_request("POST", "/dogrulama/login", data=login_data)
+
+                if response_data and "access_token" in response_data:
+                    self.access_token = response_data["access_token"]
+                    
+                    # DÜZELTİLDİ: Kullanıcı bilgilerini ayrı bir API çağrısı ile çekiyoruz.
+                    user_info = self._get_current_user()
+                    
+                    if user_info:
+                        self.current_user_id = user_info["id"]
+                        
+                        logger.info(f"Kullanıcı API üzerinden başarıyla doğrulandı: {kullanici_adi}")
+                        
+                        # Başarılı API doğrulaması sonrası, kullanıcıyı yerel DB'ye kaydet veya güncelle
+                        try:
+                            self.lokal_db.kullanici_kaydet_veya_guncelle(user_info)
+                            logger.info(f"Kullanıcı bilgileri yerel veritabanına senkronize edildi: {kullanici_adi}")
+                        except Exception as e:
+                            logger.error(f"Kullanıcı yerel veritabanına kaydedilirken hata oluştu: {e}", exc_info=True)
+
+                        response_data["kullanici"] = user_info
+                        return response_data
+                    else:
+                        logger.warning("API üzerinden kullanıcı bilgisi çekilemedi.")
+                        return None
+                else:
+                    logger.warning("Kullanıcı doğrulama API üzerinden başarısız: Yanıt formatı hatalı veya token yok.")
+                    return None
+            except Exception as e:
+                logger.error(f"Kullanıcı doğrulama API üzerinden başarısız: API isteği sırasında bir hata oluştu: {e}")
+                self.is_online = False # API hatası durumunda çevrimdışı moda geç
+                # DÜZELTİLDİ: self.app'in None olup olmadığı kontrol edildi.
+                if self.app:
+                    self.app.set_status_message(f"API hatası: {e}. Çevrimdışı moda geçiliyor.", "red")
+                # API hatası durumunda yerel veritabanı ile devam et
+                return self.kullanici_dogrula_yerel(kullanici_adi, sifre)
+
+        # Çevrimdışı moddaysa veya API bağlantısı kurulamadıysa yerel veritabanı üzerinden doğrula
         else:
-            if self.app:
-                self.app.set_status_message("API bağlantısı yok. Yerel veritabanından deniyor.", "orange")
-            return self._kullanici_dogrula_lokal(kullanici_adi, sifre)
+            logger.info("Çevrimdışı mod: Yerel veritabanı üzerinden kullanıcı doğrulaması deneniyor...")
+            return self.kullanici_dogrula_yerel(kullanici_adi, sifre)
 
-    def _kullanici_dogrula_api(self, kullanici_adi: str, sifre: str) -> Optional[Dict[str, Any]]:
-        """API üzerinden kullanıcı doğrulama işlemini yapar."""
+    def kullanici_dogrula_yerel(self, kullanici_adi: str, sifre: str) -> Optional[dict]:
+        """
+        Kullanıcıyı yerel veritabanı üzerinden doğrular.
+        """
         try:
-            response = self._make_api_request("POST", "/dogrulama/login", json={"kullanici_adi": kullanici_adi, "sifre": sifre})
-            if response:
-                self.lokal_db.kullanici_kaydet(response)
-                if self.app:
-                    self.app.set_status_message("API üzerinden doğrulama başarılı.", "green")
-                return response
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Kullanıcı doğrulama API üzerinden başarısız: {e}")
-            if self.app:
-                self.app.set_status_message("API'den doğrulama başarısız. Yerel doğrulama deneniyor.", "orange")
-        return None
-
-    def _kullanici_dogrula_lokal(self, kullanici_adi: str, sifre: str) -> Optional[Dict[str, Any]]:
-        """Yerel veritabanında kullanıcı doğrulama işlemini yapar."""
-        try:
-            kullanici = self.lokal_db.kullanici_dogrula(kullanici_adi, sifre)
-            if kullanici:
-                if self.app:
-                    self.app.set_status_message("Çevrimdışı doğrulama başarılı.", "green")
-                return kullanici
+            user_data = self.lokal_db.kullanici_getir(kullanici_adi)
+            if user_data:
+                # Password hash'ini doğrula
+                if self.verify_password(sifre, user_data["hashed_sifre"]):
+                    self.access_token = "offline_token"
+                    self.current_user_id = user_data["id"]
+                    logger.info(f"Kullanıcı yerel veritabanı üzerinden başarıyla doğrulandı: {kullanici_adi}")
+                    return {
+                        "access_token": self.access_token,
+                        "token_type": "bearer",
+                        "kullanici": user_data
+                    }
+                else:
+                    logger.warning(f"Yerel veritabanı doğrulaması başarısız: Hatalı şifre.")
+                    return None
             else:
-                if self.app:
-                    self.app.set_status_message("Çevrimdışı doğrulama başarısız. Kullanıcı adı veya şifre hatalı.", "red")
+                logger.warning(f"Yerel veritabanında kullanıcı bulunamadı veya pasif: {kullanici_adi}")
                 return None
         except Exception as e:
-            logger.error(f"Kullanıcı doğrulama yerel DB'de başarısız: {e}")
-            if self.app:
-                self.app.set_status_message(f"Yerel doğrulama sırasında hata: {e}", "red")
-        return None
+            logger.error(f"Yerel veritabanı üzerinden kullanıcı doğrulanırken hata oluştu: {e}", exc_info=True)
+            return None
+
+    def kullanici_dogrula_yerel(self, kullanici_adi: str, sifre: str) -> Optional[dict]:
+        """
+        Kullanıcıyı yerel veritabanı üzerinden doğrular.
+        """
+        try:
+            user_data = self.lokal_db.kullanici_getir(kullanici_adi)
+            if user_data:
+                # Password hash'ini doğrula
+                if self.verify_password(sifre, user_data["hashed_sifre"]):
+                    self.access_token = "offline_token"
+                    self.current_user_id = user_data["id"]
+                    logger.info(f"Kullanıcı yerel veritabanı üzerinden başarıyla doğrulandı: {kullanici_adi}")
+                    return {
+                        "access_token": self.access_token,
+                        "token_type": "bearer",
+                        "kullanici": user_data
+                    }
+                else:
+                    logger.warning(f"Yerel veritabanı doğrulaması başarısız: Hatalı şifre.")
+                    return None
+            else:
+                logger.warning(f"Yerel veritabanında kullanıcı bulunamadı veya pasif: {kullanici_adi}")
+                return None
+        except Exception as e:
+            logger.error(f"Yerel veritabanı üzerinden kullanıcı doğrulanırken hata oluştu: {e}", exc_info=True)
+            return None
+
+    def _get_current_user(self) -> Optional[dict]:
+        """
+        API'den mevcut kullanıcının bilgilerini çeker.
+        """
+        try:
+            if not self.access_token:
+                logger.warning("Kullanıcı bilgileri çekilemedi: Access token mevcut değil.")
+                return None
+            
+            response_data = self._make_api_request("GET", "/kullanicilar/me")
+            
+            if response_data:
+                logger.info("Mevcut kullanıcı bilgileri başarıyla çekildi.")
+                return response_data
+            else:
+                logger.warning("API'den kullanıcı bilgileri çekilirken beklenmedik bir yanıt alındı.")
+                return None
+        except Exception as e:
+            logger.error(f"Mevcut kullanıcı bilgileri çekilirken hata oluştu: {e}", exc_info=True)
+            return None
 
     def kullanici_listele(self):
         """API'den kullanıcı listesini çeker. Yanıtı 'items' listesi olarak döndürür."""
@@ -849,17 +921,40 @@ class OnMuhasebe:
             logger.error(f"Fatura ID {fatura_id} kalemleri çekilirken hata: {e}")
             return []
         
-    def son_fatura_no_getir(self, fatura_turu: str, kullanici_id: int):
-        path = f"/sistem/next_fatura_number/{fatura_turu.upper()}"
+    def son_fatura_no_getir(self, fatura_tipi: str, kullanici_id: int) -> str:
+        """
+        API'den son fatura numarasını alır ve yeni bir fatura numarası üretir.
+        Çevrimdışı modda ise manuel bir fatura numarası oluşturur.
+        """
+        if not self.is_online:
+            yeni_fatura_no = f"MANUEL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            logger.warning(f"Çevrimdışı mod: Manuel fatura numarası oluşturuldu: {yeni_fatura_no}")
+            return yeni_fatura_no
+        
         try:
-            response_data = self._make_api_request(method="GET", path=path, params={"kullanici_id": kullanici_id})
-            return response_data.get("fatura_no", "FATURA_NO_HATA")
-        except ValueError as e:
-            logger.error(f"Son fatura no API'den alınamadı: {e}")
-            return "FATURA_NO_HATA"
-        except Exception as e:
-            logger.error(f"Son fatura no API'den alınırken beklenmeyen hata: {e}", exc_info=True)
-            return "FATURA_NO_HATA"
+            params = {"kullanici_id": kullanici_id, "fatura_turu": fatura_tipi}
+            response_data = self._make_api_request(
+                "GET", "/raporlar/son_fatura_no_getir", params=params
+            )
+
+            if response_data and "son_fatura_no" in response_data:
+                son_fatura_no = response_data["son_fatura_no"]
+                if not son_fatura_no:
+                    return "1"
+                try:
+                    sadece_numara = int(''.join(filter(str.isdigit, son_fatura_no)))
+                    yeni_numara = sadece_numara + 1
+                    # Fatura numarasındaki metin kısmını koru
+                    metin_kismi = ''.join(filter(str.isalpha, son_fatura_no))
+                    return f"{metin_kismi}{yeni_numara}"
+                except ValueError:
+                    return "FATURA_NO_HATA"
+            else:
+                return "FATURA_NO_HATA"
+        except (ConnectionError, Timeout, RequestException) as e:
+            logger.error(f"API'den son fatura numarası çekilirken hata: {e}")
+            yeni_fatura_no = f"MANUEL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            return yeni_fatura_no
                 
     def fatura_detay_al(self, fatura_id: int, kullanici_id: int):
         try:
@@ -1649,17 +1744,98 @@ class OnMuhasebe:
         lokal_siparisler = self.lokal_db.listele(model_adi="Siparis", filtre=filtre)
         return {"items": lokal_siparisler, "total": len(lokal_siparisler)}
 
-    def get_gelir_gider_aylik_ozet(self, yil: int):
+    def get_gelir_gider_aylik_ozet(self, kullanici_id: int, baslangic_tarihi: str, bitis_tarihi: str) -> Dict[str, Any]:
         """
-        Belirtilen yıla ait aylık gelir ve gider özetini API'den alır.
+        Belirtilen tarih aralığına göre aylık gelir ve giderlerin özetini döndürür.
         """
-        endpoint = "/raporlar/gelir_gider_aylik_ozet"
-        params = {"yil": yil}
         try:
-            return self._make_api_request("GET", endpoint, params=params)
-        except ValueError as e:
-            logger.error(f"Aylık gelir/gider özeti alınırken hata: {e}")
-            return {"aylik_ozet": []} # Hata durumunda boş liste dön
+            with lokal_db_servisi.get_db() as db:
+                from api.modeller import GelirGider
+                query = db.query(
+                    func.strftime('%Y-%m', GelirGider.tarih).label('ay_yil'),
+                    func.strftime('%Y', GelirGider.tarih).label('yil'),
+                    func.strftime('%m', GelirGider.tarih).label('ay_numarasi'),
+                    func.sum(case((GelirGider.tip == 'GELİR', GelirGider.tutar), else_=0)).label('toplam_gelir'),
+                    func.sum(case((GelirGider.tip == 'GİDER', GelirGider.tutar), else_=0)).label('toplam_gider')
+                ).filter(
+                    GelirGider.kullanici_id == kullanici_id,
+                    GelirGider.tarih >= baslangic_tarihi,
+                    GelirGider.tarih <= bitis_tarihi
+                ).group_by(
+                    'ay_yil', 'yil', 'ay_numarasi'
+                ).order_by('ay_yil')
+
+                aylik_ozet = query.all()
+                
+                result = []
+                for row in aylik_ozet:
+                    ay_adi = locale.nl_langinfo(locale.MON_1 + int(row.ay_numarasi) - 1)
+                    result.append({
+                        "ay_yil": row.ay_yil,
+                        "ay_adi": ay_adi,
+                        "yil": int(row.yil),
+                        "ay_numarasi": int(row.ay_numarasi),
+                        "toplam_gelir": float(row.toplam_gelir),
+                        "toplam_gider": float(row.toplam_gider)
+                    })
+                    
+            return {"aylik_ozet": result}
+        except Exception as e:
+            logger.error(f"Aylık gelir/gider özeti alınırken hata: {e}", exc_info=True)
+            return {"aylik_ozet": []}
+
+    def get_monthly_gross_profit_summary(self, kullanici_id: int, baslangic_tarihi: str, bitis_tarihi: str) -> List[Dict[str, Any]]:
+        """
+        Belirtilen tarih aralığı için aylık brüt kâr özetini hesaplar.
+        """
+        try:
+            with lokal_db_servisi.get_db() as db:
+                from api.modeller import Fatura, StokHareket, Stok
+                query = db.query(
+                    func.strftime('%Y-%m', Fatura.tarih).label('ay_yil'),
+                    func.strftime('%Y', Fatura.tarih).label('yil'),
+                    func.strftime('%m', Fatura.tarih).label('ay_numarasi'),
+                    func.sum(case((Fatura.fatura_turu == self.FATURA_TIP_SATIS, Fatura.genel_toplam), else_=0)).label('toplam_satis_geliri'),
+                    func.sum(case((Fatura.fatura_turu == self.FATURA_TIP_ALIS, Fatura.genel_toplam), else_=0)).label('toplam_alis_gideri'),
+                ).filter(
+                    Fatura.kullanici_id == kullanici_id,
+                    Fatura.tarih >= baslangic_tarihi,
+                    Fatura.tarih <= bitis_tarihi
+                ).group_by(
+                    'ay_yil', 'yil', 'ay_numarasi'
+                ).order_by('ay_yil')
+
+                aylik_ozet = query.all()
+                
+                result = []
+                for row in aylik_ozet:
+                    ay_adi = locale.nl_langinfo(locale.MON_1 + int(row.ay_numarasi) - 1)
+                    
+                    # Satılan Malın Maliyetini (COGS) hesapla
+                    cogs_subquery = db.query(func.sum(StokHareket.miktar * Stok.alis_fiyati)) \
+                                    .join(Stok, Stok.id == StokHareket.urun_id) \
+                                    .filter(
+                                        StokHareket.kaynak == 'FATURA',
+                                        StokHareket.islem_tipi == self.STOK_ISLEM_TIP_CIKIS_FATURA_SATIS,
+                                        StokHareket.kullanici_id == kullanici_id,
+                                        StokHareket.tarih >= f"{row.ay_yil}-01",
+                                        StokHareket.tarih <= f"{row.ay_yil}-31"
+                                    ).scalar() or 0.0
+
+                    brut_kar = (row.toplam_satis_geliri or 0) - cogs_subquery
+                    
+                    result.append({
+                        "ay_yil": row.ay_yil,
+                        "ay_adi": ay_adi,
+                        "toplam_satis_geliri": float(row.toplam_satis_geliri),
+                        "satilan_malin_maliyeti": float(cogs_subquery),
+                        "brut_kar": float(brut_kar)
+                    })
+                    
+            return result
+        except Exception as e:
+            logger.error(f"Aylık brüt kâr özeti alınırken hata: {e}", exc_info=True)
+            return []
 
     def dosya_indir_api_den(self, api_dosya_yolu: str, yerel_kayit_yolu: str) -> tuple:
         """

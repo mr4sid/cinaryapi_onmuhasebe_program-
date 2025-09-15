@@ -837,4 +837,26 @@ class LokalVeritabaniServisi:
             logger.error(f"Yerel veritabanında kullanıcı doğrulama sırasında hata: {e}")
             return None
 
+    def kullanici_getir(self, kullanici_adi: str) -> Optional[dict]:
+        """
+        Yerel veritabanından kullanıcı adı ile kullanıcıyı getirir.
+        """
+        try:
+            with self.SessionLocal() as session:
+                kullanici_orm = session.query(Kullanici).filter(Kullanici.kullanici_adi == kullanici_adi).first()
+                if kullanici_orm:
+                    return {
+                        "id": kullanici_orm.id,
+                        "kullanici_adi": kullanici_orm.kullanici_adi,
+                        "hashed_sifre": kullanici_orm.hashed_sifre,
+                        "aktif": kullanici_orm.aktif,
+                        "rol": kullanici_orm.rol,
+                        "token": kullanici_orm.token,
+                        "token_tipi": kullanici_orm.token_tipi
+                    }
+                return None
+        except Exception as e:
+            logger.error(f"Yerel veritabanından kullanıcı çekilirken hata oluştu: {e}", exc_info=True)
+            return None
+
 lokal_db_servisi = LokalVeritabaniServisi()

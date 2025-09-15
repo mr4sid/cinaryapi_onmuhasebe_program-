@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from .. import modeller, semalar
 from ..veritabani import get_db
+from ..guvenlik import get_current_user
 
 router = APIRouter(prefix="/kullanicilar", tags=["Kullanıcılar"])
 
@@ -17,6 +18,10 @@ def read_kullanicilar(
     kullanicilar = query.offset(skip).limit(limit).all()
     total_count = query.count()
     return {"items": [modeller.KullaniciRead.model_validate(k, from_attributes=True) for k in kullanicilar], "total": total_count}
+
+@router.get("/me", response_model=modeller.KullaniciRead)
+def read_kullanici_me(current_user: modeller.Kullanici = Depends(get_current_user)):
+    return current_user
 
 @router.get("/{kullanici_id}", response_model=modeller.KullaniciRead)
 def read_kullanici(kullanici_id: int, db: Session = Depends(get_db)):

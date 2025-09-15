@@ -80,6 +80,7 @@ class AnaSayfa(QWidget):
         self.db = db_manager
         self.main_layout = QVBoxLayout(self)
 
+        # Başlık ve Özet Bilgiler
         self.title_label = QLabel("Çınar Yapı Ön Muhasebe Programı - Genel Bakış")
         self.title_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
         self.main_layout.addWidget(self.title_label, alignment=Qt.AlignCenter)
@@ -91,66 +92,88 @@ class AnaSayfa(QWidget):
 
         self.ozet_satislar_group = QGroupBox("Toplam Satışlar")
         self.lbl_toplam_satis_degeri = QLabel("0,00 TL")
+        self.lbl_toplam_satis_degeri.setFont(QFont("Segoe UI", 14, QFont.Bold))
         self.ozet_satislar_group.setLayout(QVBoxLayout())
         self.ozet_satislar_group.layout().addWidget(self.lbl_toplam_satis_degeri, alignment=Qt.AlignCenter)
         self.ozet_bilgiler_layout.addWidget(self.ozet_satislar_group)
 
         self.ozet_alislar_group = QGroupBox("Toplam Alışlar")
         self.lbl_toplam_alis_degeri = QLabel("0,00 TL")
+        self.lbl_toplam_alis_degeri.setFont(QFont("Segoe UI", 14, QFont.Bold))
         self.ozet_alislar_group.setLayout(QVBoxLayout())
         self.ozet_alislar_group.layout().addWidget(self.lbl_toplam_alis_degeri, alignment=Qt.AlignCenter)
         self.ozet_bilgiler_layout.addWidget(self.ozet_alislar_group)
 
         self.ozet_tahsilatlar_group = QGroupBox("Toplam Tahsilatlar")
         self.lbl_toplam_tahsilat_degeri = QLabel("0,00 TL")
+        self.lbl_toplam_tahsilat_degeri.setFont(QFont("Segoe UI", 14, QFont.Bold))
         self.ozet_tahsilatlar_group.setLayout(QVBoxLayout())
         self.ozet_tahsilatlar_group.layout().addWidget(self.lbl_toplam_tahsilat_degeri, alignment=Qt.AlignCenter)
         self.ozet_bilgiler_layout.addWidget(self.ozet_tahsilatlar_group)
 
         self.ozet_odemeler_group = QGroupBox("Toplam Ödemeler")
         self.lbl_toplam_odeme_degeri = QLabel("0,00 TL")
+        self.lbl_toplam_odeme_degeri.setFont(QFont("Segoe UI", 14, QFont.Bold))
         self.ozet_odemeler_group.setLayout(QVBoxLayout())
         self.ozet_odemeler_group.layout().addWidget(self.lbl_toplam_odeme_degeri, alignment=Qt.AlignCenter)
         self.ozet_bilgiler_layout.addWidget(self.ozet_odemeler_group)
 
         self.ozet_kritik_stok_group = QGroupBox("Kritik Stok")
         self.lbl_kritik_stok_sayisi = QLabel("0")
+        self.lbl_kritik_stok_sayisi.setFont(QFont("Segoe UI", 14, QFont.Bold))
         self.ozet_kritik_stok_group.setLayout(QVBoxLayout())
         self.ozet_kritik_stok_group.layout().addWidget(self.lbl_kritik_stok_sayisi, alignment=Qt.AlignCenter)
         self.ozet_bilgiler_layout.addWidget(self.ozet_kritik_stok_group)
+        self.main_layout.addSpacing(20)
 
-        # Hızlı menü butonlarını oluştur
+        # Hızlı erişim butonları alanı
         self.hizli_menuler_frame = QFrame(self)
         self.hizli_menuler_layout = QGridLayout(self.hizli_menuler_frame)
         self.main_layout.addWidget(self.hizli_menuler_frame)
+        self.main_layout.addStretch() # Butonların üst kısma hizalanmasını sağlar
 
-        self.hizli_menuler_layout.addWidget(QPushButton("Stok Yönetimi", clicked=lambda: self.app.show_tab("Stok Yönetimi")), 0, 0)
-        self.hizli_menuler_layout.addWidget(QPushButton("Müşteri Yönetimi", clicked=lambda: self.app.show_tab("Müşteri Yönetimi")), 0, 1)
-        self.hizli_menuler_layout.addWidget(QPushButton("Tedarikçi Yönetimi", clicked=lambda: self.app.show_tab("Tedarikçi Yönetimi")), 0, 2)
-        self.hizli_menuler_layout.addWidget(QPushButton("Faturalar", clicked=lambda: self.app.show_tab("Faturalar")), 0, 3)
+        # Buton stilleri
+        button_style = "QPushButton { padding: 25px; font-size: 14pt; border-radius: 10px; border: 1px solid #ccc; background-color: #fdfdfd; } QPushButton:hover { background-color: #e6e6e6; border: 1px solid #aaa; }"
+        
+        # 1. Satır butonları
+        btn_yeni_satis_faturasi = QPushButton("📝 Yeni Satış Faturası")
+        btn_yeni_satis_faturasi.setStyleSheet(button_style)
+        btn_yeni_satis_faturasi.clicked.connect(lambda: self.app.fatura_listesi_sayfasi.yeni_fatura_ekle_ui(self.db.FATURA_TIP_SATIS))
+        self.hizli_menuler_layout.addWidget(btn_yeni_satis_faturasi, 0, 0)
+        
+        btn_yeni_alis_faturasi = QPushButton("🛒 Yeni Alış Faturası")
+        btn_yeni_alis_faturasi.setStyleSheet(button_style)
+        btn_yeni_alis_faturasi.clicked.connect(lambda: self.app.fatura_listesi_sayfasi.yeni_fatura_ekle_ui(self.db.FATURA_TIP_ALIS))
+        self.hizli_menuler_layout.addWidget(btn_yeni_alis_faturasi, 0, 1)
 
-        self.hizli_menuler_layout.addWidget(QPushButton("Sipariş Yönetimi", clicked=lambda: self.app.show_tab("Sipariş Yönetimi")), 1, 0)
-        self.hizli_menuler_layout.addWidget(QPushButton("Kasa/Banka", clicked=lambda: self.app.show_tab("Kasa/Banka")), 1, 1)
-        self.hizli_menuler_layout.addWidget(QPushButton("Gelir/Gider", clicked=lambda: self.app.show_tab("Gelir/Gider")), 1, 2)
-        self.hizli_menuler_layout.addWidget(QPushButton("Raporlama Merkezi", clicked=lambda: self.app.show_tab("Raporlama Merkezi")), 1, 3)
+        btn_faturalar = QPushButton("🧾 Faturalar")
+        btn_faturalar.setStyleSheet(button_style)
+        btn_faturalar.clicked.connect(lambda: self.app.show_tab("Faturalar"))
+        self.hizli_menuler_layout.addWidget(btn_faturalar, 0, 2)
+        
+        # 2. Satır butonları
+        btn_kasa_banka_yonetimi = QPushButton("🏦 Kasa/Banka Yönetimi")
+        btn_kasa_banka_yonetimi.setStyleSheet(button_style)
+        btn_kasa_banka_yonetimi.clicked.connect(lambda: self.app.show_tab("Kasa/Banka"))
+        self.hizli_menuler_layout.addWidget(btn_kasa_banka_yonetimi, 1, 0)
+        
+        btn_musteri_yonetimi = QPushButton("👥 Müşteri Yönetimi")
+        btn_musteri_yonetimi.setStyleSheet(button_style)
+        btn_musteri_yonetimi.clicked.connect(lambda: self.app.show_tab("Müşteri Yönetimi"))
+        self.hizli_menuler_layout.addWidget(btn_musteri_yonetimi, 1, 1)
+        
+        btn_tedarikci_yonetimi = QPushButton("🚚 Tedarikçi Yönetimi")
+        btn_tedarikci_yonetimi.setStyleSheet(button_style)
+        btn_tedarikci_yonetimi.clicked.connect(lambda: self.app.show_tab("Tedarikçi Yönetimi"))
+        self.hizli_menuler_layout.addWidget(btn_tedarikci_yonetimi, 1, 2)
 
-        # En çok satan ürünler ve grafik alanı
-        self.rapor_alani_frame = QFrame(self)
-        self.rapor_alani_layout = QHBoxLayout(self.rapor_alani_frame)
-        self.main_layout.addWidget(self.rapor_alani_frame)
+        self.hizli_menuler_layout.setColumnStretch(0, 1)
+        self.hizli_menuler_layout.setColumnStretch(1, 1)
+        self.hizli_menuler_layout.setColumnStretch(2, 1)
 
-        self.en_cok_satanlar_group = QGroupBox("En Çok Satan Ürünler")
-        self.en_cok_satanlar_list = QListWidget()
-        self.en_cok_satanlar_group.setLayout(QVBoxLayout())
-        self.en_cok_satanlar_group.layout().addWidget(self.en_cok_satanlar_list)
-        self.rapor_alani_layout.addWidget(self.en_cok_satanlar_group, stretch=1)
-
-        self.aylik_grafik_group = QGroupBox("Aylık Satış/Alış Grafiği")
-        self.aylik_grafik_canvas = FigureCanvas(Figure())
-        self.aylik_grafik_group.setLayout(QVBoxLayout())
-        self.aylik_grafik_group.layout().addWidget(self.aylik_grafik_canvas)
-        self.rapor_alani_layout.addWidget(self.aylik_grafik_group, stretch=2)
-
+        # Eski grafik ve liste widget'larını kaldırdık
+        # (Bu kod bloğu, zaten var olan AnaSayfa sınıfını değiştireceği için bu satırlara gerek kalmayacak)
+        
         self.guncelle_ozet_bilgiler()
 
     def _create_metric_card(self, parent_frame, title, initial_value, card_type):
@@ -182,7 +205,16 @@ class AnaSayfa(QWidget):
     def guncelle_ozet_bilgiler(self):
         """Dashboard'daki tüm özet bilgileri API'den çeker ve günceller."""
         try:
-            ozet_data = self.db.get_dashboard_summary(kullanici_id=self.app.current_user_id)
+            # DÜZELTİLDİ: Tarih aralığı parametreleri eklendi.
+            baslangic_tarihi = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+            bitis_tarihi = datetime.now().strftime('%Y-%m-%d')
+
+            ozet_data = self.db.get_dashboard_summary(
+                kullanici_id=self.app.current_user_id,
+                baslangic_tarihi=baslangic_tarihi,
+                bitis_tarihi=bitis_tarihi
+            )
+            
             if ozet_data:
                 self.lbl_toplam_satis_degeri.setText(self.db._format_currency(ozet_data.get('toplam_satislar', 0.0)))
                 self.lbl_toplam_alis_degeri.setText(self.db._format_currency(ozet_data.get('toplam_alislar', 0.0)))
@@ -1776,6 +1808,33 @@ class FaturaListesiSayfasi(QWidget):
         except Exception as e:
             QMessageBox.critical(self.app, "API Hatası", f"Fatura listesi çekilirken hata: {e}")
             logger.error(f"Fatura listesi yükleme hatası: {e}", exc_info=True)
+
+    def yeni_fatura_ekle_ui(self, fatura_tipi):
+        """
+        Yeni bir fatura oluşturma penceresi açar.
+        Ana sayfadaki butonlar bu metodu çağırır.
+        """
+        
+        yeni_fatura_penceresi = QDialog(self)
+        yeni_fatura_penceresi.setWindowTitle("Yeni Fatura Oluştur")
+        yeni_fatura_penceresi.setMinimumSize(1000, 700)
+        
+        fatura_form_page = FaturaOlusturmaSayfasi( # Sınıf doğrudan kullanıldı
+            yeni_fatura_penceresi, 
+            self.db, 
+            self.app, 
+            fatura_tipi=fatura_tipi,
+            yenile_callback=self.fatura_listesini_yukle 
+        )
+        
+        layout = QVBoxLayout(yeni_fatura_penceresi)
+        layout.addWidget(fatura_form_page)
+        
+        fatura_form_page.saved_successfully.connect(yeni_fatura_penceresi.accept)
+        fatura_form_page.cancelled_successfully.connect(yeni_fatura_penceresi.reject)
+        
+        yeni_fatura_penceresi.exec()
+        self.fatura_listesini_yukle()
 
 class SiparisListesiSayfasi(QWidget):
     def __init__(self, parent, db_manager, app_ref):
@@ -4306,9 +4365,9 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         super().__init__(parent, db_manager, app_ref, fatura_tipi, duzenleme_id, yenile_callback,
                          initial_cari_id=initial_cari_id, initial_urunler=initial_urunler, initial_data=initial_data)
 
-        # DEĞİŞİKLİK BURADA: FaturaService'i başlatıyoruz
+        # DEĞİŞİKLİK BURADA: FaturaService'i app_ref parametresi ile başlatıyoruz
         from hizmetler import FaturaService
-        self.fatura_service = FaturaService(self.db)
+        self.fatura_service = FaturaService(self.db, app_ref=self.app)
 
         # Veri yükleme ve UI'ı güncelleme işlemlerini burada çağırıyoruz.
         self._load_initial_data()
@@ -4859,9 +4918,9 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         self.sepeti_guncelle_ui()
         self.toplamlari_hesapla_ui()
 
-        # DEĞİŞİKLİK: Fatura numarası alma ve kontrol etme
+        # DÜZELTİLDİ: Fatura numarası alma ve kontrol etme
         try:
-            fatura_no = self.db.son_fatura_no_getir(self.islem_tipi)
+            fatura_no = self.db.son_fatura_no_getir(self.islem_tipi, kullanici_id=self.app.current_user_id)
             if fatura_no == "FATURA_NO_HATA":
                 raise Exception("API'den otomatik fatura numarası alınamadı.")
             self.f_no_e.setText(fatura_no)
@@ -7328,13 +7387,13 @@ class RaporlamaMerkeziSayfasi(QWidget):
             self.lbl_genel_bakis_net_kar.setText(self.db._format_currency(kar_zarar_data.get("net_kar", 0.0)))
 
             # Nakit Akışı verilerini çek
-            nakit_akis_data = self.db.get_nakit_akisi_verileri(bas_t_str, bit_t_str) or {}
+            nakit_akis_data = self.db.get_nakit_akisi_verileri(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
             self.lbl_genel_bakis_nakit_girisleri.setText(self.db._format_currency(nakit_akis_data.get("nakit_girisleri", 0.0)))
             self.lbl_genel_bakis_nakit_cikislar.setText(self.db._format_currency(nakit_akis_data.get("nakit_cikislar", 0.0)))
             self.lbl_genel_bakis_net_nakit_akisi.setText(self.db._format_currency(nakit_akis_data.get("net_nakit_akisi", 0.0)))
 
             # Kasa/Banka bakiyeleri
-            kasa_banka_bakiyeleri = self.db.get_tum_kasa_banka_bakiyeleri() or []
+            kasa_banka_bakiyeleri = self.db.get_tum_kasa_banka_bakiyeleri(kullanici_id=self.app.current_user_id) or []
             self.kasa_banka_list_widget.clear()
             if kasa_banka_bakiyeleri:
                 for hesap in kasa_banka_bakiyeleri:
@@ -7349,16 +7408,7 @@ class RaporlamaMerkeziSayfasi(QWidget):
                 self.kasa_banka_list_widget.addItem("Kasa/Banka Bakiyesi Bulunamadı.")
 
             # En çok satan ürünler (API'den geliyor)
-            self.en_cok_satan_urunler_list_widget.clear()
-            if en_cok_satan_urunler:
-                for urun in en_cok_satan_urunler:
-                    item_text = f"{urun.get('ad', 'Bilinmeyen Ürün')} ({urun.get('toplam_miktar', 0):.0f} adet)"
-                    self.en_cok_satan_urunler_list_widget.addItem(item_text)
-            else:
-                self.en_cok_satan_urunler_list_widget.addItem("Veri bulunamadı.")
-
-            # Kritik stok ürünleri (API'den geliyor)
-            critical_stock_items = self.db.get_critical_stock_items() or []
+            critical_stock_items = self.db.get_critical_stock_items(kullanici_id=self.app.current_user_id) or []
             self.kritik_stok_urunler_list_widget.clear()
             if critical_stock_items:
                 for urun in critical_stock_items:
@@ -7370,7 +7420,7 @@ class RaporlamaMerkeziSayfasi(QWidget):
                 self.kritik_stok_urunler_list_widget.addItem("Kritik stok altında ürün bulunamadı.")
 
             # Grafikleri güncelle
-            aylik_gelir_gider_ozet_data = self.db.get_gelir_gider_aylik_ozet(datetime.strptime(bas_t_str, '%Y-%m-%d').year) or {}
+            aylik_gelir_gider_ozet_data = self.db.get_gelir_gider_aylik_ozet(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
             
             aylar_labels = [item.get('ay_adi') for item in aylik_gelir_gider_ozet_data.get('aylik_ozet', [])]
             toplam_gelirler = [item.get('toplam_gelir') for item in aylik_gelir_gider_ozet_data.get('aylik_ozet', [])]
@@ -7392,7 +7442,7 @@ class RaporlamaMerkeziSayfasi(QWidget):
         except Exception as e:
             logger.error(f"Genel bakış sekmesi güncellenirken hata: {e}", exc_info=True)
             QMessageBox.critical(self, "Hata", f"Genel bakış sekmesi yüklenirken bir hata oluştu:\n{e}")
-
+            
     def _update_satis_raporlari_tab(self, bas_t_str, bit_t_str):
         self.tree_satis_detay.clear()
 
@@ -7481,7 +7531,7 @@ class RaporlamaMerkeziSayfasi(QWidget):
     def _update_nakit_akisi_tab(self, bas_t_str, bit_t_str):
         self.tree_nakit_akisi_detay.clear()
 
-        nakit_akis_detay_data = self.db.get_nakit_akisi_verileri(bas_t_str, bit_t_str)
+        nakit_akis_detay_data = self.db.get_nakit_akisi_verileri(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str)
         if nakit_akis_detay_data:
             for item in nakit_akis_detay_data:
                 formatted_tarih = item.get('tarih', '').strftime('%d.%m.%Y') if isinstance(item.get('tarih'), (datetime, date)) else (str(item.get('tarih')) if item.get('tarih') is not None else "")
@@ -7508,7 +7558,7 @@ class RaporlamaMerkeziSayfasi(QWidget):
         self.lbl_nakit_cikis.setText(f"Toplam Nakit Çıkışı: {self.db._format_currency(toplam_nakit_cikis)}")
         self.lbl_nakit_net.setText(f"Dönem Net Nakit Akışı: {self.db._format_currency(toplam_nakit_giris - toplam_nakit_cikis)}")
 
-        monthly_cash_flow_data = self.db.get_monthly_cash_flow_summary(bas_t_str, bit_t_str)
+        monthly_cash_flow_data = self.db.get_monthly_cash_flow_summary(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str)
 
         all_periods_cf_set = set()
         for item in monthly_cash_flow_data: all_periods_cf_set.add(item.get('ay_yil'))
@@ -7796,28 +7846,59 @@ class GirisEkrani(QDialog):
         self.parent_app = parent_app
         self.db = db_manager
         self.setWindowTitle("Kullanıcı Girişi")
-        self.setFixedSize(350, 200)
-        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setFixedSize(400, 250)
+        self.setWindowFlags(Qt.FramelessWindowHint) # Kenarlıkları kaldırır
         self._setup_ui()
         self._initial_load_data()
 
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
-        self.form_layout = QGridLayout()
+        main_layout.setContentsMargins(10, 10, 10, 10)
         
-        self.form_layout.addWidget(QLabel("Kullanıcı Adı:"), 0, 0)
-        self.kullanici_adi_entry = QLineEdit()
-        self.form_layout.addWidget(self.kullanici_adi_entry, 0, 1)
+        # İçeriği tutacak ana çerçeve
+        content_frame = QFrame(self)
+        content_frame.setStyleSheet("""
+            QFrame {
+                background-color: #f0f0f0;
+                border-radius: 15px;
+            }
+        """)
+        content_frame.setFrameShape(QFrame.StyledPanel)
+        content_frame.setFrameShadow(QFrame.Raised)
+        
+        content_layout = QVBoxLayout(content_frame)
+        content_layout.setContentsMargins(25, 25, 25, 25)
+        
+        # Başlık
+        title_label = QLabel("Çınar Yapı Ön Muhasebe Programı")
+        title_label.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        title_label.setAlignment(Qt.AlignCenter)
+        content_layout.addWidget(title_label)
+        content_layout.addSpacing(15)
 
-        self.form_layout.addWidget(QLabel("Şifre:"), 1, 0)
+        # Giriş Formu
+        form_layout = QGridLayout()
+        form_layout.addWidget(QLabel("Kullanıcı Adı:"), 0, 0)
+        self.kullanici_adi_entry = QLineEdit()
+        self.kullanici_adi_entry.setPlaceholderText("Kullanıcı adınızı giriniz")
+        form_layout.addWidget(self.kullanici_adi_entry, 0, 1)
+
+        form_layout.addWidget(QLabel("Şifre:"), 1, 0)
         self.sifre_entry = QLineEdit()
+        self.sifre_entry.setPlaceholderText("Şifrenizi giriniz")
         self.sifre_entry.setEchoMode(QLineEdit.Password)
-        self.form_layout.addWidget(self.sifre_entry, 1, 1)
-        main_layout.addLayout(self.form_layout)
+        form_layout.addWidget(self.sifre_entry, 1, 1)
+        content_layout.addLayout(form_layout)
+        content_layout.addSpacing(15)
 
         self.giris_butonu = QPushButton("Giriş")
+        self.giris_butonu.setMinimumHeight(35)
+        self.giris_butonu.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        self.giris_butonu.setStyleSheet("background-color: #4CAF50; color: white; border-radius: 5px;")
         self.giris_butonu.clicked.connect(self._on_login_clicked)
-        main_layout.addWidget(self.giris_butonu)
+        content_layout.addWidget(self.giris_butonu)
+
+        main_layout.addWidget(content_frame)
 
         from main import load_config
         app_config = load_config()
