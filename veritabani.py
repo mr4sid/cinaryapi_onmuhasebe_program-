@@ -181,10 +181,6 @@ class OnMuhasebe:
 
     # --- KULLANICI YÖNETİMİ ---
     def kullanici_dogrula(self, kullanici_adi: str, sifre: str) -> Optional[dict]:
-        """
-        Kullanıcıyı API üzerinden veya çevrimdışı modda yerel veritabanı üzerinden doğrular.
-        """
-        # API Bağlantısı varsa, önce API üzerinden doğrulamayı dene
         if self.is_online:
             logger.info("API üzerinden kullanıcı doğrulaması deneniyor...")
             try:
@@ -194,7 +190,6 @@ class OnMuhasebe:
                 if response_data and "access_token" in response_data:
                     self.access_token = response_data["access_token"]
                     
-                    # DÜZELTİLDİ: Kullanıcı bilgilerini ayrı bir API çağrısı ile çekiyoruz.
                     user_info = self._get_current_user()
                     
                     if user_info:
@@ -202,7 +197,6 @@ class OnMuhasebe:
                         
                         logger.info(f"Kullanıcı API üzerinden başarıyla doğrulandı: {kullanici_adi}")
                         
-                        # Başarılı API doğrulaması sonrası, kullanıcıyı yerel DB'ye kaydet veya güncelle
                         try:
                             self.lokal_db.kullanici_kaydet_veya_guncelle(user_info)
                             logger.info(f"Kullanıcı bilgileri yerel veritabanına senkronize edildi: {kullanici_adi}")
@@ -219,14 +213,11 @@ class OnMuhasebe:
                     return None
             except Exception as e:
                 logger.error(f"Kullanıcı doğrulama API üzerinden başarısız: API isteği sırasında bir hata oluştu: {e}")
-                self.is_online = False # API hatası durumunda çevrimdışı moda geç
-                # DÜZELTİLDİ: self.app'in None olup olmadığı kontrol edildi.
+                self.is_online = False
                 if self.app:
                     self.app.set_status_message(f"API hatası: {e}. Çevrimdışı moda geçiliyor.", "red")
-                # API hatası durumunda yerel veritabanı ile devam et
                 return self.kullanici_dogrula_yerel(kullanici_adi, sifre)
 
-        # Çevrimdışı moddaysa veya API bağlantısı kurulamadıysa yerel veritabanı üzerinden doğrula
         else:
             logger.info("Çevrimdışı mod: Yerel veritabanı üzerinden kullanıcı doğrulaması deneniyor...")
             return self.kullanici_dogrula_yerel(kullanici_adi, sifre)
@@ -363,7 +354,6 @@ class OnMuhasebe:
 
     # --- CARİLER (Müşteri/Tedarikçi) ---
     def musteri_ekle(self, data: dict, kullanici_id: int):
-        # Yeni eklenen kullanici_id'yi API isteğine ekle
         data['kullanici_id'] = kullanici_id
         try:
             self._make_api_request("POST", "/musteriler/", json=data)
@@ -373,10 +363,8 @@ class OnMuhasebe:
             return False, f"Müşteri eklenirken hata: {e}"
 
     def musteri_listesi_al(self, kullanici_id: int, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
-        # API'den almayı dene
         if self.is_online:
             try:
-                # API'ye kullanici_id parametresini ekle
                 params = {"skip": skip, "limit": limit, "arama": arama, "aktif_durum": aktif_durum, "kullanici_id": kullanici_id}
                 response = self._make_api_request("GET", "/musteriler/", params=params)
                 if response is not None:
@@ -385,22 +373,18 @@ class OnMuhasebe:
                 self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
                 self.is_online = False
         
-        # API'ye bağlanılamazsa veya API'den veri alınamazsa yerel veritabanından al
-        # Yerel veritabanı sorgusuna da kullanici_id filtresini ekle
         filtre = {"aktif_durum": aktif_durum, "kullanici_id": kullanici_id} if aktif_durum is not None else {"kullanici_id": kullanici_id}
         lokal_musteriler = self.lokal_db.listele(model_adi="Musteri", filtre=filtre)
         return {"items": lokal_musteriler, "total": len(lokal_musteriler)}
 
     def musteri_getir_by_id(self, musteri_id: int, kullanici_id: int):
         try:
-            # API isteğine kullanici_id parametresini ekle
             return self._make_api_request("GET", f"/musteriler/{musteri_id}", params={"kullanici_id": kullanici_id})
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Müşteri ID {musteri_id} çekilirken hata: {e}")
             return None
 
     def musteri_guncelle(self, musteri_id: int, data: dict, kullanici_id: int):
-        # Güncelleme isteğine kullanici_id'yi ekle
         data['kullanici_id'] = kullanici_id
         try:
             self._make_api_request("PUT", f"/musteriler/{musteri_id}", json=data)
@@ -411,7 +395,6 @@ class OnMuhasebe:
 
     def musteri_sil(self, musteri_id: int, kullanici_id: int):
         try:
-            # Silme isteğine kullanici_id'yi ekle
             self._make_api_request("DELETE", f"/musteriler/{musteri_id}", params={"kullanici_id": kullanici_id})
             return True, "Müşteri başarıyla silindi."
         except (ValueError, ConnectionError, Exception) as e:
@@ -503,9 +486,9 @@ class OnMuhasebe:
                 "donem_sonu_bakiye": 0.0
             }
 
-    def get_musteri_net_bakiye(self, musteri_id: int):
+    def get_musteri_net_bakiye(self, musteri_id: int, kullanici_id: int):
         try:
-            response = self._make_api_request("GET", f"/musteriler/{musteri_id}/net_bakiye")
+            response = self._make_api_request("GET", f"/musteriler/{musteri_id}/net_bakiye", params={"kullanici_id": kullanici_id})
             return response.get("net_bakiye")
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Müşteri ID {musteri_id} net bakiye çekilirken hata: {e}")
@@ -576,7 +559,8 @@ class OnMuhasebe:
 
     def get_tedarikci_net_bakiye(self, tedarikci_id: int, kullanici_id: int):
         try:
-            return self._make_api_request("GET", f"/tedarikciler/{tedarikci_id}/net_bakiye", params={"kullanici_id": kullanici_id})
+            response = self._make_api_request("GET", f"/tedarikciler/{tedarikci_id}/net_bakiye", params={"kullanici_id": kullanici_id})
+            return response.get("net_bakiye")
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Tedarikçi ID {tedarikci_id} net bakiye çekilirken hata: {e}")
             return None
@@ -740,7 +724,7 @@ class OnMuhasebe:
         endpoint = f"/stoklar/{stok_id}/hareketler"
         params = {
             "islem_tipi": islem_tipi,
-            "baslangic_tarih": baslangic_tarih,
+            "baslangic_tarihi": baslangic_tarih,
             "bitis_tarihi": bitis_tarihi,
             "kullanici_id": kullanici_id
         }
@@ -1449,11 +1433,11 @@ class OnMuhasebe:
             logger.error(f"Tüm kasa/banka bakiyeleri çekilirken hata: {e}")
             return []
 
-    def get_monthly_cash_flow_summary(self, baslangic_tarihi: str, bitis_tarihi: str):
+    def get_monthly_cash_flow_summary(self, kullanici_id: int, baslangic_tarihi: str, bitis_tarihi: str):
         """Nakit akışı raporu için aylık nakit akışı özetini çeker."""
         try:
             yil = int(baslangic_tarihi.split('-')[0])
-            response = self._make_api_request("GET", "/raporlar/gelir_gider_aylik_ozet", params={"yil": yil})
+            response = self._make_api_request("GET", "/raporlar/gelir_gider_aylik_ozet", params={"yil": yil, "kullanici_id": kullanici_id})
             return response.get("aylik_ozet", [])
         except Exception as e:
             logger.error(f"Aylık nakit akışı özeti çekilirken hata: {e}")
@@ -1468,10 +1452,9 @@ class OnMuhasebe:
             logger.error(f"Cari yaşlandırma verileri çekilirken hata: {e}")
             return {"musteri_alacaklar": [], "tedarikci_borclar": []}
 
-    def get_stock_value_by_category(self):
-        """Stok değer raporu için kategoriye göre toplam stok değerini çeker."""
+    def get_stock_value_by_category(self, kullanici_id: int):
         logger.warning(f"get_stock_value_by_category metodu API'de doğrudan karşılığı yok. Simüle ediliyor.")
-        return {"items": [], "total": 0} # API'den beklenen formatı döndür
+        return {"items": [], "total": 0}
 
     def get_critical_stock_items(self, kullanici_id: int):
         if self.is_online:
@@ -1484,8 +1467,7 @@ class OnMuhasebe:
                 self.is_online = False
         return []
             
-    def get_sales_by_payment_type(self, baslangic_tarihi: str, bitis_tarihi: str):
-        """Satış raporu için ödeme türüne göre satış dağılımını çeker."""
+    def get_sales_by_payment_type(self, kullanici_id: int, baslangic_tarihi: str, bitis_tarihi: str):
         logger.warning(f"get_sales_by_payment_type metodu API'de doğrudan karşılığı yok. Simüle ediliyor.")
         return []
 

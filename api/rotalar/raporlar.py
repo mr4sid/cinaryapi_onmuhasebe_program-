@@ -85,7 +85,6 @@ def get_dashboard_ozet_endpoint(
         semalar.Fatura.kullanici_id == kullanici_id
     ).scalar() or 0.0
 
-
     return {
         "toplam_satislar": toplam_satislar,
         "toplam_alislar": toplam_alislar,

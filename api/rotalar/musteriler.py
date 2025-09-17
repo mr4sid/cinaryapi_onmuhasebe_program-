@@ -10,8 +10,8 @@ from ..api_servisler import CariHesaplamaService
 router = APIRouter(prefix="/musteriler", tags=["Müşteriler"])
 
 @router.post("/", response_model=modeller.MusteriRead)
-def create_musteri(musteri: modeller.MusteriCreate, db: Session = Depends(get_db)):
-    db_musteri = semalar.Musteri(**musteri.model_dump())
+def create_musteri(musteri: modeller.MusteriCreate, kullanici_id: int = Query(..., description="Müşteriyi oluşturan kullanıcı ID"), db: Session = Depends(get_db)):
+    db_musteri = semalar.Musteri(**musteri.model_dump(), kullanici_id=kullanici_id)
     db.add(db_musteri)
     db.commit()
     db.refresh(db_musteri)

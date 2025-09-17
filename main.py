@@ -287,7 +287,6 @@ class SyncWorker(QObject):
 class App(QMainWindow):
     def __init__(self, current_user: dict):
         super().__init__()
-        # DÜZELTME: Kullanıcı ID'sini sözlükten alıyoruz
         self.current_user = current_user
         self.current_user_id = current_user.get("id")
         
@@ -352,9 +351,8 @@ class App(QMainWindow):
         self.cari_service = CariService(self.db_manager, self)
 
     def _start_background_sync(self):
-        """Senkronizasyon işlemini arkaplan thread'inde başlatır."""
         self.sync_thread = QThread()
-        self.sync_worker = SyncWorker(self.db_manager)
+        self.sync_worker = SyncWorker(self.db_manager, self.current_user_id)
         self.sync_worker.moveToThread(self.sync_thread)
 
         self.sync_thread.started.connect(self.sync_worker.run)
@@ -563,8 +561,33 @@ class App(QMainWindow):
             sys.exit(1)
 
     def _setup_ui_connections(self):
-        # Eğer AnaSayfa üzerindeki butonlar show_tab'i çağırıyorsa, burada doğrudan bir bağlantıya gerek yok
-        pass
+        # Bu metod, menü öğelerini ilgili metotlara bağlar.
+        # Menü öğelerine App sınıfı içinden doğrudan self üzerinden erişilir.
+        self.ui_main_window_setup.actionStok_Kart.triggered.connect(lambda: self.show_tab("Stok Yönetimi"))
+        self.ui_main_window_setup.actionM_teri_Kart.triggered.connect(lambda: self.show_tab("Müşteri Yönetimi"))
+        self.ui_main_window_setup.actionTedarik_i_Kart.triggered.connect(lambda: self.show_tab("Tedarikçi Yönetimi"))
+        self.ui_main_window_setup.actionKasa_Banka_Kart.triggered.connect(lambda: self.show_tab("Kasa/Banka"))
+        self.ui_main_window_setup.actionGelir_Gider_Kart.triggered.connect(lambda: self.show_tab("Gelir/Gider"))
+        self.ui_main_window_setup.actionFatura_Kart.triggered.connect(lambda: self.show_tab("Faturalar"))
+        self.ui_main_window_setup.action_rsiparis.triggered.connect(lambda: self.show_tab("Sipariş Yönetimi"))
+        self.ui_main_window_setup.actionNitelik_Y_netimi.triggered.connect(lambda: self.show_tab("Nitelik Yönetimi"))
+        self.ui_main_window_setup.actionToplu_Veri_Aktar_m.triggered.connect(self._toplu_veri_aktarim_penceresi_ac)
+        
+        self.ui_main_window_setup.actionM_teri_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.ui_main_window_setup.actionTedarik_i_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.ui_main_window_setup.actionStok_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.ui_main_window_setup.actionFatura_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.ui_main_window_setup.actionKasa_Banka_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.ui_main_window_setup.actionGelir_Gider_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.ui_main_window_setup.actionCari_Hareket_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.ui_main_window_setup.actionSiparis_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.ui_main_window_setup.actionNitelik_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        
+        self.ui_main_window_setup.actionYedekle.triggered.connect(self._yedekle)
+        self.ui_main_window_setup.actionGeri_Y_kle.triggered.connect(self._geri_yukle)
+        self.ui_main_window_setup.actionVeri_Yonetimi.triggered.connect(self._veri_yonetimi_penceresi_ac)
+        self.ui_main_window_setup.actionY_netici_Ayarlar.triggered.connect(self._yonetici_ayarlari_penceresi_ac)
+        self.ui_main_window_setup.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
 
     def _initial_load_data(self): 
         """Uygulama başlangıcında veya veri güncellendiğinde tüm sekmelerdeki verileri yükler."""
@@ -797,9 +820,9 @@ class App(QMainWindow):
 
     def _yonetici_ayarlari_penceresi_ac(self):
         from pencereler import YoneticiAyarlariPenceresi
-        dialog = YoneticiAyarlariPenceresi(self, self.db_manager)
+        dialog = YoneticiAyarlariPenceresi(self, self.db_manager, app_ref=self)
         dialog.exec()
-
+        
     def _veri_yonetimi_penceresi_ac(self):
         """
         Veri Yönetimi arayüzünü bir diyalog penceresi olarak açar.

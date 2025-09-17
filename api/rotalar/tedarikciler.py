@@ -10,8 +10,8 @@ from ..api_servisler import CariHesaplamaService
 router = APIRouter(prefix="/tedarikciler", tags=["Tedarikçiler"])
 
 @router.post("/", response_model=modeller.TedarikciRead)
-def create_tedarikci(tedarikci: modeller.TedarikciCreate, db: Session = Depends(get_db)):
-    db_tedarikci = semalar.Tedarikci(**tedarikci.model_dump())
+def create_tedarikci(tedarikci: modeller.TedarikciCreate, kullanici_id: int = Query(..., description="Tedarikçiyi oluşturan kullanıcı ID"), db: Session = Depends(get_db)):
+    db_tedarikci = semalar.Tedarikci(**tedarikci.model_dump(), kullanici_id=kullanici_id)
     db.add(db_tedarikci)
     db.commit()
     db.refresh(db_tedarikci)
@@ -33,7 +33,6 @@ def read_tedarikciler(
         query = query.filter(
             or_(
                 semalar.Tedarikci.ad.ilike(search_term),
-                semalar.Tedarikci.kod.ilike(search_term),
                 semalar.Tedarikci.telefon.ilike(search_term),
                 semalar.Tedarikci.vergi_no.ilike(search_term)
             )
