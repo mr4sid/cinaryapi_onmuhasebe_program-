@@ -7,7 +7,7 @@ from passlib.context import CryptContext
 from ..guvenlik import create_access_token 
 from datetime import timedelta
 from ..config import ACCESS_TOKEN_EXPIRE_MINUTES
-from ..api_ana import create_initial_data 
+from ..api_servisler import create_initial_data
 # DÜZELTİLDİ: prefix '/' ile başlıyor
 router = APIRouter(prefix="/dogrulama", tags=["Kimlik Doğrulama"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

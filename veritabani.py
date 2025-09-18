@@ -129,7 +129,9 @@ class OnMuhasebe:
         """
         if not self.is_online:
             logger.warning(f"Çevrimdışı mod: API isteği iptal edildi: {method} {endpoint}")
-            return None
+            # DÜZELTME: API'den hata döndüğü zaman bir ValueError hatası fırlatıyoruz.
+            # Bu, UI katmanında hatayı daha iyi yönetmemizi sağlar.
+            raise ValueError(f"Çevrimdışı mod: '{endpoint}' API isteği yapılamadı.")
 
         # Headers'a oturum açma tokenını ekleyin (eğer varsa)
         api_headers = {"Content-Type": "application/json"}
@@ -149,7 +151,7 @@ class OnMuhasebe:
 
         url = f"{self.api_base_url}{endpoint}"
         try:
-            # POST isteği için 'data' parametresini 'json' olarak gönder.
+            # POST veya PUT istekleri için 'data' parametresini 'json' olarak gönder.
             if method.upper() == 'POST' or method.upper() == 'PUT':
                 response = requests.request(method, url, json=data, params=params, headers=api_headers, files=files, timeout=self.timeout)
             else:
@@ -162,15 +164,25 @@ class OnMuhasebe:
             else:
                 return {}
 
+        except requests.exceptions.HTTPError as http_err:
+            error_message = f"HTTP Hatası: {http_err}"
+            if http_err.response is not None and http_err.response.text:
+                try:
+                    error_detail = http_err.response.json().get('detail', http_err.response.text)
+                    error_message = f"API Hatası: {error_detail}"
+                except json.JSONDecodeError:
+                    error_message = f"API Hatası: {http_err.response.text}"
+            logger.error(f"API isteği sırasında HTTP hatası oluştu: {url}. Hata: {error_message}")
+            raise ValueError(error_message)
         except (ConnectionError, Timeout, RequestException) as e:
-            logger.error(f"API isteği sırasında hata oluştu: {url}. Hata: {e}")
+            logger.error(f"API isteği sırasında bağlantı hatası oluştu: {url}. Hata: {e}")
             self.is_online = False
             if self.app:
                 self.app.set_status_message("API bağlantısı kesildi. Çevrimdışı moda geçiliyor.", "red")
-            return None
+            raise ValueError(f"Bağlantı hatası: {e}")
         except Exception as e:
             logger.error(f"API isteği sırasında genel hata oluştu: {url}. Hata: {e}", exc_info=True)
-            return None
+            raise ValueError(f"Genel hata: {e}")
                 
     # --- ŞİRKET BİLGİLERİ ---
     def sirket_bilgilerini_yukle(self):
@@ -211,8 +223,16 @@ class OnMuhasebe:
                         try:
                             self.lokal_db.kullanici_kaydet_veya_guncelle(user_info)
                             logger.info(f"Kullanıcı bilgileri yerel veritabanına senkronize edildi: {kullanici_adi}")
+
+                            # YENİ EKLENEN KOD: Başarılı girişten sonra tüm verileri senkronize et
+                            # Kullanıcının tüm verileri (faturalar, stoklar, cariler vs.) yerel DB'ye çekilecek
+                            self.app.set_status_message("Giriş başarılı. Sunucu verileri yerel veritabanı ile senkronize ediliyor...")
+                            self.senkronize_veriler_lokal_db_icin(self.current_user_id)
+                            self.app.set_status_message("Senkronizasyon tamamlandı.", "green")
+
                         except Exception as e:
-                            logger.error(f"Kullanıcı yerel veritabanına kaydedilirken hata oluştu: {e}", exc_info=True)
+                            logger.error(f"Kullanıcı yerel veritabanına kaydedilirken veya senkronizasyon sırasında hata oluştu: {e}", exc_info=True)
+                            self.app.set_status_message(f"Hata: Veri senkronizasyonu başarısız - {e}", "red")
 
                         response_data["kullanici"] = user_info
                         return response_data
@@ -504,10 +524,9 @@ class OnMuhasebe:
             logger.error(f"Müşteri ID {musteri_id} net bakiye çekilirken hata: {e}")
             return None
 
-    def tedarikci_ekle(self, data: dict, kullanici_id: int):
-        data['kullanici_id'] = kullanici_id
+    def tedarikci_ekle(self, data: dict):
         try:
-            self._make_api_request("POST", "/tedarikciler/", json=data)
+            self._make_api_request("POST", "/tedarikciler/", data=data)
             return True, "Tedarikçi başarıyla eklendi."
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Tedarikçi eklenirken hata: {e}")
@@ -578,10 +597,9 @@ class OnMuhasebe:
             return None
 
     # --- KASA/BANKA ---
-    def kasa_banka_ekle(self, data: dict, kullanici_id: int):
-        data['kullanici_id'] = kullanici_id
+    def kasa_banka_ekle(self, data: dict):
         try:
-            self._make_api_request("POST", "/kasalar_bankalar/", json=data)
+            self._make_api_request("POST", "/kasalar_bankalar/", data=data)
             return True, "Kasa/Banka hesabı başarıyla eklendi."
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Kasa/Banka eklenirken hata: {e}")
@@ -639,11 +657,10 @@ class OnMuhasebe:
             return False, f"Kasa/Banka silinirken hata: {e}"
 
     # --- STOKLAR ---
-    def stok_ekle(self, stok_data: dict, kullanici_id: int):
-        stok_data['kullanici_id'] = kullanici_id
+    def stok_ekle(self, stok_data: dict):
         endpoint = "/stoklar/"
         try:
-            response_data = self._make_api_request("POST", endpoint, json=stok_data)
+            response_data = self._make_api_request("POST", endpoint, data=stok_data)
             if response_data and response_data.get("id"):
                 return True, f"'{stok_data['ad']}' adlı ürün başarıyla eklendi. ID: {response_data['id']}"
             else:
@@ -960,10 +977,9 @@ class OnMuhasebe:
             return None
 
     # --- SİPARİŞLER ---
-    def siparis_ekle(self, data: dict, kullanici_id: int):
-        data['kullanici_id'] = kullanici_id
+    def siparis_ekle(self, data: dict):
         try:
-            return self._make_api_request("POST", "/siparisler/", json=data)
+            return self._make_api_request("POST", "/siparisler/", data=data)
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Sipariş eklenirken hata: {e}")
             raise
@@ -1035,10 +1051,9 @@ class OnMuhasebe:
             return "OTOMATIK"
 
     # --- GELİR/GİDER ---
-    def gelir_gider_ekle(self, data: dict, kullanici_id: int):
-        data['kullanici_id'] = kullanici_id
+    def gelir_gider_ekle(self, data: dict):
         try:
-            self._make_api_request("POST", "/gelir_gider/", json=data)
+            self._make_api_request("POST", "/gelir_gider/", data=data)
             return True, "Gelir/Gider kaydı başarıyla eklendi."
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Gelir/Gider eklenirken hata: {e}")
@@ -1076,10 +1091,9 @@ class OnMuhasebe:
             return None
 
     # --- CARİ HAREKETLER (Manuel oluşturma ve silme) ---
-    def cari_hareket_ekle_manuel(self, data: dict, kullanici_id: int):
-        data['kullanici_id'] = kullanici_id
+    def cari_hareket_ekle_manuel(self, data: dict):
         try:
-            self._make_api_request("POST", "/cari_hareketler/manuel", json=data)
+            self._make_api_request("POST", "/cari_hareketler/manuel", data=data)
             return True, "Manuel cari hareket başarıyla eklendi."
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Manuel cari hareket eklenirken hata: {e}")
@@ -1134,12 +1148,11 @@ class OnMuhasebe:
             return {"items": [], "total": 0}
 
     # --- NİTELİKLER (Kategori, Marka, Grup, Birim, Ülke, Gelir/Gider Sınıflandırma) ---
-    def nitelik_ekle(self, nitelik_tipi: str, data: dict, kullanici_id: int):
-        data['kullanici_id'] = kullanici_id
+    def nitelik_ekle(self, nitelik_tipi: str, data: dict):
         # 1. API'ye göndermeyi dene
         if self.is_online:
             try:
-                response = self._make_api_request("POST", f"/nitelikler/{nitelik_tipi}", json=data)
+                response = self._make_api_request("POST", f"/nitelikler/{nitelik_tipi}", data=data)
                 if response:
                     # API'den gelen veriyi yerel veritabanına kaydet
                     self.lokal_db.ekle(model_adi="Nitelik", veri=response)

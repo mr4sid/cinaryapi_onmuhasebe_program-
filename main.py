@@ -686,30 +686,21 @@ class App(QMainWindow):
             QMessageBox.critical(self, "Rapor Hatası", f"{rapor_tipi.capitalize()} raporu oluşturulurken beklenmeyen bir hata oluştu: {e}")
             logger.error(f"{rapor_tipi.capitalize()} raporu oluşturulurken hata: {e}")
 
-    def _yedekle(self):
+    def _yedekle(self, file_path):
+        """Veritabanını yedekler ve kullanıcıya geri bildirimde bulunur."""
+        self.set_status_message("Veritabanı yedekleniyor, lütfen bekleyiniz...", "blue")
         try:
-            file_path, _ = QFileDialog.getSaveFileName(self, "Veritabanı Yedekle", "", "Yedek Dosyası (*.sql);;Tüm Dosyalar (*)")
-            if file_path:
-                from pencereler import BeklemePenceresi
-                self.bekleme_penceresi = BeklemePenceresi(self, message="Veritabanı yedekleniyor, lütfen bekleyiniz...")
-                self.bekleme_penceresi.show()
-                
-                self.backup_thread = QThread()
-                self.backup_worker = BackupWorker(self.db_manager, file_path)
-                self.backup_worker.moveToThread(self.backup_thread)
-
-                self.backup_thread.started.connect(self.backup_worker.run)
-                self.backup_worker.is_finished.connect(self.backup_thread.quit)
-                self.backup_worker.is_finished.connect(self.backup_worker.deleteLater)
-                self.backup_thread.finished.connect(self.backup_thread.deleteLater)
-                self.backup_worker.is_finished.connect(self._handle_backup_completion)
-
-                self.backup_thread.start()
+            # db sınıfındaki merkezi metodu kullanıyoruz.
+            success, message, created_file_path = self.db.database_backup(file_path=file_path, kullanici_id=self.current_user_id)
+            if success:
+                self.set_status_message(message, "green")
+                QMessageBox.information(self, "Başarılı", f"{message}\nDosya Yolu: {created_file_path}")
             else:
-                self.set_status_message("Yedekleme işlemi iptal edildi.")
+                self.set_status_message(message, "red")
+                QMessageBox.critical(self, "Yedekleme Hatası", message)
         except Exception as e:
-            QMessageBox.critical(self, "Yedekleme Hatası", f"Veritabanı yedeklenirken bir hata oluştu: {e}")
-            logger.error(f"Yedekleme sırasında hata: {e}", exc_info=True)
+            self.set_status_message(f"Yedekleme sırasında bir hata oluştu: {e}", "red")
+            QMessageBox.critical(self, "Yedekleme Hatası", f"Beklenmeyen bir hata oluştu:\n{e}")
 
     def _check_backup_completion(self, result_queue, bekleme_penceresi):
         if not result_queue.empty():
@@ -742,38 +733,22 @@ class App(QMainWindow):
             QMessageBox.critical(self, "Yedekleme Hatası", final_message)
             self.set_status_message(final_message, "red")
 
-    def _geri_yukle(self):
+    def _geri_yukle(self, file_path):
+        """Veritabanını geri yükler ve uygulamayı yeniden başlatır."""
+        self.set_status_message("Veritabanı geri yükleniyor, lütfen bekleyiniz...", "blue")
         try:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Veritabanı Geri Yükle", "", "Yedek Dosyası (*.sql);;Tüm Dosyalar (*)")
-            if file_path:
-                reply = QMessageBox.question(self, "Geri Yükleme Onayı",
-                                             "Mevcut veritabanı üzerine yazılacak ve tüm veriler silinecek. Devam etmek istiyor musunuz?",
-                                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                if reply == QMessageBox.StandardButton.Yes:
-                    from pencereler import BeklemePenceresi
-                    self.bekleme_penceresi = BeklemePenceresi(self, message="Veritabanı geri yükleniyor, lütfen bekleyiniz...")
-                    self.bekleme_penceresi.show()
-                    
-                    self.restore_thread = QThread()
-                    self.restore_worker = RestoreWorker(self.db_manager, file_path)
-                    self.restore_worker.moveToThread(self.restore_thread)
-
-                    self.restore_thread.started.connect(self.restore_worker.run)
-                    self.restore_worker.is_finished.connect(self.restore_thread.quit)
-                    self.restore_worker.is_finished.connect(self.restore_worker.deleteLater)
-                    self.restore_thread.finished.connect(self.restore_thread.deleteLater)
-                    self.restore_worker.is_finished.connect(self._handle_restore_completion)
-
-                    self.restore_thread.start()
-
-                else:
-                    self.set_status_message("Geri yükleme işlemi iptal edildi.")
+            # db sınıfındaki merkezi metodu kullanıyoruz.
+            success, message, _ = self.db.database_restore(file_path=file_path, kullanici_id=self.current_user_id)
+            if success:
+                self.set_status_message(message, "green")
+                QMessageBox.information(self, "Başarılı", f"{message}\nUygulama yeniden başlatılacak.")
+                self.quit()
             else:
-                self.set_status_message("Geri yükleme işlemi iptal edildi.")
-
+                self.set_status_message(message, "red")
+                QMessageBox.critical(self, "Geri Yükleme Hatası", message)
         except Exception as e:
-            QMessageBox.critical(self, "Geri Yükleme Hatası", f"Veritabanı geri yüklenirken bir hata oluştu: {e}")
-            logger.error(f"Geri yükleme sırasında hata: {e}", exc_info=True)
+            self.set_status_message(f"Geri yükleme sırasında bir hata oluştu: {e}", "red")
+            QMessageBox.critical(self, "Geri Yükleme Hatası", f"Beklenmeyen bir hata oluştu:\n{e}")
 
     @Slot(bool, str)
     def _handle_restore_completion(self, success, message):
@@ -858,23 +833,30 @@ if __name__ == "__main__":
     palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
     palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
     app.setPalette(palette)
+    
     from arayuz import GirisEkrani
     db_manager_login = OnMuhasebe(api_base_url=load_config()["api_base_url"], app_ref=None)
     login_screen = GirisEkrani(None, db_manager_login)
+    
+    # login_data'yı global kapsamda tanımlayalım
+    login_data = {"user_data": None}
 
     def on_successful_login(user_data):
-        """Giriş başarılı olduğunda ana uygulamayı başlatır ve kullanıcı bilgilerini iletir."""
-        global main_window
-        # App sınıfına kullanıcı verilerini gönderiyoruz
-        main_window = App(user_data)
-        # Yeni bir referans ataması yapıyoruz
-        db_manager_login.app = main_window 
-        main_window.show()
+        """Giriş başarılı olduğunda kullanıcı verisini depolar ve giriş ekranını kapatır."""
+        # Kullanıcı verisini global sözlüğe kaydedin
+        login_data["user_data"] = user_data
+        # Giriş ekranını kapatın
         login_screen.accept()
 
     login_screen.login_success.connect(on_successful_login)
 
+    # Uygulamanın ana olay döngüsünü başlatın
     if login_screen.exec() == QDialog.Accepted:
+        # Eğer login başarılıysa, ana pencereyi oluşturup gösterin
+        main_window = App(login_data["user_data"])
+        db_manager_login.app = main_window 
+        main_window.show()
         sys.exit(app.exec())
     else:
+        # Eğer login iptal edildiyse (kullanıcı kapattıysa), uygulamadan çıkın
         sys.exit(0)
