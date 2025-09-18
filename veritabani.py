@@ -82,18 +82,18 @@ class OnMuhasebe:
     USER_ROLE_MANAGER = "MANAGER"
     USER_ROLE_SALES = "SALES"
     USER_ROLE_USER = "USER"
-
-    def __init__(self, app_ref, api_base_url):
+    
+    def __init__(self, api_base_url, app_ref):
         self.app = app_ref
         self.api_base_url = api_base_url
         self.access_token = None
-        self.current_user_id = None
+        self.current_user_id = self.app.current_user_id if self.app and hasattr(self.app, 'current_user_id') else None
         self.is_online = False
         self.timeout = 10
 
         # Lokal veritabanı bağlantısını başlat
         try:
-            self.lokal_db = lokal_db_servisi  # DÜZELTİLDİ: Nesne zaten başlatıldığı için () kaldırıldı.
+            self.lokal_db = lokal_db_servisi
             self.lokal_db.initialize_database()
             logger.info("Yerel veritabanı başarıyla başlatıldı.")
         except Exception as e:
@@ -125,6 +125,7 @@ class OnMuhasebe:
     def _make_api_request(self, method: str, endpoint: str, params: Optional[Dict] = None, data: Optional[Dict] = None, headers: Optional[Dict] = None, files=None):
         """
         API'ye kontrollü bir şekilde istek gönderir.
+        Her API isteğine otomatik olarak kullanici_id parametresini ekler.
         """
         if not self.is_online:
             logger.warning(f"Çevrimdışı mod: API isteği iptal edildi: {method} {endpoint}")
@@ -137,6 +138,14 @@ class OnMuhasebe:
 
         if headers:
             api_headers.update(headers)
+
+        # Kullanici_id'yi params'a otomatik olarak ekle
+        if params is None:
+            params = {}
+        
+        # Eğer self.current_user_id mevcutsa ve daha önceden parametrelere eklenmemişse ekle
+        if self.current_user_id is not None and "kullanici_id" not in params:
+            params["kullanici_id"] = self.current_user_id
 
         url = f"{self.api_base_url}{endpoint}"
         try:
@@ -166,6 +175,7 @@ class OnMuhasebe:
     # --- ŞİRKET BİLGİLERİ ---
     def sirket_bilgilerini_yukle(self):
         try:
+            # DÜZELTME: _make_api_request'in artık kullanici_id'yi otomatik eklemesi nedeniyle parametre kaldırıldı
             return self._make_api_request("GET", "/sistem/bilgiler")
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Şirket bilgileri API'den yüklenemedi: {e}")
@@ -173,6 +183,7 @@ class OnMuhasebe:
 
     def sirket_bilgilerini_kaydet(self, data: dict):
         try:
+            # DÜZELTME: _make_api_request'in artık kullanici_id'yi otomatik eklemesi nedeniyle parametre kaldırıldı
             self._make_api_request("PUT", "/sistem/bilgiler", json=data)
             return True, "Şirket bilgileri başarıyla kaydedildi."
         except (ValueError, ConnectionError, Exception) as e:
@@ -297,44 +308,37 @@ class OnMuhasebe:
             logger.error(f"Mevcut kullanıcı bilgileri çekilirken hata oluştu: {e}", exc_info=True)
             return None
 
-    def kullanici_listele(self):
+    def kullanici_listele(self) -> List[dict]:
         """API'den kullanıcı listesini çeker. Yanıtı 'items' listesi olarak döndürür."""
         try:
+            # DÜZELTME: kullanici_id parametresi _make_api_request tarafından otomatik olarak eklendiği için çıkarıldı
             response = self._make_api_request("GET", "/kullanicilar/")
             return response.get("items", [])
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Kullanıcı listesi API'den alınamadı: {e}")
             return []
                 
-    def kullanici_ekle(self, username, password, yetki):
-        """
-        Yeni bir kullanıcıyı API üzerinden ekler. Çevrimdışı modda eklemeye izin verilmez.
-        """
-        if not self.is_online:
-            self.app.set_status_message("Çevrimdışı modda yeni kullanıcı oluşturulamaz. Lütfen internet bağlantınızı kontrol edin.", "orange")
-            return False, "Çevrimdışı modda yeni kullanıcı oluşturulamaz. Lütfen internet bağlantınızı kontrol edin."
-            
+    def kullanici_ekle(self, data: dict):
+        """API'ye yeni bir kullanıcı ekler."""
         try:
-            self._make_api_request("POST", "/dogrulama/register_temp", json={"kullanici_adi": username, "sifre": password, "yetki": yetki})
-            self.app.set_status_message("Kullanıcı başarıyla eklendi.", "green")
-            return True, "Kullanıcı başarıyla eklendi."
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Kullanıcı eklenirken hata: {e}")
-            self.app.set_status_message(f"Kullanıcı eklenirken hata: {e}", "red")
-            return False, f"Kullanıcı eklenirken hata: {e}"
+            # DÜZELTME: kullanici_id parametresi _make_api_request tarafından otomatik olarak eklendiği için çıkarıldı
+            response = self._make_api_request("POST", "/kullanicilar/ekle", json=data)
+            if response:
+                return True, "Kullanıcı başarıyla eklendi."
+            return False, "Kullanıcı eklenirken bilinmeyen bir hata oluştu."
+        except Exception as e:
+            logger.error(f"Kullanıcı ekleme hatası: {e}")
+            return False, f"Kullanıcı eklenirken bir hata oluştu: {e}"
 
-    def kullanici_guncelle_sifre_yetki(self, user_id, new_password, yetki):
+    def kullanici_guncelle(self, kullanici_id: int, data: dict):
+        """API'deki mevcut bir kullanıcıyı günceller."""
         try:
-            # API'den şifre hashing işlemini yapması beklenir.
-            data_to_update = {"yetki": yetki}
-            if new_password:
-                data_to_update["sifre"] = new_password
-                
-            self._make_api_request("PUT", f"/kullanicilar/{user_id}", json=data_to_update)
-            return True, "Kullanıcı şifre ve yetki başarıyla güncellendi."
-        except (ValueError, ConnectionError, Exception) as e:
-            logger.error(f"Kullanıcı şifre/yetki güncellenirken hata: {e}")
-            return False, f"Kullanıcı şifre/yetki güncellenirken hata: {e}"
+            # DÜZELTME: kullanici_id parametresi _make_api_request tarafından otomatik olarak eklendiği için çıkarıldı
+            self._make_api_request("PUT", f"/kullanicilar/{kullanici_id}", json=data)
+            return True, "Kullanıcı başarıyla güncellendi."
+        except Exception as e:
+            logger.error(f"Kullanıcı güncelleme hatası: {e}")
+            return False, f"Kullanıcı güncellenirken bir hata oluştu: {e}"
 
     def kullanici_adi_guncelle(self, user_id, new_username):
         try:
@@ -344,17 +348,19 @@ class OnMuhasebe:
             logger.error(f"Kullanıcı adı güncellenirken hata: {e}")
             return False, f"Kullanıcı adı güncellenirken hata: {e}"
 
-    def kullanici_sil(self, user_id):
+    def kullanici_sil(self, user_id: int):
+        """API'deki bir kullanıcıyı siler."""
         try:
+            # DÜZELTME: kullanici_id parametresi _make_api_request tarafından otomatik olarak eklendiği için çıkarıldı
             self._make_api_request("DELETE", f"/kullanicilar/{user_id}")
             return True, "Kullanıcı başarıyla silindi."
-        except (ValueError, ConnectionError, Exception) as e:
+        except Exception as e:
             logger.error(f"Kullanıcı silinirken hata: {e}")
-            return False, f"Kullanıcı silinirken hata: {e}"
+            return False, f"Kullanıcı silinirken bir hata oluştu: {e}"
 
     # --- CARİLER (Müşteri/Tedarikçi) ---
-    def musteri_ekle(self, data: dict, kullanici_id: int):
-        data['kullanici_id'] = kullanici_id
+    def musteri_ekle(self, data: dict):
+        # DÜZELTME: kullanici_id parametresi _make_api_request tarafından otomatik olarak eklendiği için çıkarıldı
         try:
             self._make_api_request("POST", "/musteriler/", json=data)
             return True, "Müşteri başarıyla eklendi."
@@ -362,10 +368,10 @@ class OnMuhasebe:
             logger.error(f"Müşteri eklenirken hata: {e}")
             return False, f"Müşteri eklenirken hata: {e}"
 
-    def musteri_listesi_al(self, kullanici_id: int, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
+    def musteri_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
         if self.is_online:
             try:
-                params = {"skip": skip, "limit": limit, "arama": arama, "aktif_durum": aktif_durum, "kullanici_id": kullanici_id}
+                params = {"skip": skip, "limit": limit, "arama": arama, "aktif_durum": aktif_durum}
                 response = self._make_api_request("GET", "/musteriler/", params=params)
                 if response is not None:
                     return response
@@ -373,19 +379,22 @@ class OnMuhasebe:
                 self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
                 self.is_online = False
         
-        filtre = {"aktif_durum": aktif_durum, "kullanici_id": kullanici_id} if aktif_durum is not None else {"kullanici_id": kullanici_id}
+        # OFFLINE KISMI:
+        # Not: Yerel veritabanı da kullanıcı bazlı filtreleme yapmalıdır.
+        filtre = {"aktif_durum": aktif_durum} if aktif_durum is not None else {}
         lokal_musteriler = self.lokal_db.listele(model_adi="Musteri", filtre=filtre)
         return {"items": lokal_musteriler, "total": len(lokal_musteriler)}
 
-    def musteri_getir_by_id(self, musteri_id: int, kullanici_id: int):
+    def musteri_getir_by_id(self, musteri_id: int):
+        # DÜZELTME: kullanici_id parametresi _make_api_request tarafından otomatik olarak eklendiği için çıkarıldı
         try:
-            return self._make_api_request("GET", f"/musteriler/{musteri_id}", params={"kullanici_id": kullanici_id})
+            return self._make_api_request("GET", f"/musteriler/{musteri_id}")
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Müşteri ID {musteri_id} çekilirken hata: {e}")
             return None
 
-    def musteri_guncelle(self, musteri_id: int, data: dict, kullanici_id: int):
-        data['kullanici_id'] = kullanici_id
+    def musteri_guncelle(self, musteri_id: int, data: dict):
+        # DÜZELTME: kullanici_id parametresi _make_api_request tarafından otomatik olarak eklendiği için çıkarıldı
         try:
             self._make_api_request("PUT", f"/musteriler/{musteri_id}", json=data)
             return True, "Müşteri başarıyla güncellendi."
@@ -393,18 +402,19 @@ class OnMuhasebe:
             logger.error(f"Müşteri ID {musteri_id} güncellenirken hata: {e}")
             return False, f"Müşteri güncellenirken hata: {e}"
 
-    def musteri_sil(self, musteri_id: int, kullanici_id: int):
+    def musteri_sil(self, musteri_id: int):
+        # DÜZELTME: kullanici_id parametresi _make_api_request tarafından otomatik olarak eklendiği için çıkarıldı
         try:
-            self._make_api_request("DELETE", f"/musteriler/{musteri_id}", params={"kullanici_id": kullanici_id})
+            self._make_api_request("DELETE", f"/musteriler/{musteri_id}")
             return True, "Müşteri başarıyla silindi."
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Müşteri ID {musteri_id} silinirken hata: {e}")
             return False, f"Müşteri silinirken hata: {e}"
             
-    def get_perakende_musteri_id(self) -> Optional[int]:
+    def get_perakende_musteri_id(self, kullanici_id: int) -> Optional[int]:
         """API'den varsayılan perakende müşteri ID'sini çeker."""
         try:
-            response_data = self._make_api_request("GET", "/sistem/varsayilan_cariler/perakende_musteri_id")
+            response_data = self._make_api_request("GET", "/sistem/varsayilan_cariler/perakende_musteri_id", params={"kullanici_id": kullanici_id})
             return response_data.get('id')
         except Exception as e:
             logger.warning(f"Varsayılan perakende müşteri ID'si API'den alınamadı: {e}. None dönülüyor.")
@@ -542,10 +552,12 @@ class OnMuhasebe:
             logger.error(f"Tedarikçi ID {tedarikci_id} silinirken hata: {e}")
             return False, f"Tedarikçi silinirken hata: {e}"
             
-    def get_genel_tedarikci_id(self, kullanici_id: int):
+    def get_genel_tedarikci_id(self, kullanici_id: int) -> Optional[int]:
+        """API'den varsayılan genel tedarikçi ID'sini çeker."""
         try:
-            return self._make_api_request("GET", f"/sistem/varsayilan_cariler/genel_tedarikci_id", params={"kullanici_id": kullanici_id})
-        except (ValueError, ConnectionError, Exception) as e:
+            response_data = self._make_api_request("GET", "/sistem/varsayilan_cariler/genel_tedarikci_id", params={"kullanici_id": kullanici_id})
+            return response_data.get('id')
+        except Exception as e:
             logger.warning(f"Varsayılan genel tedarikçi ID'si API'den alınamadı: {e}. None dönülüyor.")
             return None
         
@@ -1166,25 +1178,16 @@ class OnMuhasebe:
             logger.error(f"Nitelik tipi {nitelik_tipi} ID {nitelik_id} silinirken hata: {e}")
             raise
 
-    def kategori_listele(self, kullanici_id: int, skip: int = 0, limit: int = 1000) -> List[dict]:
+    def kategori_listele(self, kullanici_id: int, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
         if self.is_online:
             try:
                 params = {"skip": skip, "limit": limit, "kullanici_id": kullanici_id}
                 response = self._make_api_request("GET", "/nitelikler/kategoriler", params=params)
                 if response is not None:
-                    if isinstance(response, dict) and "items" in response:
-                        self.lokal_db.senkronize_veriler(self.api_base_url)
-                        return response["items"]
-                    elif isinstance(response, list):
-                        self.lokal_db.senkronize_veriler(self.api_base_url)
-                        return response
-                    else:
-                        self.app.set_status_message("API'den beklenmeyen yanıt formatı.", "orange")
-                else:
-                    self.app.set_status_message("API'den yanıt alınamadı. Yerel veritabanı kullanılıyor.", "orange")
+                    return response
             except Exception as e:
-                self.app.set_status_message(f"API hatası: {e}. Yerel veritabanı kullanılıyor.", "orange")
-    
+                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+        
         return self.lokal_db.listele(model_adi="Nitelik", filtre={"tip": "kategori", "kullanici_id": kullanici_id})
 
     def marka_listele(self, kullanici_id: int, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
@@ -1603,7 +1606,7 @@ class OnMuhasebe:
             logger.error(f"Tüm işlem verileri temizlenirken hata: {e}")
             return False, f"Tüm işlem verileri temizlenirken hata: {e}"
 
-    def clear_all_data(self):
+    def clear_all_data(self, kullanici_id: int):
         """
         Tüm verileri API üzerinden temizleme işlemini tetikler.
         """
@@ -1611,9 +1614,12 @@ class OnMuhasebe:
             # API'ye DELETE isteği gönderiyoruz.
             response = self._make_api_request(
                 method="DELETE",
-                path="/admin/clear_all_data",
-                json={}
+                endpoint="/admin/clear_all_data",
+                params={"kullanici_id": kullanici_id}
             )
+            if response is None:
+                return False, "API'den yanıt alınamadı. İşlem tamamlanamadı."
+
             return True, response.get("message", "Tüm veriler temizlendi (kullanıcılar hariç).")
         except Exception as e:
             logger.error(f"Tüm veriler temizlenirken hata: {e}")
@@ -1897,11 +1903,12 @@ class OnMuhasebe:
             logger.error(f"Veritabanı geri yükleme API isteği başarısız: {e}")
             return False, f"Geri yükleme başarısız oldu: {e}", None
         
-    def senkronize_veriler_lokal_db_icin(self):
+    def senkronize_veriler_lokal_db_icin(self, kullanici_id: int):
         """
         Lokal veritabanı senkronizasyonunu başlatmak için bir aracı metot.
         """
-        return lokal_db_servisi.senkronize_veriler(self.api_base_url)
+        # DÜZELTME: senkronize_veriler metoduna kullanici_id parametresi eklendi
+        return lokal_db_servisi.senkronize_veriler(self.api_base_url, kullanici_id=kullanici_id)
     
     def _close_local_db_connections(self):
         """

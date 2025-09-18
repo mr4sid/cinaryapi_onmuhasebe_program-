@@ -26,18 +26,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Varsayılan verileri ekleyen fonksiyon
-def create_initial_data(db: Session):
+def create_initial_data(db: Session, kullanici_id: int):
     try:
         logger.info("Varsayılan veriler kontrol ediliyor ve ekleniyor...")
 
         # Varsayılan perakende müşteriyi kontrol et ve ekle
-        perakende_musteri = db.query(Musteri).filter(Musteri.kod == "PERAKENDE_MUSTERI").first()
+        perakende_musteri = db.query(Musteri).filter(Musteri.kod == "PERAKENDE_MUSTERI", Musteri.kullanici_id == kullanici_id).first()
         if not perakende_musteri:
             yeni_musteri = Musteri(
                 ad="Perakende Müşteri",
                 kod="PERAKENDE_MUSTERI",
                 aktif=True,
-                olusturma_tarihi=datetime.now()
+                olusturma_tarihi=datetime.now(),
+                kullanici_id=kullanici_id
             )
             db.add(yeni_musteri)
             db.commit()
@@ -47,13 +48,14 @@ def create_initial_data(db: Session):
             logger.info("Varsayılan 'Perakende Müşteri' zaten mevcut.")
 
         # Varsayılan Genel Tedarikçi (YENİ EKLENEN KISIM)
-        genel_tedarikci = db.query(Tedarikci).filter(Tedarikci.kod == "GENEL_TEDARIKCI").first()
+        genel_tedarikci = db.query(Tedarikci).filter(Tedarikci.kod == "GENEL_TEDARIKCI", Tedarikci.kullanici_id == kullanici_id).first()
         if not genel_tedarikci:
             yeni_tedarikci = Tedarikci(
                 ad="Genel Tedarikçi",
                 kod="GENEL_TEDARIKCI",
                 aktif=True,
-                olusturma_tarihi=datetime.now()
+                olusturma_tarihi=datetime.now(),
+                kullanici_id=kullanici_id
             )
             db.add(yeni_tedarikci)
             db.commit()
@@ -63,7 +65,7 @@ def create_initial_data(db: Session):
             logger.info("Varsayılan 'Genel Tedarikçi' zaten mevcut.")
 
         # Varsayılan NAKİT hesabını kontrol et ve ekle
-        nakit_kasa = db.query(KasaBanka).filter(KasaBanka.kod == "NAKİT_KASA").first()
+        nakit_kasa = db.query(KasaBanka).filter(KasaBanka.kod == "NAKİT_KASA", KasaBanka.kullanici_id == kullanici_id).first()
         if not nakit_kasa:
             yeni_kasa = KasaBanka(
                 hesap_adi="Nakit Kasa",
@@ -73,7 +75,8 @@ def create_initial_data(db: Session):
                 para_birimi="TL",
                 aktif=True,
                 varsayilan_odeme_turu="NAKİT",
-                olusturma_tarihi=datetime.now()
+                olusturma_tarihi=datetime.now(),
+                kullanici_id=kullanici_id
             )
             db.add(yeni_kasa)
             db.commit()

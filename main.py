@@ -108,15 +108,16 @@ class RestoreWorker(QObject):
 class SyncWorker(QObject):
     is_finished = Signal(bool, str)
 
-    def __init__(self, db_manager):
+    def __init__(self, db_manager, kullanici_id):
         super().__init__()
         self.db_manager = db_manager
+        self.kullanici_id = kullanici_id
 
     @Slot()
     def run(self):
         success, message = False, "Bilinmeyen bir hata oluştu."
         try:
-            success, message = self.db_manager.senkronize_veriler_lokal_db_icin()
+            success, message = self.db_manager.senkronize_veriler_lokal_db_icin(self.kullanici_id)
         except Exception as e:
             message = f"Senkronizasyon sırasında beklenmedik bir hata oluştu: {e}"
             logger.error(message, exc_info=True)
@@ -266,24 +267,6 @@ class Ui_MainWindow_Minimal:
         self.menuAyarlar.addAction(MainWindow.actionY_netici_Ayarlar)
         self.menuAyarlar.addAction(MainWindow.actionVeri_Yonetimi)
 
-class SyncWorker(QObject):
-    is_finished = Signal(bool, str)
-
-    def __init__(self, db_manager):
-        super().__init__()
-        self.db_manager = db_manager
-
-    @Slot()
-    def run(self):
-        success, message = False, "Bilinmeyen bir hata oluştu."
-        try:
-            success, message = self.db_manager.senkronize_veriler_lokal_db_icin()
-        except Exception as e:
-            message = f"Senkronizasyon sırasında beklenmedik bir hata oluştu: {e}"
-            logger.error(message, exc_info=True)
-        finally:
-            self.is_finished.emit(success, message)
-
 class App(QMainWindow):
     def __init__(self, current_user: dict):
         super().__init__()
@@ -346,12 +329,13 @@ class App(QMainWindow):
         self.urun_nitelik_yonetimi_sekmesi = UrunNitelikYonetimiSekmesi(self, self.db_manager, self)
         self.tab_widget.addTab(self.urun_nitelik_yonetimi_sekmesi, "Nitelik Yönetimi")
         
-        self.fatura_service = FaturaService(self.db_manager, self)
-        self.toplu_islem_service = TopluIslemService(self.db_manager, self)
-        self.cari_service = CariService(self.db_manager, self)
+        self.fatura_service = FaturaService(self.db_manager)
+        self.toplu_islem_service = TopluIslemService(self.db_manager)
+        self.cari_service = CariService(self.db_manager)
 
     def _start_background_sync(self):
         self.sync_thread = QThread()
+        # DÜZELTME: SyncWorker, kullanıcı kimliği parametresi ile başlatıldı.
         self.sync_worker = SyncWorker(self.db_manager, self.current_user_id)
         self.sync_worker.moveToThread(self.sync_thread)
 
@@ -562,32 +546,32 @@ class App(QMainWindow):
 
     def _setup_ui_connections(self):
         # Bu metod, menü öğelerini ilgili metotlara bağlar.
-        # Menü öğelerine App sınıfı içinden doğrudan self üzerinden erişilir.
-        self.ui_main_window_setup.actionStok_Kart.triggered.connect(lambda: self.show_tab("Stok Yönetimi"))
-        self.ui_main_window_setup.actionM_teri_Kart.triggered.connect(lambda: self.show_tab("Müşteri Yönetimi"))
-        self.ui_main_window_setup.actionTedarik_i_Kart.triggered.connect(lambda: self.show_tab("Tedarikçi Yönetimi"))
-        self.ui_main_window_setup.actionKasa_Banka_Kart.triggered.connect(lambda: self.show_tab("Kasa/Banka"))
-        self.ui_main_window_setup.actionGelir_Gider_Kart.triggered.connect(lambda: self.show_tab("Gelir/Gider"))
-        self.ui_main_window_setup.actionFatura_Kart.triggered.connect(lambda: self.show_tab("Faturalar"))
-        self.ui_main_window_setup.action_rsiparis.triggered.connect(lambda: self.show_tab("Sipariş Yönetimi"))
-        self.ui_main_window_setup.actionNitelik_Y_netimi.triggered.connect(lambda: self.show_tab("Nitelik Yönetimi"))
-        self.ui_main_window_setup.actionToplu_Veri_Aktar_m.triggered.connect(self._toplu_veri_aktarim_penceresi_ac)
+        # Menü öğelerine App sınıfı içinden doğru bir şekilde erişilir.
+        self.actionStok_Kart.triggered.connect(lambda: self.show_tab("Stok Yönetimi"))
+        self.actionM_teri_Kart.triggered.connect(lambda: self.show_tab("Müşteri Yönetimi"))
+        self.actionTedarik_i_Kart.triggered.connect(lambda: self.show_tab("Tedarikçi Yönetimi"))
+        self.actionKasa_Banka_Kart.triggered.connect(lambda: self.show_tab("Kasa/Banka"))
+        self.actionGelir_Gider_Kart.triggered.connect(lambda: self.show_tab("Gelir/Gider"))
+        self.actionFatura_Kart.triggered.connect(lambda: self.show_tab("Faturalar"))
+        self.action_rsiparis.triggered.connect(lambda: self.show_tab("Sipariş Yönetimi"))
+        self.actionNitelik_Y_netimi.triggered.connect(lambda: self.show_tab("Nitelik Yönetimi"))
+        self.actionToplu_Veri_Aktar_m.triggered.connect(self._toplu_veri_aktarim_penceresi_ac)
         
-        self.ui_main_window_setup.actionM_teri_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.ui_main_window_setup.actionTedarik_i_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.ui_main_window_setup.actionStok_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.ui_main_window_setup.actionFatura_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.ui_main_window_setup.actionKasa_Banka_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.ui_main_window_setup.actionGelir_Gider_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.ui_main_window_setup.actionCari_Hareket_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.ui_main_window_setup.actionSiparis_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
-        self.ui_main_window_setup.actionNitelik_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionM_teri_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionTedarik_i_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionStok_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionFatura_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionKasa_Banka_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionGelir_Gider_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionCari_Hareket_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionSiparis_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
+        self.actionNitelik_Raporu.triggered.connect(lambda: self.show_tab("Raporlama Merkezi"))
         
-        self.ui_main_window_setup.actionYedekle.triggered.connect(self._yedekle)
-        self.ui_main_window_setup.actionGeri_Y_kle.triggered.connect(self._geri_yukle)
-        self.ui_main_window_setup.actionVeri_Yonetimi.triggered.connect(self._veri_yonetimi_penceresi_ac)
-        self.ui_main_window_setup.actionY_netici_Ayarlar.triggered.connect(self._yonetici_ayarlari_penceresi_ac)
-        self.ui_main_window_setup.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
+        self.actionYedekle.triggered.connect(self._yedekle)
+        self.actionGeri_Y_kle.triggered.connect(self._geri_yukle)
+        self.actionVeri_Yonetimi.triggered.connect(self._veri_yonetimi_penceresi_ac)
+        self.actionY_netici_Ayarlar.triggered.connect(self._yonetici_ayarlari_penceresi_ac)
+        self.actionAPI_Ayarlar.triggered.connect(self._api_ayarlari_penceresi_ac)
 
     def _initial_load_data(self): 
         """Uygulama başlangıcında veya veri güncellendiğinde tüm sekmelerdeki verileri yükler."""
@@ -820,7 +804,7 @@ class App(QMainWindow):
 
     def _yonetici_ayarlari_penceresi_ac(self):
         from pencereler import YoneticiAyarlariPenceresi
-        dialog = YoneticiAyarlariPenceresi(self, self.db_manager, app_ref=self)
+        dialog = YoneticiAyarlariPenceresi(self, self.db_manager)
         dialog.exec()
         
     def _veri_yonetimi_penceresi_ac(self):

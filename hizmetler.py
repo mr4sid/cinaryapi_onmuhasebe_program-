@@ -13,6 +13,7 @@ from api.modeller import (Base, Stok, Musteri, Tedarikci, Fatura, FaturaKalemi,
                            CariHesap, CariHareket, Siparis, SiparisKalemi, UrunKategori, UrunGrubu,
                            KasaBankaHesap, StokHareket, GelirGider, Nitelik, Ulke, UrunMarka, 
                            SenkronizasyonKuyrugu, GelirSiniflandirma, GiderSiniflandirma, UrunBirimi)
+
 logger = logging.getLogger(__name__)
 
 if not logger.handlers:
@@ -23,12 +24,9 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 class FaturaService:
-    def __init__(self, db_manager, app_ref):
+    def __init__(self, db_manager):
         self.db = db_manager
-        self.app = app_ref
         logger.info("FaturaService başlatıldı.")
-        # DÜZELTME: Kullanıcı ID'sini sözlükten alıyoruz
-        self.current_user_id = self.app.current_user.get("id") if self.app and hasattr(self.app, 'current_user') else None
 
     def fatura_olustur(self, fatura_no, tarih, fatura_tipi, cari_id, kalemler_data, odeme_turu,
                          kasa_banka_id=None, misafir_adi=None, fatura_notlari=None, vade_tarihi=None,
@@ -47,8 +45,8 @@ class FaturaService:
             "genel_iskonto_tipi": genel_iskonto_tipi,
             "genel_iskonto_degeri": genel_iskonto_degeri,
             "original_fatura_id": original_fatura_id,
-            "olusturan_kullanici_id": self.current_user_id, # DÜZELTME: self.current_user_id kullanıldı
-            "kullanici_id": self.current_user_id # DÜZELTME: kullanici_id parametresi eklendi
+            "olusturan_kullanici_id": self.db.app.current_user_id,
+            "kullanici_id": self.db.app.current_user_id
         }
 
         try:
@@ -120,10 +118,8 @@ class FaturaService:
             return False, f"Siparişi faturaya dönüştürülürken beklenmeyen bir hata oluştu: {e}"
 
 class CariService:
-    def __init__(self, db_manager, app):
+    def __init__(self, db_manager):
         self.db = db_manager
-        self.app = app
-        self.current_user_id = self.app.current_user.get("id") if self.app and hasattr(self.app, 'current_user') else None
         logger.info("CariService başlatıldı.")
         
     def musteri_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
@@ -137,7 +133,7 @@ class CariService:
 
         try:
             # DÜZELTME: musteri_listesi_al metoduna kullanici_id eklendi
-            return self.db.musteri_listesi_al(kullanici_id=self.current_user_id, **cleaned_params)
+            return self.db.musteri_listesi_al(kullanici_id=self.db.app.current_user_id, **cleaned_params)
         except Exception as e:
             logger.error(f"Müşteri listesi CariService üzerinden alınırken hata: {e}")
             raise
@@ -145,7 +141,7 @@ class CariService:
     def musteri_getir_by_id(self, musteri_id: int):
         try:
             # DÜZELTME: musteri_getir_by_id metoduna kullanici_id eklendi
-            return self.db.musteri_getir_by_id(musteri_id, kullanici_id=self.current_user_id)
+            return self.db.musteri_getir_by_id(musteri_id, kullanici_id=self.db.app.current_user_id)
         except Exception as e:
             logger.error(f"Müşteri ID {musteri_id} CariService üzerinden çekilirken hata: {e}")
             raise
@@ -153,7 +149,7 @@ class CariService:
     def musteri_sil(self, musteri_id: int):
         try:
             # DÜZELTME: musteri_sil metoduna kullanici_id eklendi
-            return self.db.musteri_sil(musteri_id, kullanici_id=self.current_user_id)
+            return self.db.musteri_sil(musteri_id, kullanici_id=self.db.app.current_user_id)
         except Exception as e:
             logger.error(f"Müşteri ID {musteri_id} CariService üzerinden silinirken hata: {e}")
             raise
@@ -169,7 +165,7 @@ class CariService:
 
         try:
             # DÜZELTME: tedarikci_listesi_al metoduna kullanici_id eklendi
-            return self.db.tedarikci_listesi_al(kullanici_id=self.current_user_id, **cleaned_params)
+            return self.db.tedarikci_listesi_al(kullanici_id=self.db.app.current_user_id, **cleaned_params)
         except Exception as e:
             logger.error(f"Tedarikçi listesi CariService üzerinden alınırken hata: {e}")
             raise
@@ -177,7 +173,7 @@ class CariService:
     def tedarikci_getir_by_id(self, tedarikci_id: int):
         try:
             # DÜZELTME: tedarikci_getir_by_id metoduna kullanici_id eklendi
-            return self.db.tedarikci_getir_by_id(tedarikci_id, kullanici_id=self.current_user_id)
+            return self.db.tedarikci_getir_by_id(tedarikci_id, kullanici_id=self.db.app.current_user_id)
         except Exception as e:
             logger.error(f"Tedarikçi ID {tedarikci_id} CariService üzerinden çekilirken hata: {e}")
             raise
@@ -185,7 +181,7 @@ class CariService:
     def tedarikci_sil(self, tedarikci_id: int):
         try:
             # DÜZELTME: tedarikci_sil metoduna kullanici_id eklendi
-            return self.db.tedarikci_sil(tedarikci_id, kullanici_id=self.current_user_id)
+            return self.db.tedarikci_sil(tedarikci_id, kullanici_id=self.db.app.current_user_id)
         except Exception as e:
             logger.error(f"Tedarikçi ID {tedarikci_id} CariService üzerinden silinirken hata: {e}")
             raise
@@ -193,43 +189,42 @@ class CariService:
     def cari_getir_by_id(self, cari_id: int, cari_tipi: str):
         if cari_tipi == self.db.CARI_TIP_MUSTERI:
             # DÜZELTME: musteri_getir_by_id metoduna kullanici_id eklendi
-            return self.musteri_getir_by_id(cari_id, kullanici_id=self.current_user_id)
+            return self.db.musteri_getir_by_id(cari_id, kullanici_id=self.db.app.current_user_id)
         elif cari_tipi == self.db.CARI_TIP_TEDARIKCI:
             # DÜZELTME: tedarikci_getir_by_id metoduna kullanici_id eklendi
-            return self.tedarikci_getir_by_id(cari_id, kullanici_id=self.current_user_id)
+            return self.db.tedarikci_getir_by_id(cari_id, kullanici_id=self.db.app.current_user_id)
         else:
             raise ValueError("Geçersiz cari tipi belirtildi. 'MUSTERI' veya 'TEDARIKCI' olmalı.")
 
 class TopluIslemService:
-    def __init__(self, db_manager, app_ref):
+    def __init__(self, db_manager):
         self.db = db_manager
-        self.app = app_ref
         self._nitelik_cache = {}
 
     def _load_nitelik_cache(self, nitelik_tipi: str):
         if nitelik_tipi not in self._nitelik_cache:
             self._nitelik_cache[nitelik_tipi] = {}
             if nitelik_tipi == "kategoriler":
-                items = self.db.kategori_listele(kullanici_id=self.app.current_user_id)
+                items = self.db.kategori_listele(kullanici_id=self.db.app.current_user_id)
                 for item in items:
                     self._nitelik_cache[nitelik_tipi][item.get("ad").lower()] = item.get("id")
             elif nitelik_tipi == "markalar":
-                response = self.db.marka_listele(kullanici_id=self.app.current_user_id)
+                response = self.db.marka_listele(kullanici_id=self.db.app.current_user_id)
                 items = response.get("items", [])
                 for item in items:
                     self._nitelik_cache[nitelik_tipi][item.get("ad").lower()] = item.get("id")
             elif nitelik_tipi == "urun_gruplari":
-                response = self.db.urun_grubu_listele(kullanici_id=self.app.current_user_id)
+                response = self.db.urun_grubu_listele(kullanici_id=self.db.app.current_user_id)
                 items = response.get("items", [])
                 for item in items:
                     self._nitelik_cache[nitelik_tipi][item.get("ad").lower()] = item.get("id")
             elif nitelik_tipi == "urun_birimleri":
-                response = self.db.urun_birimi_listele(kullanici_id=self.app.current_user_id)
+                response = self.db.urun_birimi_listele(kullanici_id=self.db.app.current_user_id)
                 items = response.get("items", [])
                 for item in items:
                     self._nitelik_cache[nitelik_tipi][item.get("ad").lower()] = item.get("id")
             elif nitelik_tipi == "ulkeler":
-                response = self.db.ulke_listele(kullanici_id=self.app.current_user_id)
+                response = self.db.ulke_listele(kullanici_id=self.db.app.current_user_id)
                 items = response.get("items", [])
                 for item in items:
                     self._nitelik_cache[nitelik_tipi][item.get("ad").lower()] = item.get("id")

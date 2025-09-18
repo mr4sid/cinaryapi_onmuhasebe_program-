@@ -2301,41 +2301,8 @@ class YoneticiAyarlariPenceresi(QDialog):
             try:
                 utility_function = self.utility_map.get(button_text)
                 if utility_function:
-                    success, message = utility_function()
-
-                    if success:
-                        QMessageBox.information(self, "Başarılı", message)
-                        self.app.set_status_message(message)
-                        
-                        if "Tüm Verileri Temizle" in button_text:
-                            self.close()
-                            self.app.close()
-                    else:
-                        QMessageBox.critical(self, "Hata", message)
-                        self.app.set_status_message(f"'{button_text}' işlemi sırasında hata oluştu: {message}")
-                else:
-                    QMessageBox.critical(self, "Hata", f"'{button_text}' işlemi için eşleşen bir fonksiyon bulunamadı.")
-            except Exception as e:
-                QMessageBox.critical(self, "Kritik Hata", f"İşlem sırasında beklenmedik bir hata oluştu: {e}")
-                logging.error(f"'{button_text}' yardımcı programı çalıştırılırken hata: {traceback.format_exc()}")
-        else:
-            self.app.set_status_message(f"'{button_text}' işlemi iptal edildi.")
-
-    def _run_utility(self, button_text):
-        """
-        Onay alıp yardımcı fonksiyonu çalıştıran ana metot.
-        """
-        confirm_message = f"'{button_text}' işlemini gerçekleştirmek istediğinizden emin misiniz?\n\nBU İŞLEM GERİ ALINAMAZ!"
-        if "Tüm Verileri Temizle" in button_text:
-             confirm_message += "\n\nBu işlemden sonra program yeniden başlatılacaktır."
-
-        reply = QMessageBox.question(self, "Onay Gerekli", confirm_message, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            try:
-                # DÜZELTME: Sözlükten doğru fonksiyonu çekiyoruz.
-                utility_function = self.utility_map.get(button_text)
-                if utility_function:
-                    success, message = utility_function()
+                    # Düzeltme: Fonksiyon çağrısına kullanici_id parametresini ekle
+                    success, message = utility_function(kullanici_id=self.app.current_user[0])
 
                     if success:
                         QMessageBox.information(self, "Başarılı", message)
@@ -6874,3 +6841,84 @@ class SiniflandirmaDuzenlePenceresi(QDialog):
             error_detail = str(e)
             QMessageBox.critical(self, "API Hatası", f"Sınıflandırma güncellenirken hata: {error_detail}")
             logging.error(f"Sınıflandırma güncelleme hatası: {error_detail}", exc_info=True)
+
+class KullaniciKayitPenceresi(QDialog):
+    def __init__(self, parent_app, db_manager):
+        super().__init__(parent_app)
+        self.app = parent_app
+        self.db = db_manager
+        self.setWindowTitle("Yeni Kullanıcı Hesabı Oluştur")
+        self.setFixedSize(350, 200)
+        self.setModal(True)
+
+        main_layout = QVBoxLayout(self)
+        title_label = QLabel("Yeni Hesap Oluştur")
+        title_label.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        title_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(title_label)
+
+        form_layout = QGridLayout()
+        main_layout.addLayout(form_layout)
+
+        form_layout.addWidget(QLabel("Kullanıcı Adı:"), 0, 0)
+        self.kullanici_adi_entry = QLineEdit()
+        self.kullanici_adi_entry.setPlaceholderText("Benzersiz kullanıcı adı")
+        form_layout.addWidget(self.kullanici_adi_entry, 0, 1)
+
+        form_layout.addWidget(QLabel("Şifre:"), 1, 0)
+        self.sifre_entry = QLineEdit()
+        self.sifre_entry.setEchoMode(QLineEdit.Password)
+        self.sifre_entry.setPlaceholderText("Şifre")
+        form_layout.addWidget(self.sifre_entry, 1, 1)
+
+        form_layout.addWidget(QLabel("Şifre Tekrar:"), 2, 0)
+        self.sifre_tekrar_entry = QLineEdit()
+        self.sifre_tekrar_entry.setEchoMode(QLineEdit.Password)
+        self.sifre_tekrar_entry.setPlaceholderText("Şifre tekrarı")
+        form_layout.addWidget(self.sifre_tekrar_entry, 2, 1)
+        
+        main_layout.addStretch()
+
+        button_layout = QHBoxLayout()
+        main_layout.addLayout(button_layout)
+        button_layout.addStretch()
+
+        btn_kaydet = QPushButton("Hesap Oluştur")
+        btn_kaydet.clicked.connect(self._hesap_olustur)
+        button_layout.addWidget(btn_kaydet)
+
+        btn_iptal = QPushButton("İptal")
+        btn_iptal.clicked.connect(self.reject)
+        button_layout.addWidget(btn_iptal)
+
+        self.kullanici_adi_entry.setFocus()
+
+    def _hesap_olustur(self):
+        kullanici_adi = self.kullanici_adi_entry.text().strip()
+        sifre = self.sifre_entry.text().strip()
+        sifre_tekrar = self.sifre_tekrar_entry.text().strip()
+
+        if not (kullanici_adi and sifre and sifre_tekrar):
+            QMessageBox.warning(self, "Eksik Bilgi", "Lütfen tüm alanları doldurun.")
+            return
+
+        if sifre != sifre_tekrar:
+            QMessageBox.warning(self, "Şifre Hatası", "Girilen şifreler eşleşmiyor.")
+            return
+
+        try:
+            # Yeni API rotasını çağırıyoruz
+            data = {"kullanici_adi": kullanici_adi, "sifre": sifre}
+            response = requests.post(f"{self.db.api_base_url}/dogrulama/register", json=data)
+            response.raise_for_status()
+            
+            QMessageBox.information(self, "Başarılı", "Yeni kullanıcı hesabınız başarıyla oluşturuldu.")
+            self.accept()
+        except requests.exceptions.RequestException as e:
+            error_detail = "Kullanıcı adı zaten mevcut."
+            if e.response is not None and e.response.json():
+                error_detail = e.response.json().get('detail', str(e))
+
+            QMessageBox.critical(self, "Kayıt Hatası", f"Kullanıcı oluşturulurken bir hata oluştu:\n{error_detail}")
+        except Exception as e:
+            QMessageBox.critical(self, "Beklenmeyen Hata", f"Beklenmeyen bir hata oluştu: {e}")

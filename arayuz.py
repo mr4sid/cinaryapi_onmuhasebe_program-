@@ -28,7 +28,7 @@ from matplotlib.figure import Figure
 # Yerel Uygulama Modülleri
 from veritabani import OnMuhasebe
 from hizmetler import lokal_db_servisi # Değiştirilen satır
-from pencereler import YeniMusteriEklePenceresi, YeniTedarikciEklePenceresi, StokKartiPenceresi,YeniKasaBankaEklePenceresi
+from pencereler import StokKartiPenceresi, KullaniciKayitPenceresi
 from yardimcilar import DatePickerDialog, normalize_turkish_chars, setup_locale, format_and_validate_numeric_input
 from datetime import datetime
 import requests
@@ -7807,17 +7807,63 @@ class GelirGiderSayfasi(QWidget):
             selected_widget.gg_listesini_yukle()
         
 class GirisEkrani(QDialog):
-    login_success = Signal(object) # Yeni sinyal tanımlandı
-
-    def __init__(self, parent_app, db_manager):
-        super().__init__(parent_app)
-        self.parent_app = parent_app
+    def __init__(self, parent=None, db_manager=None, app_ref=None):
+        super().__init__(parent)
         self.db = db_manager
+        self.app = app_ref
         self.setWindowTitle("Kullanıcı Girişi")
-        self.setFixedSize(400, 250)
-        self.setWindowFlags(Qt.FramelessWindowHint) # Kenarlıkları kaldırır
-        self._setup_ui()
-        self._initial_load_data()
+        self.setFixedSize(350, 250)
+
+        self._main_layout = QVBoxLayout(self)
+
+        self.logo_label = QLabel("Çınar Yapı")
+        self.logo_label.setFont(QFont("Segoe UI", 24, QFont.Bold))
+        self.logo_label.setAlignment(Qt.AlignCenter)
+        self._main_layout.addWidget(self.logo_label)
+
+        self._frame = QFrame(self)
+        self._frame.setFrameShape(QFrame.StyledPanel)
+        self._frame.setLineWidth(1)
+        self._main_layout.addWidget(self._frame)
+
+        self._form_layout = QGridLayout(self._frame)
+
+        self._form_layout.addWidget(QLabel("Kullanıcı Adı:"), 0, 0)
+        self._entry_username = QLineEdit()
+        self._form_layout.addWidget(self._entry_username, 0, 1)
+
+        self._form_layout.addWidget(QLabel("Şifre:"), 1, 0)
+        self._entry_password = QLineEdit()
+        self._entry_password.setEchoMode(QLineEdit.Password)
+        self._form_layout.addWidget(self._entry_password, 1, 1)
+
+        self._main_layout.addStretch()
+
+        self._btn_login = QPushButton("Giriş Yap")
+        self._btn_login.clicked.connect(self.accept)
+
+        # Yeni buton eklendi
+        self._btn_register = QPushButton("Yeni Hesap Oluştur")
+        self._btn_register.clicked.connect(self._open_user_registration_window)
+
+        # Butonları yatay düzende birleştirme
+        self._button_layout = QHBoxLayout()
+        self._button_layout.addStretch()
+        self._button_layout.addWidget(self._btn_register)
+        self._button_layout.addWidget(self._btn_login)
+        self._button_layout.addStretch()
+
+        self._main_layout.addLayout(self._button_layout)
+        self._main_layout.addStretch()
+        self._main_layout.addStretch()
+        self._entry_username.setFocus()
+
+    def get_credentials(self):
+        return self._entry_username.text(), self._entry_password.text()
+
+    def _open_user_registration_window(self):
+        kayit_penceresi = KullaniciKayitPenceresi(self, self.db)
+        kayit_penceresi.exec_()
 
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
