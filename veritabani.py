@@ -92,7 +92,7 @@ class OnMuhasebe:
 
         # Lokal veritabanı bağlantısını başlat
         try:
-            self.lokal_db = lokal_db_servisi
+            self.lokal_db = lokal_db_servisi 
             self.lokal_db.initialize_database()
             logger.info("Yerel veritabanı başarıyla başlatıldı.")
         except Exception as e:
@@ -176,8 +176,6 @@ class OnMuhasebe:
         except (ConnectionError, Timeout, RequestException) as e:
             logger.error(f"API isteği sırasında bağlantı hatası oluştu: {url}. Hata: {e}")
             self.is_online = False
-            if self.app:
-                self.app.set_status_message("API bağlantısı kesildi. Çevrimdışı moda geçiliyor.", "red")
             raise ValueError(f"Bağlantı hatası: {e}")
         except Exception as e:
             logger.error(f"API isteği sırasında genel hata oluştu: {url}. Hata: {e}", exc_info=True)
@@ -617,7 +615,7 @@ class OnMuhasebe:
                 if response is not None:
                     return response
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
                 
         filtre = {
@@ -666,17 +664,17 @@ class OnMuhasebe:
             logger.error(f"Stok eklenirken beklenmeyen hata: {e}", exc_info=True)
             return False, f"Ürün eklenirken beklenmeyen bir hata oluştu: {e}"
 
-    def stok_ozet_al(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
+    def stok_ozet_al(self, kullanici_id: int, baslangic_tarihi: str = None, bitis_tarihi: str = None):
         """
         API'den tüm stokların özet bilgilerini çeker.
         """
         if self.is_online:
             try:
-                response = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi})
+                response = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "kullanici_id": kullanici_id})
                 if response is not None:
                     return response
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
         
         # Offline modda veya API'den yanıt gelmezse boş sözlük döndür
@@ -724,7 +722,6 @@ class OnMuhasebe:
                 if response is not None:
                     return response
             except Exception as e:
-                # self.app.set_status_message() çağrısı kaldırıldı.
                 logger.error(f"Stok listesi API'den çekilirken hata: {e}", exc_info=True)
                 self.is_online = False
                 
@@ -888,7 +885,7 @@ class OnMuhasebe:
                 if response is not None:
                     return response
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
                 
         filtre = {
@@ -995,11 +992,21 @@ class OnMuhasebe:
         }
         params = {k: v for k, v in params.items() if v is not None}
         
-        try:
-            return self._make_api_request("GET", "/siparisler/", params=params)
-        except Exception as e:
-            logger.error(f"Sipariş listesi alınırken hata: {e}")
-            raise
+        if self.is_online:
+            try:
+                return self._make_api_request("GET", "/siparisler/", params=params)
+            except Exception as e:
+                logger.error(f"Sipariş listesi alınırken hata: {e}")
+                self.is_online = False
+                
+        filtre = {
+            "cari_id": cari_id,
+            "durum": durum,
+            "siparis_tipi": siparis_turu,
+            "kullanici_id": kullanici_id
+        }
+        lokal_siparisler = self.lokal_db.listele(model_adi="Siparis", filtre=filtre)
+        return {"items": lokal_siparisler, "total": len(lokal_siparisler)}
 
     def siparis_getir_by_id(self, siparis_id: int, kullanici_id: int):
         try:
@@ -1066,11 +1073,11 @@ class OnMuhasebe:
                 if response is not None:
                     return response
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
         
         filtre = {"tip": tip_filtre, "kullanici_id": kullanici_id} if tip_filtre else {"kullanici_id": kullanici_id}
-        return self.lokal_db.listele(model_adi="GelirGider", filtre=filtre)
+        return {"items": self.lokal_db.listele(model_adi="GelirGider", filtre=filtre), "total": 0}
 
     def gelir_gider_sil(self, gg_id: int, kullanici_id: int):
         try:
@@ -1149,7 +1156,8 @@ class OnMuhasebe:
         # 1. API'ye göndermeyi dene
         if self.is_online:
             try:
-                response = self._make_api_request("POST", f"/nitelikler/{nitelik_tipi}", data=data)
+                # Düzeltme: API'ye json=data parametresi ile istek gönderilecek.
+                response = self._make_api_request("POST", f"/nitelikler/{nitelik_tipi}", json=data)
                 if response:
                     # API'den gelen veriyi yerel veritabanına kaydet
                     self.lokal_db.ekle(model_adi="Nitelik", veri=response)
@@ -1329,7 +1337,7 @@ class OnMuhasebe:
                 if summary is not None:
                     return summary.get("toplam_satislar", 0.0)
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
         return 0.0
 
@@ -1340,7 +1348,7 @@ class OnMuhasebe:
                 if summary is not None:
                     return summary.get("toplam_tahsilatlar", 0.0)
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
         return 0.0
 
@@ -1351,7 +1359,7 @@ class OnMuhasebe:
                 if summary is not None:
                     return summary.get("toplam_odemeler", 0.0)
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
         return 0.0
 
@@ -1363,7 +1371,7 @@ class OnMuhasebe:
                 if response is not None:
                     return response
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
 
         return {"items": [], "total": 0}
@@ -1377,7 +1385,7 @@ class OnMuhasebe:
                 if response is not None:
                     return response
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
         
         return {
@@ -1415,7 +1423,7 @@ class OnMuhasebe:
                         return response
                     return response.get("aylik_ozet", [])
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
         
         return []
@@ -1440,7 +1448,7 @@ class OnMuhasebe:
                 if response is not None:
                     return response
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
         
         return {"nakit_girisleri": 0.0, "nakit_cikislar": 0.0, "net_nakit_akisi": 0.0}
@@ -1483,7 +1491,7 @@ class OnMuhasebe:
                 if response is not None:
                     return response.get("items", [])
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
         return []
             
@@ -1498,7 +1506,7 @@ class OnMuhasebe:
                 if summary is not None:
                     return summary.get("en_cok_satan_urunler", [])
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
         return []
 
@@ -1510,7 +1518,7 @@ class OnMuhasebe:
                 if response_data is not None:
                     return response_data.get("items", [])
             except Exception as e:
-                self.app.set_status_message(f"API hatası. Yerel veritabanı kullanılıyor: {e}", "orange")
+                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
         return []
             

@@ -524,52 +524,51 @@ class StokYonetimiSayfasi(QWidget):
         self.stok_listesini_yenile()
         
     def _yukle_filtre_comboboxlari(self):
-        """Stok yönetimi sayfasındaki filtre comboboxlarını doldurur."""
+        """Kategori, Marka ve diğer filtre combobox'larını doldurur."""
         try:
-            self.kategori_filter_cb.clear()
-            self.kategori_filter_cb.addItem("TÜMÜ", userData=None)
-            kategoriler_response = self.db.kategori_listele(kullanici_id=self.app.current_user_id)
+            self.kategori_combo_filtre.clear()
+            self.marka_combo_filtre.clear()
+            self.urun_grubu_combo_filtre.clear()
+
+            self.kategori_combo_filtre.addItem("Tümü", None)
+            self.marka_combo_filtre.addItem("Tümü", None)
+            self.urun_grubu_combo_filtre.addItem("Tümü", None)
             
-            if isinstance(kategoriler_response, dict) and "items" in kategoriler_response:
+            # API'den kategorileri çek
+            try:
+                # DÜZELTME: kategori_listele metoduna kullanici_id parametresi eklendi
+                kategoriler_response = self.db.kategori_listele(kullanici_id=self.app.current_user[0], limit=1000)
                 kategoriler = kategoriler_response.get("items", [])
-            elif isinstance(kategoriler_response, list):
-                kategoriler = kategoriler_response
-            else:
-                raise ValueError("API'den geçersiz kategori listesi yanıtı alındı.")
-            
-            for kat in kategoriler:
-                self.kategori_filter_cb.addItem(kat.get('ad'), userData=kat.get('id'))
+                for k in sorted(kategoriler, key=lambda x: x.get('ad', '')):
+                    self.kategori_combo_filtre.addItem(k.get('ad'), k.get('id'))
+            except Exception as e:
+                logger.error(f"Kategori filtre combobox yüklenirken hata: {e}", exc_info=True)
+                self.app.set_status_message(f"Hata: Kategori filtreleri yüklenemedi. {e}", "red")
 
-            self.marka_filter_cb.clear()
-            self.marka_filter_cb.addItem("TÜMÜ", userData=None)
-            markalar_response = self.db.marka_listele(kullanici_id=self.app.current_user_id)
-            
-            if isinstance(markalar_response, dict) and "items" in markalar_response:
+            # API'den markaları çek
+            try:
+                # DÜZELTME: marka_listele metoduna kullanici_id parametresi eklendi
+                markalar_response = self.db.marka_listele(kullanici_id=self.app.current_user[0], limit=1000)
                 markalar = markalar_response.get("items", [])
-            elif isinstance(markalar_response, list):
-                markalar = markalar_response
-            else:
-                raise ValueError("API'den geçersiz marka listesi yanıtı alındı.")
-            
-            for marka in markalar:
-                self.marka_filter_cb.addItem(marka.get('ad'), userData=marka.get('id'))
+                for m in sorted(markalar, key=lambda x: x.get('ad', '')):
+                    self.marka_combo_filtre.addItem(m.get('ad'), m.get('id'))
+            except Exception as e:
+                logger.error(f"Marka filtre combobox yüklenirken hata: {e}", exc_info=True)
+                self.app.set_status_message(f"Hata: Marka filtreleri yüklenemedi. {e}", "red")
 
-            self.urun_grubu_filter_cb.clear()
-            self.urun_grubu_filter_cb.addItem("TÜMÜ", userData=None)
-            urun_gruplari_response = self.db.urun_grubu_listele(kullanici_id=self.app.current_user_id)
-            
-            if isinstance(urun_gruplari_response, dict) and "items" in urun_gruplari_response:
+            # API'den ürün gruplarını çek
+            try:
+                # DÜZELTME: urun_grubu_listele metoduna kullanici_id parametresi eklendi
+                urun_gruplari_response = self.db.urun_grubu_listele(kullanici_id=self.app.current_user[0], limit=1000)
                 urun_gruplari = urun_gruplari_response.get("items", [])
-            elif isinstance(urun_gruplari_response, list):
-                urun_gruplari = urun_gruplari_response
-            else:
-                raise ValueError("API'den geçersiz ürün grubu listesi yanıtı alındı.")
-
-            for grup in urun_gruplari:
-                self.urun_grubu_filter_cb.addItem(grup.get('ad'), userData=grup.get('id'))
+                for g in sorted(urun_gruplari, key=lambda x: x.get('ad', '')):
+                    self.urun_grubu_combo_filtre.addItem(g.get('ad'), g.get('id'))
+            except Exception as e:
+                logger.error(f"Ürün grubu filtre combobox yüklenirken hata: {e}", exc_info=True)
+                self.app.set_status_message(f"Hata: Ürün grubu filtreleri yüklenemedi. {e}", "red")
 
         except Exception as e:
-            logger.error(f"Stok filtre comboboxları yüklenirken hata: {e}", exc_info=True)
+            logger.error(f"Stok filtre comboboxları yüklenirken genel hata: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Stok filtreleri yüklenemedi. {e}", "red")
             
     def _filtreleri_temizle(self):

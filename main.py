@@ -534,7 +534,7 @@ class App(QMainWindow):
                                 f"API'ye bağlanılamadı: {e}\n"
                                 "Uygulama çevrimdışı (offline) modda başlatılacaktır. Veri senkronizasyonu yapılamayacaktır.")
             logger.critical(f"Uygulama başlatılırken API bağlantı hatası: {e}. Offline moda geçiliyor.")
-            self.db_manager = OnMuhasebe(api_base_url=None, app_ref=self) # API URL'si olmadan başlat
+            self.db_manager = OnMuhasebe(api_base_url=None) # API URL'si olmadan başlat
             self.is_online = False
             self.set_status_message("Çevrimdışı mod: API bağlantısı yok. Yerel veriler kullanılıyor.", "orange")
         except Exception as e:

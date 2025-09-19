@@ -22,10 +22,9 @@ def get_dashboard_ozet_endpoint(
     kullanici_id: int = Query(..., description="Kullanıcı ID"),
     db: Session = Depends(get_db)
 ):
-    query_fatura = db.query(semalar.Fatura)
-    query_gelir_gider = db.query(semalar.GelirGider)
-    # Düzeltme: Stok modelinde kullanici_id niteliği yok, bu yüzden filtre kaldırıldı.
-    query_stok = db.query(semalar.Stok)
+    query_fatura = db.query(semalar.Fatura).filter(semalar.Fatura.kullanici_id == kullanici_id)
+    query_gelir_gider = db.query(semalar.GelirGider).filter(semalar.GelirGider.kullanici_id == kullanici_id)
+    query_stok = db.query(semalar.Stok).filter(semalar.Stok.kullanici_id == kullanici_id)
 
     if baslangic_tarihi:
         query_fatura = query_fatura.filter(semalar.Fatura.tarih >= baslangic_tarihi)
@@ -47,7 +46,8 @@ def get_dashboard_ozet_endpoint(
     ).join(
         semalar.Fatura, semalar.FaturaKalemi.fatura_id == semalar.Fatura.id
     ).filter(
-        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS
+        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
+        semalar.Fatura.kullanici_id == kullanici_id # DÜZELTME: Kullanıcı ID filtresi eklendi
     )
     if baslangic_tarihi:
         en_cok_satan_urunler_query = en_cok_satan_urunler_query.filter(semalar.Fatura.tarih >= baslangic_tarihi)
@@ -74,13 +74,15 @@ def get_dashboard_ozet_endpoint(
         semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
         semalar.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value,
         semalar.Fatura.vade_tarihi >= today,
-        semalar.Fatura.vade_tarihi <= (today + timedelta(days=30))
+        semalar.Fatura.vade_tarihi <= (today + timedelta(days=30)),
+        semalar.Fatura.kullanici_id == kullanici_id
     ).scalar() or 0.0
 
     vadesi_gecmis_borclar_toplami = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
         semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS,
         semalar.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value,
-        semalar.Fatura.vade_tarihi < today
+        semalar.Fatura.vade_tarihi < today,
+        semalar.Fatura.kullanici_id == kullanici_id
     ).scalar() or 0.0
 
     return {
@@ -382,6 +384,7 @@ def get_cari_hesap_ekstresi_endpoint(
                 hareket_model_dict['fatura_turu'] = fatura_obj.fatura_turu
         
         if hareket.kasa_banka_id:
+            # DÜZELTME: semalar.KasaBanka.kullanici_id filtresi eklendi
             kasa_banka_obj = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == hareket.kasa_banka_id, semalar.KasaBanka.kullanici_id == kullanici_id).first()
             if kasa_banka_obj:
                 hareket_model_dict['kasa_banka_adi'] = kasa_banka_obj.hesap_adi
@@ -430,11 +433,12 @@ def get_gelir_gider_aylik_ozet_endpoint(
      .all()
 
     aylik_data = []
+    ay_adlari_dict = {
+        1: "Ocak", 2: "Şubat", 3: "Mart", 4: "Nisan", 5: "Mayıs", 6: "Haziran",
+        7: "Temmuz", 8: "Ağustos", 9: "Eylül", 10: "Ekim", 11: "Kasım", 12: "Aralık"
+    }
+
     for i in range(1, 13):
-        ay_adlari_dict = {
-            1: "Ocak", 2: "Şubat", 3: "Mart", 4: "Nisan", 5: "Mayıs", 6: "Haziran",
-            7: "Temmuz", 8: "Ağustos", 9: "Eylül", 10: "Ekim", 11: "Kasım", 12: "Aralık"
-        }
         ay_adi = ay_adlari_dict.get(i, f"{i}. Ay")
         
         gelir = next((item.toplam_gelir for item in gelir_gider_ozet if item.ay == i), 0.0)
@@ -470,7 +474,7 @@ def get_urun_faturalari_endpoint(
         for fatura in faturalar
     ], "total": len(faturalar)}
 
-@router.get("/fatura_kalem_gecmisi", response_model=List[modeller.CariHareketRead])
+@router.get("/fatura_kalem_gecmisi", response_model=List[modeller.FaturaKalemiRead])
 def get_fatura_kalem_gecmisi_endpoint(
     cari_id: int,
     urun_id: int,
@@ -490,4 +494,4 @@ def get_fatura_kalem_gecmisi_endpoint(
               
     kalemler = query.all()
     
-    return kalemler
+    return [modeller.FaturaKalemiRead.model_validate(kalem, from_attributes=True) for kalem in kalemler]
