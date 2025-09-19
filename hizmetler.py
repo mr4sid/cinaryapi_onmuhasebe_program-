@@ -120,23 +120,14 @@ class FaturaService:
 class CariService:
     def __init__(self, db_manager):
         self.db = db_manager
-        logger.info("CariService başlatıldı.")
         
-    def musteri_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
-        params = {
-            "skip": skip,
-            "limit": limit,
-            "arama": arama,
-            "aktif_durum": aktif_durum
-        }
-        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
-
+    def musteri_listesi_al(self, kullanici_id: int, **kwargs):
+        cleaned_params = {k: v for k, v in kwargs.items() if v is not None}
         try:
-            # DÜZELTME: musteri_listesi_al metoduna kullanici_id eklendi
-            return self.db.musteri_listesi_al(kullanici_id=self.db.app.current_user_id, **cleaned_params)
+            return self.db.musteri_listesi_al(kullanici_id=kullanici_id, **cleaned_params)
         except Exception as e:
-            logger.error(f"Müşteri listesi CariService üzerinden alınırken hata: {e}")
-            raise
+            logger.error(f"Müşteri listesi CariService üzerinden alınırken hata: {e}", exc_info=True)
+            return {"items": [], "total": 0}
 
     def musteri_getir_by_id(self, musteri_id: int):
         try:
@@ -154,21 +145,13 @@ class CariService:
             logger.error(f"Müşteri ID {musteri_id} CariService üzerinden silinirken hata: {e}")
             raise
 
-    def tedarikci_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
-        params = {
-            "skip": skip,
-            "limit": limit,
-            "arama": arama,
-            "aktif_durum": aktif_durum
-        }
-        cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
-
+    def tedarikci_listesi_al(self, kullanici_id: int, **kwargs):
+        cleaned_params = {k: v for k, v in kwargs.items() if v is not None}
         try:
-            # DÜZELTME: tedarikci_listesi_al metoduna kullanici_id eklendi
-            return self.db.tedarikci_listesi_al(kullanici_id=self.db.app.current_user_id, **cleaned_params)
+            return self.db.tedarikci_listesi_al(kullanici_id=kullanici_id, **cleaned_params)
         except Exception as e:
-            logger.error(f"Tedarikçi listesi CariService üzerinden alınırken hata: {e}")
-            raise
+            logger.error(f"Tedarikçi listesi CariService üzerinden alınırken hata: {e}", exc_info=True)
+            return {"items": [], "total": 0}
 
     def tedarikci_getir_by_id(self, tedarikci_id: int):
         try:

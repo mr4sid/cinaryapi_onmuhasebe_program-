@@ -524,7 +524,7 @@ class App(QMainWindow):
             # API bağlantısını test ediyoruz.
             # Veritabanı yöneticisi içinde sadece API bağlantısını test eden bir metot eklemek daha mantıklı olabilir.
             # Şimdilik, doğrudan OnMuhasebe'yi API URL'si ile başlatıyoruz ve hatayı yakalıyoruz.
-            self.db_manager = OnMuhasebe(api_base_url=self.config["api_base_url"], app_ref=self)
+            self.db_manager = OnMuhasebe(api_base_url=self.config["api_base_url"])
             self.is_online = True
             logger.info("Veritabanı yöneticisi API modu ile başarıyla başlatıldı.")
             self.set_status_message("API bağlantısı başarılı.", "green")
@@ -835,7 +835,7 @@ if __name__ == "__main__":
     app.setPalette(palette)
     
     from arayuz import GirisEkrani
-    db_manager_login = OnMuhasebe(api_base_url=load_config()["api_base_url"], app_ref=None)
+    db_manager_login = OnMuhasebe(api_base_url=load_config()["api_base_url"])
     login_screen = GirisEkrani(None, db_manager_login)
     
     # login_data'yı global kapsamda tanımlayalım

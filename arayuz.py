@@ -481,13 +481,11 @@ class StokYonetimiSayfasi(QWidget):
         self.tree_stok = QTreeWidget(tree_frame)
         self.tree_stok.setHeaderLabels(cols)
         
-        # DEĞİŞİKLİK: Sütun başlıklarının font boyutu ve hizalaması güncellendi
         font_header = QFont("Segoe UI", 12, QFont.Bold)
         for i in range(self.tree_stok.columnCount()):
             self.tree_stok.headerItem().setTextAlignment(i, Qt.AlignCenter)
             self.tree_stok.headerItem().setFont(i, font_header)
 
-        # Sütunları manuel olarak ayarlıyoruz
         self.tree_stok.header().setSectionResizeMode(QHeaderView.Interactive)
         self.tree_stok.header().setStretchLastSection(False)
         self.tree_stok.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -519,39 +517,60 @@ class StokYonetimiSayfasi(QWidget):
         self.sonraki_sayfa_button.clicked.connect(self.sonraki_sayfa)
         pagination_layout.addWidget(self.sonraki_sayfa_button)
         
-        self.tree_stok.itemDoubleClicked.connect(self.secili_urun_duzenle) # YENİ EKLENEN SATIR
+        self.tree_stok.itemDoubleClicked.connect(self.secili_urun_duzenle)
 
-        self._yukle_filtre_comboboxlari_stok_yonetimi()
+        # DÜZELTME: Doğru metot çağrısı yapıldı.
+        self._yukle_filtre_comboboxlari()
         self.stok_listesini_yenile()
         
     def _yukle_filtre_comboboxlari(self):
-        self.cari_filter_cb.clear()
-        self.cari_filter_map = {"TÜMÜ": None}
-        self.cari_filter_cb.addItem("TÜMÜ", userData=None)
-
+        """Stok yönetimi sayfasındaki filtre comboboxlarını doldurur."""
         try:
-            # Müşteri listesini alıyoruz
-            musteriler_response = self.db.musteri_listesi_al(kullanici_id=self.app.current_user_id, limit=10000)
-            musteriler_list = musteriler_response.get("items", []) if isinstance(musteriler_response, dict) else musteriler_response
-            for m in musteriler_list:
-                display_text = f"{m.get('ad', 'Bilinmiyor')} (M: {m.get('kod', '')})"
-                self.cari_filter_map[display_text] = m.get('id')
-                self.cari_filter_cb.addItem(display_text, userData=m.get('id'))
+            self.kategori_filter_cb.clear()
+            self.kategori_filter_cb.addItem("TÜMÜ", userData=None)
+            kategoriler_response = self.db.kategori_listele(kullanici_id=self.app.current_user_id)
+            
+            if isinstance(kategoriler_response, dict) and "items" in kategoriler_response:
+                kategoriler = kategoriler_response.get("items", [])
+            elif isinstance(kategoriler_response, list):
+                kategoriler = kategoriler_response
+            else:
+                raise ValueError("API'den geçersiz kategori listesi yanıtı alındı.")
+            
+            for kat in kategoriler:
+                self.kategori_filter_cb.addItem(kat.get('ad'), userData=kat.get('id'))
 
-            # Tedarikçi listesini alıyoruz
-            tedarikciler_response = self.db.tedarikci_listesi_al(kullanici_id=self.app.current_user_id, limit=10000)
-            tedarikciler_list = tedarikciler_response.get("items", []) if isinstance(tedarikciler_response, dict) else tedarikciler_response
-            for t in tedarikciler_list:
-                display_text = f"{t.get('ad', 'Bilinmiyor')} (T: {t.get('kod', '')})"
-                self.cari_filter_map[display_text] = t.get('id')
-                self.cari_filter_cb.addItem(display_text, userData=t.get('id'))
-        
+            self.marka_filter_cb.clear()
+            self.marka_filter_cb.addItem("TÜMÜ", userData=None)
+            markalar_response = self.db.marka_listele(kullanici_id=self.app.current_user_id)
+            
+            if isinstance(markalar_response, dict) and "items" in markalar_response:
+                markalar = markalar_response.get("items", [])
+            elif isinstance(markalar_response, list):
+                markalar = markalar_response
+            else:
+                raise ValueError("API'den geçersiz marka listesi yanıtı alındı.")
+            
+            for marka in markalar:
+                self.marka_filter_cb.addItem(marka.get('ad'), userData=marka.get('id'))
+
+            self.urun_grubu_filter_cb.clear()
+            self.urun_grubu_filter_cb.addItem("TÜMÜ", userData=None)
+            urun_gruplari_response = self.db.urun_grubu_listele(kullanici_id=self.app.current_user_id)
+            
+            if isinstance(urun_gruplari_response, dict) and "items" in urun_gruplari_response:
+                urun_gruplari = urun_gruplari_response.get("items", [])
+            elif isinstance(urun_gruplari_response, list):
+                urun_gruplari = urun_gruplari_response
+            else:
+                raise ValueError("API'den geçersiz ürün grubu listesi yanıtı alındı.")
+
+            for grup in urun_gruplari:
+                self.urun_grubu_filter_cb.addItem(grup.get('ad'), userData=grup.get('id'))
+
         except Exception as e:
-            logger.warning(f"Cari listesi yüklenirken hata: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Cari listesi alınamadı - {e}", "red")
-
-        self.durum_combo.setCurrentText("TÜMÜ")
-        self.siparis_tipi_filter_cb.setCurrentText("TÜMÜ")
+            logger.error(f"Stok filtre comboboxları yüklenirken hata: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Stok filtreleri yüklenemedi. {e}", "red")
             
     def _filtreleri_temizle(self):
         self.arama_entry.clear()
@@ -613,7 +632,6 @@ class StokYonetimiSayfasi(QWidget):
         """Mevcut stok listesini QTreeWidget'a doldurur ve biçimlendirir."""
         self.tree_stok.clear()
         
-        # DEĞİŞİKLİK: Yazı boyutu artırıldı
         font_item = QFont("Segoe UI", 12)
         
         for item in stok_listesi:
@@ -621,16 +639,14 @@ class StokYonetimiSayfasi(QWidget):
             
             item_qt.setData(0, Qt.UserRole, item.id)
             
-            # Sıfır miktar için renkli uyarı
             if item.miktar <= item.min_stok_seviyesi:
                 for col in range(self.tree_stok.columnCount()):
-                    item_qt.setBackground(col, QBrush(QColor("#ffcdd2"))) # Açık kırmızı
+                    item_qt.setBackground(col, QBrush(QColor("#ffcdd2")))
                     
             item_qt.setText(0, str(item.id))
             item_qt.setText(1, item.kod)
             item_qt.setText(2, item.ad)
             
-            # Sayısal alanları formatla
             miktar_str = f"{item.miktar:,.2f}".replace('.', ',')
             satis_fiyat_str = self.db._format_currency(item.satis_fiyati)
             kdv_str = f"%{item.kdv_orani:.0f}"
@@ -642,23 +658,15 @@ class StokYonetimiSayfasi(QWidget):
             item_qt.setText(6, min_stok_str)
             item_qt.setText(7, "Evet" if item.aktif else "Hayır")
             
-            # DEĞİŞİKLİK: Tüm sütunları merkeze hizala ve yazı fontunu ayarla
             for i in range(self.tree_stok.columnCount()):
                 item_qt.setTextAlignment(i, Qt.AlignCenter)
                 item_qt.setFont(i, font_item)
 
     def _sayfalama_butonlarini_guncelle(self):
-        # Toplam sayfa sayısını hesapla
-        if self.toplam_kayit_sayisi > 0:
-            self.total_pages = (self.toplam_kayit_sayisi + self.kayit_sayisi_per_sayfa - 1) // self.kayit_sayisi_per_sayfa
-        else:
-            self.total_pages = 1
-
-        self.sayfa_bilgisi_label.setText(f"Sayfa {self.mevcut_sayfa} / {self.total_pages}")
-        
-        # Sayfalama butonlarını etkinleştir/devre dışı bırak
-        self.onceki_sayfa_button.setEnabled(self.mevcut_sayfa > 1)
-        self.sonraki_sayfa_button.setEnabled(self.mevcut_sayfa < self.total_pages)
+        self.btn_ilk_sayfa.setEnabled(self.mevcut_sayfa > 1)
+        self.btn_onceki_sayfa.setEnabled(self.mevcut_sayfa > 1)
+        self.btn_sonraki_sayfa.setEnabled(self.mevcut_sayfa < self.total_pages)
+        self.btn_son_sayfa.setEnabled(self.mevcut_sayfa < self.total_pages)
 
     def yeni_urun_ekle_penceresi(self):
         logger.info("Yeni ürün ekle butonu tıklandı. StokKartiPenceresi açılmaya çalışılıyor.")
@@ -1032,7 +1040,7 @@ class MusteriYonetimiSayfasi(QWidget):
         
         # CariService entegrasyonu için servisleri burada başlatıyoruz
         from hizmetler import CariService
-        self.cari_service = CariService(self.db, self.app)         
+        self.cari_service = CariService(self.db)       
 
         self.main_layout = QVBoxLayout(self)
 
@@ -1166,6 +1174,7 @@ class MusteriYonetimiSayfasi(QWidget):
     def musteri_listesini_yenile(self):
         self.tree.clear()
         try:
+            # DÜZELTME: musteri_listesi_al metoduna kullanici_id parametresi eklendi.
             musteriler_response = self.db.musteri_listesi_al(
                 kullanici_id=self.app.current_user_id,
                 arama=self.arama_entry.text(),
@@ -1370,9 +1379,9 @@ class TedarikciYonetimiSayfasi(QWidget):
         self.db = db_manager
         self.app = app_ref
 
-        # CariService örneğini burada başlatıyoruz
+        # CariService entegrasyonu için servisleri burada başlatıyoruz
         from hizmetler import CariService
-        self.cari_service = CariService(self.db, self.app)
+        self.cari_service = CariService(self.db)
 
         self.main_layout = QVBoxLayout(self)
 
@@ -1506,6 +1515,7 @@ class TedarikciYonetimiSayfasi(QWidget):
     def tedarikci_listesini_yenile(self):
         self.tree.clear()
         try:
+            # DÜZELTME: tedarikci_listesi_al metoduna kullanici_id parametresi eklendi.
             tedarikciler_response = self.db.tedarikci_listesi_al(
                 kullanici_id=self.app.current_user_id,
                 arama=self.arama_entry.text(),
@@ -1812,11 +1822,14 @@ class SiparisListesiSayfasi(QWidget):
         super().__init__(parent)
         self.db = db_manager
         self.app = app_ref
-        from hizmetler import CariService # Bu import zaten olabilir, kontrol edin
-        self.cari_service = CariService(self.db, self.app)
+        from hizmetler import CariService
+        # DÜZELTME: CariService'e sadece db_manager parametresi gönderildi.
+        self.cari_service = CariService(self.db)
+        
         self.main_layout = QVBoxLayout(self)
         self.after_timer = QTimer(self)
         self.after_timer.setSingleShot(True)
+        
         # Sayfalama değişkenleri
         self.kayit_sayisi_per_sayfa = 20
         self.mevcut_sayfa = 1
@@ -5178,6 +5191,7 @@ class SiparisOlusturmaSayfasi(BaseIslemSayfasi):
             self.original_fatura_id_for_iade = initial_data.get('orijinal_fatura_id')
 
         # BaseIslemSayfasi'nın __init__ metodunu çağırıyoruz
+        # DÜZELTME: db_manager ve app_ref parametreleri doğru şekilde iletildi.
         super().__init__(parent, db_manager, app_ref, islem_tipi, duzenleme_id, yenile_callback,
                          initial_cari_id=initial_cari_id, initial_urunler=initial_urunler, initial_data=initial_data)
 
@@ -7652,11 +7666,11 @@ class GelirGiderSayfasi(QWidget):
             selected_widget.gg_listesini_yukle()
         
 class GirisEkrani(QDialog):
-    login_success = Signal(dict) 
-    def __init__(self, parent=None, db_manager=None, app_ref=None):
+    login_success = Signal(dict)
+
+    def __init__(self, parent=None, db_manager=None):
         super().__init__(parent)
         self.db = db_manager
-        self.app = app_ref
         self.setWindowTitle("Kullanıcı Girişi")
         self.setFixedSize(350, 250)
 
@@ -7686,13 +7700,11 @@ class GirisEkrani(QDialog):
         self._main_layout.addStretch()
 
         self._btn_login = QPushButton("Giriş Yap")
-        self._btn_login.clicked.connect(self.accept)
+        self._btn_login.clicked.connect(self._on_login_clicked)
 
-        # Yeni buton eklendi
         self._btn_register = QPushButton("Yeni Hesap Oluştur")
         self._btn_register.clicked.connect(self._open_user_registration_window)
 
-        # Butonları yatay düzende birleştirme
         self._button_layout = QHBoxLayout()
         self._button_layout.addStretch()
         self._button_layout.addWidget(self._btn_register)
@@ -7703,11 +7715,18 @@ class GirisEkrani(QDialog):
         self._main_layout.addStretch()
         self._main_layout.addStretch()
         self._entry_username.setFocus()
+        
+        # main.py'den last_username değerini yükleyelim
+        from main import load_config
+        app_config = load_config()
+        self._entry_username.setText(app_config.get('last_username', ''))
+        self._entry_username.setFocus()
 
     def get_credentials(self):
         return self._entry_username.text(), self._entry_password.text()
 
     def _open_user_registration_window(self):
+        from pencereler import KullaniciKayitPenceresi
         kayit_penceresi = KullaniciKayitPenceresi(self, self.db)
         kayit_penceresi.exec_()
 
@@ -7781,23 +7800,34 @@ class GirisEkrani(QDialog):
         self.layout().addWidget(sirket_label_bottom, alignment=Qt.AlignCenter | Qt.AlignBottom)
 
     def _on_login_clicked(self):
-        kullanici_adi = self.kullanici_adi_entry.text()
-        sifre = self.sifre_entry.text()
+        kullanici_adi = self._entry_username.text()
+        sifre = self._entry_password.text()
 
+        if not kullanici_adi or not sifre:
+            QMessageBox.warning(self, "Hata", "Lütfen kullanıcı adı ve şifre giriniz.")
+            return
+            
         from main import save_config, load_config
         app_config = load_config()
         app_config['last_username'] = kullanici_adi
         save_config(app_config)
-        
-        result = self.db.kullanici_dogrula(kullanici_adi, sifre)
-        
-        # Sadece giriş başarılı olduğunda sinyali yay
-        if isinstance(result, dict) and result.get("access_token") and result.get("kullanici"):
-            self.login_success.emit(result.get("kullanici"))
-        else:
-            QMessageBox.critical(self, "Giriş Hatası", "Kullanıcı adı veya şifre hatalı.")
-            self.sifre_entry.clear()
-            self.sifre_entry.setFocus()
+
+        try:
+            result = self.db.kullanici_dogrula(kullanici_adi, sifre)
+            
+            # `kullanici_dogrula` metodu başarılı bir giriş durumunda,
+            # içinde "kullanici" anahtarı olan bir sözlük döndürür.
+            if isinstance(result, dict) and result.get("kullanici"):
+                self.login_success.emit(result.get("kullanici"))
+                self.accept()
+            else:
+                QMessageBox.critical(self, "Giriş Hatası", "Kullanıcı adı veya şifre hatalı.")
+                self._entry_password.clear()
+                self._entry_password.setFocus()
+        except Exception as e:
+            QMessageBox.critical(self, "Bağlantı Hatası", f"Giriş yapılırken bir hata oluştu: {e}")
+            self._entry_password.clear()
+            self._entry_password.setFocus()
 
 class StokHareketleriSekmesi(QWidget):
     def __init__(self, parent_notebook, db_manager, app_ref, urun_id, urun_adi, parent_pencere=None):

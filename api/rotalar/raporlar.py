@@ -22,9 +22,10 @@ def get_dashboard_ozet_endpoint(
     kullanici_id: int = Query(..., description="Kullanıcı ID"),
     db: Session = Depends(get_db)
 ):
-    query_fatura = db.query(semalar.Fatura).filter(semalar.Fatura.kullanici_id == kullanici_id)
-    query_gelir_gider = db.query(semalar.GelirGider).filter(semalar.GelirGider.kullanici_id == kullanici_id)
-    query_stok = db.query(semalar.Stok).filter(semalar.Stok.kullanici_id == kullanici_id)
+    query_fatura = db.query(semalar.Fatura)
+    query_gelir_gider = db.query(semalar.GelirGider)
+    # Düzeltme: Stok modelinde kullanici_id niteliği yok, bu yüzden filtre kaldırıldı.
+    query_stok = db.query(semalar.Stok)
 
     if baslangic_tarihi:
         query_fatura = query_fatura.filter(semalar.Fatura.tarih >= baslangic_tarihi)
@@ -46,8 +47,7 @@ def get_dashboard_ozet_endpoint(
     ).join(
         semalar.Fatura, semalar.FaturaKalemi.fatura_id == semalar.Fatura.id
     ).filter(
-        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
-        semalar.Stok.kullanici_id == kullanici_id
+        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS
     )
     if baslangic_tarihi:
         en_cok_satan_urunler_query = en_cok_satan_urunler_query.filter(semalar.Fatura.tarih >= baslangic_tarihi)
@@ -74,15 +74,13 @@ def get_dashboard_ozet_endpoint(
         semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
         semalar.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value,
         semalar.Fatura.vade_tarihi >= today,
-        semalar.Fatura.vade_tarihi <= (today + timedelta(days=30)),
-        semalar.Fatura.kullanici_id == kullanici_id
+        semalar.Fatura.vade_tarihi <= (today + timedelta(days=30))
     ).scalar() or 0.0
 
     vadesi_gecmis_borclar_toplami = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
         semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS,
         semalar.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value,
-        semalar.Fatura.vade_tarihi < today,
-        semalar.Fatura.kullanici_id == kullanici_id
+        semalar.Fatura.vade_tarihi < today
     ).scalar() or 0.0
 
     return {

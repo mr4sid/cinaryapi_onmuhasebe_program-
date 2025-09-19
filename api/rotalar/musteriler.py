@@ -26,7 +26,8 @@ def read_musteriler(
     arama: Optional[str] = None,
     aktif_durum: Optional[bool] = None
 ):
-    query = db.query(semalar.Musteri).filter(semalar.Musteri.kullanici_id == kullanici_id)
+    # DÜZELTME: Sorgu filtresi kaldırıldı.
+    query = db.query(semalar.Musteri)
 
     if arama:
         search_term = f"%{arama}%"

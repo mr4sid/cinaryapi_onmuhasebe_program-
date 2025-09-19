@@ -38,7 +38,7 @@ def read_stoklar(
     stokta_var: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
-    query = db.query(semalar.Stok).filter(semalar.Stok.kullanici_id == kullanici_id)
+    query = db.query(semalar.Stok)
     
     if arama:
         search_filter = or_(

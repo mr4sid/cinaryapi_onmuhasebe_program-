@@ -23,7 +23,7 @@ def read_kategoriler(
     arama: str = Query(None),
     db: Session = Depends(get_db)
 ):
-    query = db.query(semalar.UrunKategori).filter(semalar.UrunKategori.kullanici_id == kullanici_id)
+    query = db.query(semalar.UrunKategori)
     if arama:
         query = query.filter(semalar.UrunKategori.ad.ilike(f"%{arama}%"))
     kategoriler = query.offset(skip).limit(limit).all()
@@ -79,7 +79,7 @@ def read_markalar(
     arama: str = Query(None),
     db: Session = Depends(get_db)
 ):
-    query = db.query(semalar.UrunMarka).filter(semalar.UrunMarka.kullanici_id == kullanici_id)
+    query = db.query(semalar.UrunMarka)
     if arama:
         query = query.filter(semalar.UrunMarka.ad.ilike(f"%{arama}%"))
     markalar = query.offset(skip).limit(limit).all()
@@ -134,7 +134,7 @@ def read_urun_gruplari(
     arama: str = Query(None),
     db: Session = Depends(get_db)
 ):
-    query = db.query(semalar.UrunGrubu).filter(semalar.UrunGrubu.kullanici_id == kullanici_id)
+    query = db.query(semalar.UrunGrubu)
     if arama:
         query = query.filter(semalar.UrunGrubu.ad.ilike(f"%{arama}%"))
     urun_gruplari = query.offset(skip).limit(limit).all()
