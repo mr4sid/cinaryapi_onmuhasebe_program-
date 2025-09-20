@@ -122,6 +122,7 @@ class CariHareket(Base):
     odeme_turu = Column(Enum(OdemeTuruEnum), nullable=True)
     kasa_banka_id = Column(Integer, ForeignKey('kasalar_bankalar.id'), nullable=True)
     vade_tarihi = Column(Date, nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
     olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
@@ -172,10 +173,11 @@ class Musteri(Base):
     vergi_no = Column(String, nullable=True)
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
     cari_hareketler = relationship(
         "CariHareket",
-        primaryjoin=lambda: and_(Musteri.id == foreign(CariHareket.cari_id), CariHareket.cari_turu == 'MUSTERI'), 
+        primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_turu == 'MUSTERI'), 
         back_populates="musteri_iliski",
         cascade="all, delete-orphan",
         overlaps="musteri_iliski" 
@@ -196,6 +198,7 @@ class Tedarikci(Base):
     vergi_no = Column(String, nullable=True)
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
     cari_hareketler = relationship(
         "CariHareket",
@@ -256,12 +259,12 @@ class Stok(Base):
     aktif = Column(Boolean, default=True)
     urun_resmi_yolu = Column(String, nullable=True)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
-
     kategori_id = Column(Integer, ForeignKey('urun_kategorileri.id'), nullable=True)
     marka_id = Column(Integer, ForeignKey('urun_markalari.id'), nullable=True)
     urun_grubu_id = Column(Integer, ForeignKey('urun_gruplari.id'), nullable=True)
     birim_id = Column(Integer, ForeignKey('urun_birimleri.id'), nullable=True)
     mense_id = Column(Integer, ForeignKey('ulkeler.id'), nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
     kategori = relationship("UrunKategori", back_populates="stoklar")
     marka = relationship("UrunMarka", back_populates="stoklar")
@@ -295,13 +298,11 @@ class Fatura(Base):
     toplam_kdv_haric = Column(Float, nullable=False, default=0.0)
     toplam_kdv_dahil = Column(Float, nullable=False, default=0.0)
 
-    toplam_kdv_haric = Column(Float, nullable=False, default=0.0)
-    toplam_kdv_dahil = Column(Float, nullable=False, default=0.0)
-
     olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
     son_guncelleme_tarihi_saat = Column(DateTime, onupdate=datetime.now, nullable=True)
     son_guncelleyen_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
     kasa_banka_hesabi = relationship("KasaBanka", backref="faturalar_iliski")
     olusturan_kullanici = relationship("Kullanici", foreign_keys=[olusturan_kullanici_id])
@@ -396,13 +397,13 @@ class GelirGider(Base):
     cari_tip = Column(Enum(CariTipiEnum), nullable=True)
     gelir_siniflandirma_id = Column(Integer, ForeignKey('gelir_siniflandirmalari.id'), nullable=True)
     gider_siniflandirma_id = Column(Integer, ForeignKey('gider_siniflandirmalari.id'), nullable=True)
-
     olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
     kasa_banka_hesabi = relationship("KasaBanka", backref="gelir_gider_iliski")
     gelir_siniflandirma = relationship("GelirSiniflandirma", back_populates="gelir_giderler")
-    gider_siniflandirma = relationship("GiderSiniflandirma", back_populates="gelir_giderler")
+    gider_siniflandirma = relationship("GiderSiniflandirma", back_populates="gider_giderler")
     olusturan_kullanici = relationship("Kullanici", foreign_keys=[olusturan_kullanici_id])
 
 class KasaBankaHareket(Base):
@@ -427,6 +428,7 @@ class UrunKategori(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     ad = Column(String, unique=True, index=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
     stoklar = relationship("Stok", back_populates="kategori")
 
 class UrunMarka(Base):
@@ -435,6 +437,7 @@ class UrunMarka(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     ad = Column(String, unique=True, index=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
     stoklar = relationship("Stok", back_populates="marka")
 
 class UrunGrubu(Base):
@@ -443,6 +446,7 @@ class UrunGrubu(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     ad = Column(String, unique=True, index=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
     stoklar = relationship("Stok", back_populates="urun_grubu")
 
 class UrunBirimi(Base):
@@ -451,6 +455,7 @@ class UrunBirimi(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     ad = Column(String, unique=True, index=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
     stoklar = relationship("Stok", back_populates="birim")
 
 class Ulke(Base):
@@ -459,6 +464,7 @@ class Ulke(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     ad = Column(String, unique=True, index=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
     stoklar = relationship("Stok", back_populates="mense_ulke")
 
 class GelirSiniflandirma(Base):
@@ -467,6 +473,7 @@ class GelirSiniflandirma(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     ad = Column(String, unique=True, index=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
     gelir_giderler = relationship("GelirGider", back_populates="gelir_siniflandirma")
 
 class GiderSiniflandirma(Base):
@@ -475,4 +482,5 @@ class GiderSiniflandirma(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     ad = Column(String, unique=True, index=True)
-    gelir_giderler = relationship("GelirGider", back_populates="gider_siniflandirma")
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
+    gider_giderler = relationship("GelirGider", back_populates="gider_siniflandirma")

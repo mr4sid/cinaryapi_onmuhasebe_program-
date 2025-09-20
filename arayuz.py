@@ -526,13 +526,13 @@ class StokYonetimiSayfasi(QWidget):
     def _yukle_filtre_comboboxlari(self):
         """Kategori, Marka ve diğer filtre combobox'larını doldurur."""
         try:
-            self.kategori_combo_filtre.clear()
-            self.marka_combo_filtre.clear()
-            self.urun_grubu_combo_filtre.clear()
+            self.kategori_filter_cb.clear()
+            self.marka_filter_cb.clear()
+            self.urun_grubu_filter_cb.clear()
 
-            self.kategori_combo_filtre.addItem("Tümü", None)
-            self.marka_combo_filtre.addItem("Tümü", None)
-            self.urun_grubu_combo_filtre.addItem("Tümü", None)
+            self.kategori_filter_cb.addItem("Tümü", None)
+            self.marka_filter_cb.addItem("Tümü", None)
+            self.urun_grubu_filter_cb.addItem("Tümü", None)
             
             # API'den kategorileri çek
             try:
@@ -540,7 +540,7 @@ class StokYonetimiSayfasi(QWidget):
                 kategoriler_response = self.db.kategori_listele(kullanici_id=self.app.current_user[0], limit=1000)
                 kategoriler = kategoriler_response.get("items", [])
                 for k in sorted(kategoriler, key=lambda x: x.get('ad', '')):
-                    self.kategori_combo_filtre.addItem(k.get('ad'), k.get('id'))
+                    self.kategori_filter_cb.addItem(k.get('ad'), k.get('id'))
             except Exception as e:
                 logger.error(f"Kategori filtre combobox yüklenirken hata: {e}", exc_info=True)
                 self.app.set_status_message(f"Hata: Kategori filtreleri yüklenemedi. {e}", "red")
@@ -551,7 +551,7 @@ class StokYonetimiSayfasi(QWidget):
                 markalar_response = self.db.marka_listele(kullanici_id=self.app.current_user[0], limit=1000)
                 markalar = markalar_response.get("items", [])
                 for m in sorted(markalar, key=lambda x: x.get('ad', '')):
-                    self.marka_combo_filtre.addItem(m.get('ad'), m.get('id'))
+                    self.marka_filter_cb.addItem(m.get('ad'), m.get('id'))
             except Exception as e:
                 logger.error(f"Marka filtre combobox yüklenirken hata: {e}", exc_info=True)
                 self.app.set_status_message(f"Hata: Marka filtreleri yüklenemedi. {e}", "red")
@@ -562,7 +562,7 @@ class StokYonetimiSayfasi(QWidget):
                 urun_gruplari_response = self.db.urun_grubu_listele(kullanici_id=self.app.current_user[0], limit=1000)
                 urun_gruplari = urun_gruplari_response.get("items", [])
                 for g in sorted(urun_gruplari, key=lambda x: x.get('ad', '')):
-                    self.urun_grubu_combo_filtre.addItem(g.get('ad'), g.get('id'))
+                    self.urun_grubu_filter_cb.addItem(g.get('ad'), g.get('id'))
             except Exception as e:
                 logger.error(f"Ürün grubu filtre combobox yüklenirken hata: {e}", exc_info=True)
                 self.app.set_status_message(f"Hata: Ürün grubu filtreleri yüklenemedi. {e}", "red")

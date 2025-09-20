@@ -47,7 +47,7 @@ def get_dashboard_ozet_endpoint(
         semalar.Fatura, semalar.FaturaKalemi.fatura_id == semalar.Fatura.id
     ).filter(
         semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
-        semalar.Fatura.kullanici_id == kullanici_id # DÜZELTME: Kullanıcı ID filtresi eklendi
+        semalar.Stok.kullanici_id == kullanici_id
     )
     if baslangic_tarihi:
         en_cok_satan_urunler_query = en_cok_satan_urunler_query.filter(semalar.Fatura.tarih >= baslangic_tarihi)

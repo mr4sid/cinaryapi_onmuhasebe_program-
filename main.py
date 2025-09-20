@@ -538,7 +538,7 @@ class App(QMainWindow):
             self.is_online = False
             self.set_status_message("Çevrimdışı mod: API bağlantısı yok. Yerel veriler kullanılıyor.", "orange")
         except Exception as e:
-            QMessageBox.critical(self, "Uygulama Başlatma Hatası",
+            QMessageBox.critical(self, "Uygulama Başlatma Hatası",  
                                  f"Veritabanı yöneticisi başlatılırken beklenmeyen bir hata oluştu: {e}\n"
                                  "Uygulama kapanacak.")
             logger.critical(f"Uygulama başlatılırken beklenmeyen hata: {e}")

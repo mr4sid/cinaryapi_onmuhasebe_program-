@@ -3,6 +3,7 @@ from hizmetler import lokal_db_servisi
 import requests
 import json
 import logging
+from passlib.context import CryptContext
 import os
 import time
 import locale
@@ -82,7 +83,7 @@ class OnMuhasebe:
     USER_ROLE_MANAGER = "MANAGER"
     USER_ROLE_SALES = "SALES"
     USER_ROLE_USER = "USER"
-    
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")    
     def __init__(self, api_base_url):
         self.api_base_url = api_base_url
         self.access_token = None
@@ -100,6 +101,16 @@ class OnMuhasebe:
             raise
 
         self.check_online_status()
+
+    def verify_password(self, plain_password, hashed_password):
+        """
+        Düz metin şifreyi, hashlenmiş şifreyle karşılaştırır.
+        """
+        try:
+            return self.pwd_context.verify(plain_password, hashed_password)
+        except Exception as e:
+            logger.error(f"Parola doğrulama hatası: {e}", exc_info=True)
+            return False
 
     def check_online_status(self):
         """
@@ -247,59 +258,32 @@ class OnMuhasebe:
             logger.info("Çevrimdışı mod: Yerel veritabanı üzerinden kullanıcı doğrulaması deneniyor...")
             return self.kullanici_dogrula_yerel(kullanici_adi, sifre)
 
-    def kullanici_dogrula_yerel(self, kullanici_adi: str, sifre: str) -> Optional[dict]:
+    def kullanici_dogrula_yerel(self, kullanici_adi, sifre):
         """
-        Kullanıcıyı yerel veritabanı üzerinden doğrular.
+        Çevrimdışı modda yerel veritabanı üzerinden kullanıcı doğrular.
         """
+        # DÜZELTME: Kullanici modeli direkt olarak içe aktarılmalı, servis üzerinden değil.
+        from api.modeller import Kullanici
         try:
-            user_data = self.lokal_db.kullanici_getir(kullanici_adi)
-            if user_data:
-                # Password hash'ini doğrula
-                if self.verify_password(sifre, user_data["hashed_sifre"]):
-                    self.access_token = "offline_token"
-                    self.current_user_id = user_data["id"]
-                    logger.info(f"Kullanıcı yerel veritabanı üzerinden başarıyla doğrulandı: {kullanici_adi}")
-                    return {
-                        "access_token": self.access_token,
-                        "token_type": "bearer",
-                        "kullanici": user_data
-                    }
+            with lokal_db_servisi.get_db() as db_session:
+                user_data = db_session.query(Kullanici).filter(
+                    Kullanici.kullanici_adi == kullanici_adi
+                ).first()
+                
+                if user_data:
+                    # DÜZELTME: verify_password metodu çağrılıyor.
+                    if self.verify_password(sifre, user_data.hashed_sifre):
+                        logging.info("Yerel veritabanı üzerinden kullanıcı başarıyla doğrulandı.")
+                        return True, {"id": user_data.id, "kullanici_adi": user_data.kullanici_adi}
+                    else:
+                        logging.warning("Yerel veritabanı üzerinden doğrulama başarısız: Hatalı şifre.")
+                        return False, "Kullanıcı adı veya şifre hatalı."
                 else:
-                    logger.warning(f"Yerel veritabanı doğrulaması başarısız: Hatalı şifre.")
-                    return None
-            else:
-                logger.warning(f"Yerel veritabanında kullanıcı bulunamadı veya pasif: {kullanici_adi}")
-                return None
+                    logging.warning("Yerel veritabanı üzerinden doğrulama başarısız: Kullanıcı bulunamadı.")
+                    return False, "Kullanıcı adı veya şifre hatalı."
         except Exception as e:
-            logger.error(f"Yerel veritabanı üzerinden kullanıcı doğrulanırken hata oluştu: {e}", exc_info=True)
-            return None
-
-    def kullanici_dogrula_yerel(self, kullanici_adi: str, sifre: str) -> Optional[dict]:
-        """
-        Kullanıcıyı yerel veritabanı üzerinden doğrular.
-        """
-        try:
-            user_data = self.lokal_db.kullanici_getir(kullanici_adi)
-            if user_data:
-                # Password hash'ini doğrula
-                if self.verify_password(sifre, user_data["hashed_sifre"]):
-                    self.access_token = "offline_token"
-                    self.current_user_id = user_data["id"]
-                    logger.info(f"Kullanıcı yerel veritabanı üzerinden başarıyla doğrulandı: {kullanici_adi}")
-                    return {
-                        "access_token": self.access_token,
-                        "token_type": "bearer",
-                        "kullanici": user_data
-                    }
-                else:
-                    logger.warning(f"Yerel veritabanı doğrulaması başarısız: Hatalı şifre.")
-                    return None
-            else:
-                logger.warning(f"Yerel veritabanında kullanıcı bulunamadı veya pasif: {kullanici_adi}")
-                return None
-        except Exception as e:
-            logger.error(f"Yerel veritabanı üzerinden kullanıcı doğrulanırken hata oluştu: {e}", exc_info=True)
-            return None
+            logging.error(f"Yerel veritabanı üzerinden kullanıcı doğrulanırken hata oluştu: {e}", exc_info=True)
+            return False, f"Yerel veritabanı hatası: {e}"
 
     def _get_current_user(self) -> Optional[dict]:
         """
