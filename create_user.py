@@ -21,9 +21,9 @@ if not logger.handlers:
         
         # Oluşturulacak kullanıcı bilgileri
         user_data = {
-            "kullanici_adi": "testadmin",
+            "kullanici_adi": "admin",
             "sifre": "755397",
-            "yetki": "KULLANICI"
+            "yetki": "admin",
         }
 
         try:

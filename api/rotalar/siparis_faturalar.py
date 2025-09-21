@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 siparisler_router = APIRouter(prefix="/siparisler", tags=["Siparişler"])
 faturalar_router = APIRouter(prefix="/faturalar", tags=["Faturalar"])
-
+router = APIRouter()
+router.include_router(siparisler_router)
+router.include_router(faturalar_router)
 # --- SİPARİŞLER ENDPOINT'leri ---
 
 @siparisler_router.post("/", response_model=modeller.SiparisRead, status_code=status.HTTP_201_CREATED)

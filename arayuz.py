@@ -534,11 +534,20 @@ class StokYonetimiSayfasi(QWidget):
             self.marka_filter_cb.addItem("Tümü", None)
             self.urun_grubu_filter_cb.addItem("Tümü", None)
             
+            kullanici_id = self.app.current_user.get('id')
+            if not kullanici_id: raise ValueError("Kullanıcı ID'si mevcut değil.")
+
             # API'den kategorileri çek
             try:
-                # DÜZELTME: kategori_listele metoduna kullanici_id parametresi eklendi
-                kategoriler_response = self.db.kategori_listele(kullanici_id=self.app.current_user[0], limit=1000)
-                kategoriler = kategoriler_response.get("items", [])
+                kategoriler_response = self.db.kategori_listele(kullanici_id=kullanici_id, limit=1000)
+                # Düzeltme: Yanıtın sözlük mü yoksa liste mi olduğunu kontrol et
+                if isinstance(kategoriler_response, dict):
+                    kategoriler = kategoriler_response.get("items", [])
+                elif isinstance(kategoriler_response, list):
+                    kategoriler = kategoriler_response
+                else:
+                    kategoriler = []
+                
                 for k in sorted(kategoriler, key=lambda x: x.get('ad', '')):
                     self.kategori_filter_cb.addItem(k.get('ad'), k.get('id'))
             except Exception as e:
@@ -547,9 +556,15 @@ class StokYonetimiSayfasi(QWidget):
 
             # API'den markaları çek
             try:
-                # DÜZELTME: marka_listele metoduna kullanici_id parametresi eklendi
-                markalar_response = self.db.marka_listele(kullanici_id=self.app.current_user[0], limit=1000)
-                markalar = markalar_response.get("items", [])
+                markalar_response = self.db.marka_listele(kullanici_id=kullanici_id, limit=1000)
+                # Düzeltme: Yanıtın sözlük mü yoksa liste mi olduğunu kontrol et
+                if isinstance(markalar_response, dict):
+                    markalar = markalar_response.get("items", [])
+                elif isinstance(markalar_response, list):
+                    markalar = markalar_response
+                else:
+                    markalar = []
+                
                 for m in sorted(markalar, key=lambda x: x.get('ad', '')):
                     self.marka_filter_cb.addItem(m.get('ad'), m.get('id'))
             except Exception as e:
@@ -558,9 +573,15 @@ class StokYonetimiSayfasi(QWidget):
 
             # API'den ürün gruplarını çek
             try:
-                # DÜZELTME: urun_grubu_listele metoduna kullanici_id parametresi eklendi
-                urun_gruplari_response = self.db.urun_grubu_listele(kullanici_id=self.app.current_user[0], limit=1000)
-                urun_gruplari = urun_gruplari_response.get("items", [])
+                urun_gruplari_response = self.db.urun_grubu_listele(kullanici_id=kullanici_id, limit=1000)
+                # Düzeltme: Yanıtın sözlük mü yoksa liste mi olduğunu kontrol et
+                if isinstance(urun_gruplari_response, dict):
+                    urun_gruplari = urun_gruplari_response.get("items", [])
+                elif isinstance(urun_gruplari_response, list):
+                    urun_gruplari = urun_gruplari_response
+                else:
+                    urun_gruplari = []
+                
                 for g in sorted(urun_gruplari, key=lambda x: x.get('ad', '')):
                     self.urun_grubu_filter_cb.addItem(g.get('ad'), g.get('id'))
             except Exception as e:
@@ -1991,10 +2012,11 @@ class SiparisListesiSayfasi(QWidget):
     def _yukle_filtre_comboboxlari(self):
         cari_display_values = ["TÜMÜ"]
         self.cari_filter_map = {"TÜMÜ": None}
+        kullanici_id = self.app.current_user_id # Düzeltme: kullanıcı ID'si alındı
 
         try:
-            # Müşteri listesini CariService üzerinden çekiyoruz
-            musteriler = self.cari_service.musteri_listesi_al(limit=10000)
+            # Düzeltme: musteri_listesi_al metoduna kullanici_id parametresi eklendi
+            musteriler = self.cari_service.musteri_listesi_al(kullanici_id=kullanici_id, limit=10000)
             
             # Gelen verinin türüne göre döngüyü ayarlıyoruz
             if isinstance(musteriler, dict) and 'items' in musteriler:
@@ -2021,8 +2043,8 @@ class SiparisListesiSayfasi(QWidget):
             self.app.set_status_message(f"Hata: Müşteri listesi alınamadı - {e}")
 
         try:
-            # Tedarikçi listesini CariService üzerinden çekiyoruz
-            tedarikciler = self.cari_service.tedarikci_listesi_al(limit=10000)
+            # Düzeltme: tedarikci_listesi_al metoduna kullanici_id parametresi eklendi
+            tedarikciler = self.cari_service.tedarikci_listesi_al(kullanici_id=kullanici_id, limit=10000)
             
             # Gelen verinin türüne göre döngüyü ayarlıyoruz
             if isinstance(tedarikciler, dict) and 'items' in tedarikciler:
@@ -2051,7 +2073,7 @@ class SiparisListesiSayfasi(QWidget):
         self.cari_filter_cb.clear()
         self.cari_filter_cb.addItem("TÜMÜ", userData=None)
         sorted_cari_display_values = sorted([v for v in cari_display_values if v != "TÜMÜ"])
-        self.cari_filter_cb.addItems(sorted_cari_display_values)
+        self.cari_filter_cb.addItems(sorted(list(set(sorted_cari_display_values)))) # Düzeltme: Benzersiz öğeler eklendi
         self.cari_filter_cb.setCurrentText("TÜMÜ")
 
         self.durum_combo.setCurrentText("TÜMÜ")
@@ -3442,6 +3464,7 @@ class BaseIslemSayfasi(QWidget):
 
     def _carileri_yukle_ve_cachele(self):
         logging.debug(f"BaseIslemSayfasi: _carileri_yukle_ve_cachele çağrıldı. self.islem_tipi: {self.islem_tipi}")
+        kullanici_id = self.app.current_user_id # Düzeltme: kullanıcı ID'si alındı
 
         self.tum_cariler_cache_data = []
         self.cari_map_display_to_id = {}
@@ -3450,10 +3473,10 @@ class BaseIslemSayfasi(QWidget):
         try:
             cariler_list = []
             if self.islem_tipi in ["SATIŞ", "SATIŞ_SIPARIS", "SATIŞ İADE"]:
-                cariler_response = self.db.musteri_listesi_al(kullanici_id=self.app.current_user_id)
+                cariler_response = self.db.musteri_listesi_al(kullanici_id=kullanici_id)
                 cariler_list = cariler_response.get("items", []) if isinstance(cariler_response, dict) else cariler_response
             elif self.islem_tipi in ["ALIŞ", "ALIŞ_SIPARIS", "ALIŞ İADE"]:
-                cariler_response = self.db.tedarikci_listesi_al(kullanici_id=self.app.current_user_id)
+                cariler_response = self.db.tedarikci_listesi_al(kullanici_id=kullanici_id)
                 cariler_list = cariler_response.get("items", []) if isinstance(cariler_response, dict) else cariler_response
             else:
                 self.app.set_status_message("Uyarı: Geçersiz işlem tipi için cari listesi yüklenemedi.", "orange")
@@ -6107,14 +6130,15 @@ class BaseFinansalIslemSayfasi(QWidget):
     def _yukle_ve_cachele_carileri(self):
         self.tum_cariler_cache = []
         self.cari_map = {}
+        kullanici_id = self.app.current_user_id # Düzeltme: kullanıcı ID'si alındı
 
         try:
             cariler_data = []
             if self.islem_tipi == 'TAHSILAT':
-                musteriler_response = self.db.musteri_listesi_al(kullanici_id=self.app.current_user_id)
+                musteriler_response = self.db.musteri_listesi_al(kullanici_id=kullanici_id, limit=10000)
                 cariler_data = musteriler_response.get("items", []) if isinstance(musteriler_response, dict) else musteriler_response
             elif self.islem_tipi == 'ODEME':
-                tedarikciler_response = self.db.tedarikci_listesi_al(kullanici_id=self.app.current_user_id)
+                tedarikciler_response = self.db.tedarikci_listesi_al(kullanici_id=kullanici_id, limit=10000)
                 cariler_data = tedarikciler_response.get("items", []) if isinstance(tedarikciler_response, dict) else tedarikciler_response
             
             if not cariler_data and self.cari_tip is None:
@@ -6133,8 +6157,8 @@ class BaseFinansalIslemSayfasi(QWidget):
             self.cari_combo.addItems(display_values)
 
             # Perakende müşteri veya genel tedarikçi varsa, varsayılan olarak seçme mantığı
-            perakende_musteri_id_val = self.db.get_perakende_musteri_id(kullanici_id=self.app.current_user_id)
-            genel_tedarikci_id_val = self.db.get_genel_tedarikci_id(kullanici_id=self.app.current_user_id)
+            perakende_musteri_id_val = self.db.get_perakende_musteri_id(kullanici_id=kullanici_id)
+            genel_tedarikci_id_val = self.db.get_genel_tedarikci_id(kullanici_id=kullanici_id)
             
             if self.cari_combo.count() > 0:
                 if self.islem_tipi == 'TAHSILAT' and perakende_musteri_id_val is not None:
@@ -8602,12 +8626,12 @@ class UrunNitelikYonetimiSekmesi(QWidget):
         self._urun_birimi_listesini_yukle()
         self._ulke_listesini_yukle()
 
-
     # Ürün Grubu Yönetimi Metotları
     def _urun_grubu_listesini_yukle(self):
         self.urun_grubu_tree.clear()
         try:
             urun_gruplari_response = self.db.urun_grubu_listele(kullanici_id=self.app.current_user_id)
+            # Düzeltme: Yanıtın sözlük mü yoksa liste mi olduğunu kontrol et
             if isinstance(urun_gruplari_response, dict) and "items" in urun_gruplari_response:
                 urun_gruplari = urun_gruplari_response.get("items", [])
             elif isinstance(urun_gruplari_response, list):

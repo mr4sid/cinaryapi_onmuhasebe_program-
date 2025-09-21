@@ -5,8 +5,11 @@ from datetime import date, datetime
 from typing import List, Optional, Union, Literal # Literal eklendi
 import enum
 from sqlalchemy.sql import func
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey, Date, Enum
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import (
+    Column, Integer, String, Float, Boolean, Text, DateTime,
+    ForeignKey, Date, Enum, or_
+)
+from sqlalchemy.orm import relationship, backref, declarative_base # DEĞİŞTİ: relationship ve backref eklendi
 
 # Enumların string değerlerini kullanmak için
 from .semalar import (
@@ -24,6 +27,28 @@ Base = declarative_base()
 class BaseOrmModel(BaseModel):
     class Config:
         from_attributes = True # Pydantic v2 için orm_mode yerine from_attributes kullanılır
+
+class SirketBilgileri(Base):
+    __tablename__ = 'sirket_bilgileri'
+    id = Column(Integer, primary_key=True, index=True)
+    sirket_adi = Column(String(100), nullable=False)
+    adres = Column(String(200), nullable=True)
+    telefon = Column(String(20), nullable=True)
+    email = Column(String(50), nullable=True)
+    vergi_dairesi = Column(String(100), nullable=True)
+    vergi_no = Column(String(20), nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), unique=True, nullable=False)
+
+    kullanici = relationship("Kullanici", back_populates="sirket_bilgisi")
+
+class SirketAyarlari(Base):
+    __tablename__ = 'sirket_ayarlari'
+    id = Column(Integer, primary_key=True, index=True)
+    ayar_adi = Column(String(100), unique=True, index=True, nullable=False)
+    ayar_degeri = Column(String(255), nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), unique=True, nullable=False)
+    
+    kullanici = relationship("Kullanici", back_populates="sirket_ayarlari")
 
 # Şirket Bilgileri
 class SirketBase(BaseOrmModel):
@@ -855,157 +880,254 @@ class Sirket(Base):
     sirket_logo_yolu = Column(String, nullable=True)
 
 class Kullanici(Base):
-    __tablename__ = "kullanicilar"
-
+    __tablename__ = 'kullanicilar'
     id = Column(Integer, primary_key=True, index=True)
-    kullanici_adi = Column(String(50), unique=True, index=True)
-    hashed_sifre = Column(String)
-    yetki = Column(String)
+    kullanici_adi = Column(String(50), unique=True, index=True, nullable=False)
+    sifre_hash = Column(String(255), nullable=False)
+    ad = Column(String(50), nullable=True)
+    soyad = Column(String(50), nullable=True)
+    email = Column(String(100), unique=True, index=True, nullable=True)
+    telefon = Column(String(20), nullable=True)
+    rol = Column(String(20), default="admin")  # admin, user, manager
     aktif = Column(Boolean, default=True)
-    olusturma_tarihi = Column(DateTime, default=datetime.now)
-    son_giris_tarihi = Column(DateTime, nullable=True)
-    token = Column(String, nullable=True)
-    token_tipi = Column(String, nullable=True)
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+
+    sirket_bilgisi = relationship("SirketBilgileri", back_populates="kullanici", uselist=False)
+    sirket_ayarlari = relationship("SirketAyarlari", back_populates="kullanici", uselist=False)
+    
+    # Relationships
+    stoklar = relationship("Stok", back_populates="kullanici")
+    musteriler = relationship("Musteri", back_populates="kullanici")
+    tedarikciler = relationship("Tedarikci", back_populates="kullanici")
+    faturalar = relationship("Fatura", back_populates="kullanici")
+    kasalar_bankalar = relationship("KasaBankaHesap", back_populates="kullanici")
+    cari_hareketler = relationship("CariHareket", back_populates="kullanici")
+    gelir_giderler = relationship("GelirGider", back_populates="kullanici")
+    siparisler = relationship("Siparis", back_populates="kullanici")
+    urun_nitelikleri = relationship("UrunNitelik", back_populates="kullanici")
+    stok_hareketleri = relationship("StokHareket", back_populates="kullanici")
 
 class Musteri(Base):
     __tablename__ = 'musteriler'
-    id = Column(Integer, primary_key=True)
-    ad = Column(String)
-    kod = Column(String, unique=True, nullable=True)
-    telefon = Column(String, nullable=True)
-    adres = Column(Text, nullable=True)
-    vergi_dairesi = Column(String, nullable=True)
-    vergi_no = Column(String, nullable=True)
-    aktif = Column(Boolean)
-    olusturma_tarihi = Column(DateTime, default=datetime.now)
-    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True) # Yeni eklendix
+    id = Column(Integer, primary_key=True, index=True)
+    ad = Column(String(100), index=True)
+    kod = Column(String(50), unique=True, index=True, nullable=False)
+    adres = Column(String(255))
+    telefon = Column(String(20))
+    email = Column(String(100))
+    vergi_dairesi = Column(String(100))
+    vergi_no = Column(String(20))
+    aktif = Column(Boolean, default=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
+    
+    kullanici = relationship("Kullanici", back_populates="musteriler")
+    
+    # DÜZELTİLDİ: foreign() anotasyonu eklendi
+    faturalar = relationship("Fatura", 
+                             primaryjoin="and_(foreign(Fatura.cari_id) == Musteri.id, Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ_IADE']))",
+                             back_populates="musteri",
+                             overlaps="faturalar")
+                             
+    # DÜZELTİLDİ: foreign() anotasyonu eklendi
+    cari_hareketler = relationship("CariHareket",
+                                  primaryjoin="and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_tip=='MUSTERI')",
+                                  back_populates="musteri",
+                                  overlaps="cari_hareketler")
+                                  
+    # DÜZELTİLDİ: foreign() anotasyonu eklendi
+    siparisler = relationship("Siparis",
+                              primaryjoin="and_(foreign(Siparis.cari_id) == Musteri.id, Siparis.siparis_turu=='SATIŞ')",
+                              back_populates="musteri",
+                              overlaps="siparisler")
 
 class Tedarikci(Base):
     __tablename__ = 'tedarikciler'
-    id = Column(Integer, primary_key=True)
-    ad = Column(String)
-    kod = Column(String, unique=True, nullable=True)
-    telefon = Column(String, nullable=True)
-    adres = Column(Text, nullable=True)
-    vergi_dairesi = Column(String, nullable=True)
-    vergi_no = Column(String, nullable=True)
-    aktif = Column(Boolean)
-    olusturma_tarihi = Column(DateTime, default=datetime.now)
-    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True) # Yeni eklendi
+    id = Column(Integer, primary_key=True, index=True)
+    ad = Column(String(100), index=True)
+    kod = Column(String(50), unique=True, index=True, nullable=False)
+    adres = Column(String(255))
+    telefon = Column(String(20))
+    email = Column(String(100))
+    vergi_dairesi = Column(String(100))
+    vergi_no = Column(String(20))
+    aktif = Column(Boolean, default=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
+
+    kullanici = relationship("Kullanici", back_populates="tedarikciler")
+    
+    # DÜZELTİLDİ: foreign() anotasyonu eklendi
+    faturalar = relationship("Fatura",
+                             primaryjoin="and_(foreign(Fatura.cari_id) == Tedarikci.id, Fatura.fatura_turu.in_(['ALIŞ', 'ALIS_IADE', 'DEVIR_GIRIS']))",
+                             back_populates="tedarikci",
+                             overlaps="faturalar")
+                             
+    # DÜZELTİLDİ: foreign() anotasyonu eklendi
+    cari_hareketler = relationship("CariHareket",
+                                  primaryjoin="and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_tip=='TEDARIKCI')",
+                                  back_populates="tedarikci",
+                                  overlaps="cari_hareketler")
+                                  
+    # DÜZELTİLDİ: foreign() anotasyonu eklendi
+    siparisler = relationship("Siparis",
+                              primaryjoin="and_(foreign(Siparis.cari_id) == Tedarikci.id, Siparis.siparis_turu=='ALIŞ')",
+                              back_populates="tedarikci",
+                              overlaps="siparisler")
 
 class Stok(Base):
     __tablename__ = 'stoklar'
-    id = Column(Integer, primary_key=True)
-    kod = Column(String, unique=True)
-    ad = Column(String)
+    id = Column(Integer, primary_key=True, index=True)
+    kod = Column(String(50), unique=True, index=True, nullable=False)
+    ad = Column(String(200), index=True, nullable=False)
     detay = Column(Text, nullable=True)
-    miktar = Column(Float)
-    alis_fiyati = Column(Float)
-    satis_fiyati = Column(Float)
-    kdv_orani = Column(Float)
-    min_stok_seviyesi = Column(Float)
-    aktif = Column(Boolean)
-    urun_resmi_yolu = Column(String, nullable=True)
-    olusturma_tarihi = Column(DateTime, default=datetime.now)
-    kategori_id = Column(Integer)
-    marka_id = Column(Integer)
-    urun_grubu_id = Column(Integer)
-    birim_id = Column(Integer)
-    mense_id = Column(Integer)
-    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True) # Yeni eklendi
+    miktar = Column(Float, default=0.0)
+    alis_fiyati = Column(Float, default=0.0)
+    satis_fiyati = Column(Float, default=0.0)
+    kdv_orani = Column(Float, default=20.0)
+    min_stok_seviyesi = Column(Float, default=0.0)
+    aktif = Column(Boolean, default=True)
+    urun_resmi_yolu = Column(String(255), nullable=True)
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+    kategori_id = Column(Integer, ForeignKey('urun_nitelikleri.id'), nullable=True)
+    marka_id = Column(Integer, ForeignKey('urun_nitelikleri.id'), nullable=True)
+    urun_grubu_id = Column(Integer, ForeignKey('urun_nitelikleri.id'), nullable=True)
+    birim_id = Column(Integer, ForeignKey('urun_nitelikleri.id'), nullable=True)
+    mense_id = Column(Integer, ForeignKey('urun_nitelikleri.id'), nullable=True)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
+
+    kullanici = relationship("Kullanici", back_populates="stoklar")
+    fatura_kalemleri = relationship("FaturaKalemi", back_populates="urun")
+    stok_hareketleri = relationship("StokHareket", back_populates="urun", cascade="all, delete-orphan")
+    siparis_kalemleri = relationship("SiparisKalemi", back_populates="urun")
     
 class Fatura(Base):
     __tablename__ = 'faturalar'
-    id = Column(Integer, primary_key=True)
-    fatura_no = Column(String, unique=True)
-    fatura_turu = Column(Enum(FaturaTuruEnum))
-    tarih = Column(Date)
-    vade_tarihi = Column(Date, nullable=True)
-    cari_id = Column(Integer)
-    misafir_adi = Column(String, nullable=True)
-    odeme_turu = Column(Enum(OdemeTuruEnum))
-    kasa_banka_id = Column(Integer, nullable=True)
+    id = Column(Integer, primary_key=True, index=True)
+    fatura_no = Column(String(50), unique=True, index=True, nullable=False)
+    tarih = Column(Date, nullable=False)
+    fatura_turu = Column(Enum(FaturaTuruEnum), nullable=False)
+    cari_id = Column(Integer, nullable=False) # Hangi cari ile ilgili olduğu
+    cari_tipi = Column(String(20), nullable=False) # Cari tipi: Musteri veya Tedarikci
+    odeme_turu = Column(Enum(OdemeTuruEnum), nullable=False)
+    odeme_durumu = Column(String(20), default="ÖDENMEDİ")
+    toplam_tutar = Column(Float, default=0.0)
+    toplam_kdv = Column(Float, default=0.0)
+    genel_toplam = Column(Float, default=0.0)
+    kasa_banka_id = Column(Integer, ForeignKey('kasalar_bankalar.id'), nullable=True)
     fatura_notlari = Column(Text, nullable=True)
-    genel_iskonto_tipi = Column(String)
-    genel_iskonto_degeri = Column(Float)
-    original_fatura_id = Column(Integer, nullable=True)
-    genel_toplam = Column(Float)
-    toplam_kdv_haric = Column(Float)
-    toplam_kdv_dahil = Column(Float)
-    olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
-    olusturan_kullanici_id = Column(Integer, nullable=True)
-    son_guncelleme_tarihi_saat = Column(DateTime, nullable=True)
-    son_guncelleyen_kullanici_id = Column(Integer, nullable=True)
-    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
+    vade_tarihi = Column(Date, nullable=True)
+    genel_iskonto_tipi = Column(String(20), default="YOK")
+    genel_iskonto_degeri = Column(Float, default=0.0)
+    misafir_adi = Column(String(100), nullable=True)
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
+
+    # Relationships
+    kullanici = relationship("Kullanici", back_populates="faturalar")
+    kalemler = relationship("FaturaKalemi", back_populates="fatura", cascade="all, delete-orphan")
+    kasa_banka = relationship("KasaBankaHesap", back_populates="faturalar")
+    
+    # DÜZELTİLDİ: primaryjoin ve foreign() anotasyonu eklendi
+    musteri = relationship("Musteri",
+                          primaryjoin="and_(Fatura.cari_id == foreign(Musteri.id), Fatura.cari_tipi == 'MUSTERI')",
+                          overlaps="faturalar")
+                          
+    # DÜZELTİLDİ: primaryjoin ve foreign() anotasyonu eklendi
+    tedarikci = relationship("Tedarikci",
+                             primaryjoin="and_(Fatura.cari_id == foreign(Tedarikci.id), Fatura.cari_tipi == 'TEDARIKCI')",
+                             overlaps="faturalar")
 
 class FaturaKalemi(Base):
     __tablename__ = 'fatura_kalemleri'
-    id = Column(Integer, primary_key=True)
-    fatura_id = Column(Integer)
-    urun_id = Column(Integer)
-    miktar = Column(Float)
-    birim_fiyat = Column(Float)
-    kdv_orani = Column(Float)
-    alis_fiyati_fatura_aninda = Column(Float, nullable=True)
-    iskonto_yuzde_1 = Column(Float)
-    iskonto_yuzde_2 = Column(Float)
-    iskonto_tipi = Column(String)
-    iskonto_degeri = Column(Float)
+    id = Column(Integer, primary_key=True, index=True)
+    fatura_id = Column(Integer, ForeignKey('faturalar.id'))
+    urun_id = Column(Integer, ForeignKey('stoklar.id'))
+    miktar = Column(Float, nullable=False)
+    birim_fiyat = Column(Float, nullable=False)
+    kdv_orani = Column(Float, default=0.0)
+    iskonto_yuzde_1 = Column(Float, default=0.0)
+    iskonto_yuzde_2 = Column(Float, default=0.0)
+    alis_fiyati_fatura_aninda = Column(Float, default=0.0)
+    kalem_toplam_kdv_haric = Column(Float, default=0.0)
+    kalem_toplam_kdv_dahil = Column(Float, default=0.0)
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+
+    fatura = relationship("Fatura", back_populates="kalemler")
+    urun = relationship("Stok", back_populates="fatura_kalemleri")
 
 class StokHareket(Base):
     __tablename__ = 'stok_hareketleri'
-    id = Column(Integer, primary_key=True)
-    stok_id = Column(Integer)
-    tarih = Column(Date)
-    islem_tipi = Column(Enum(StokIslemTipiEnum))
-    miktar = Column(Float)
-    birim_fiyat = Column(Float)
+    id = Column(Integer, primary_key=True, index=True)
+    tarih = Column(Date, nullable=False)
+    urun_id = Column(Integer, ForeignKey('stoklar.id'), nullable=False)
+    islem_tipi = Column(Enum(StokIslemTipiEnum), nullable=False)
+    miktar = Column(Float, nullable=False)
+    onceki_stok = Column(Float, nullable=False)
+    sonraki_stok = Column(Float, nullable=False)
     aciklama = Column(Text, nullable=True)
-    kaynak = Column(String)
+    kaynak = Column(String(50), nullable=False)
     kaynak_id = Column(Integer, nullable=True)
-    onceki_stok = Column(Float, nullable=True)
-    sonraki_stok = Column(Float, nullable=True)
-    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
+
+    kullanici = relationship("Kullanici", back_populates="stok_hareketleri")
+    urun = relationship("Stok", back_populates="stok_hareketleri")
 
 class Siparis(Base):
     __tablename__ = 'siparisler'
-    id = Column(Integer, primary_key=True)
-    siparis_no = Column(String)
-    siparis_turu = Column(Enum(SiparisTuruEnum))
-    durum = Column(Enum(SiparisDurumEnum))
-    tarih = Column(Date)
+    id = Column(Integer, primary_key=True, index=True)
+    siparis_no = Column(String(50), unique=True, index=True, nullable=False)
+    siparis_turu = Column(Enum(SiparisTuruEnum), nullable=False) # 'SATIŞ' veya 'ALIŞ'
+    durum = Column(Enum(SiparisDurumEnum), nullable=False) # 'BEKLEYEN', 'TAMAMLANDI', 'İPTAL'
+    tarih = Column(Date, nullable=False)
     teslimat_tarihi = Column(Date, nullable=True)
-    cari_id = Column(Integer)
-    cari_tip = Column(Enum(CariTipiEnum))
-    siparis_notlari = Column(Text, nullable=True)
-    genel_iskonto_tipi = Column(String)
-    genel_iskonto_degeri = Column(Float)
-    fatura_id = Column(Integer, nullable=True)
-    toplam_tutar = Column(Float)
-    olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
-    olusturan_kullanici_id = Column(Integer, nullable=True)
-    son_guncelleme_tarihi_saat = Column(DateTime, nullable=True)
-    son_guncelleyen_kullanici_id = Column(Integer, nullable=True)
-    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
+    cari_id = Column(Integer, nullable=False)
+    cari_tip = Column(String(20), nullable=False) # 'MUSTERI' veya 'TEDARIKCI'
+    siparis_notlari = Column(Text)
+    genel_toplam = Column(Float, default=0.0)
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+
+    kullanici = relationship("Kullanici", back_populates="siparisler")
+    kalemler = relationship("SiparisKalemi", back_populates="siparis", cascade="all, delete-orphan")
+
+    # DÜZELTİLDİ: foreign() anotasyonu eklendi
+    musteri = relationship("Musteri", 
+                           primaryjoin="and_(foreign(Siparis.cari_id) == Musteri.id, Siparis.cari_tip == 'MUSTERI')",
+                           overlaps="siparisler, kalemler")
+
+    # DÜZELTİLDİ: foreign() anotasyonu eklendi
+    tedarikci = relationship("Tedarikci", 
+                             primaryjoin="and_(foreign(Siparis.cari_id) == Tedarikci.id, Siparis.cari_tip == 'TEDARIKCI')",
+                             overlaps="siparisler, kalemler")
 
 class CariHareket(Base):
     __tablename__ = 'cari_hareketler'
-    id = Column(Integer, primary_key=True)
-    cari_id = Column(Integer)
-    cari_turu = Column(Enum(CariTipiEnum))
-    tarih = Column(Date)
-    islem_turu = Column(String)
-    islem_yone = Column(Enum(IslemYoneEnum))
-    tutar = Column(Float)
-    aciklama = Column(Text, nullable=True)
-    kaynak = Column(String)
-    kaynak_id = Column(Integer, nullable=True)
+    id = Column(Integer, primary_key=True, index=True)
+    tarih = Column(Date, nullable=False)
+    islem_turu = Column(String(50), nullable=False)  # 'TAHSILAT', 'ODEME', 'FATURA'
+    cari_id = Column(Integer, nullable=False) # Hangi cari ile ilgili olduğu
+    cari_tip = Column(Enum(CariTipiEnum), nullable=False) # Cari tipi: Musteri veya Tedarikci
+    tutar = Column(Float, nullable=False)
     odeme_turu = Column(Enum(OdemeTuruEnum), nullable=True)
-    kasa_banka_id = Column(Integer, nullable=True)
-    vade_tarihi = Column(Date, nullable=True)
-    olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
-    olusturan_kullanici_id = Column(Integer, nullable=True)
-    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
+    aciklama = Column(Text, nullable=True)
+    kaynak = Column(String(50), nullable=False) # 'FATURA', 'TAHSILAT', 'ODEME'
+    kaynak_id = Column(Integer, nullable=True) # İlgili Fatura/Tahsilat/Ödeme ID'si
+    kasa_banka_id = Column(Integer, ForeignKey('kasalar_bankalar.id'), nullable=True)
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
+
+    kullanici = relationship("Kullanici", back_populates="cari_hareketler")
+    kasa_banka = relationship("KasaBankaHesap", back_populates="cari_hareketler")
+    
+    # DÜZELTİLDİ: primaryjoin ve foreign() anotasyonu eklendi
+    musteri = relationship("Musteri",
+                          primaryjoin="and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_tip == 'MUSTERI')",
+                          overlaps="cari_hareketler") 
+                          
+    # DÜZELTİLDİ: primaryjoin ve foreign() anotasyonu eklendi
+    tedarikci = relationship("Tedarikci",
+                             primaryjoin="and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_tip == 'TEDARIKCI')",
+                             overlaps="cari_hareketler")
 
 class UrunKategori(Base):
     __tablename__ = 'urun_kategorileri'
@@ -1082,24 +1204,56 @@ class SiparisKalemi(Base):
     miktar = Column(Float, default=0.0)
     birim_fiyat = Column(Float, default=0.0)
     kdv_orani = Column(Float, default=0.0)
-    iskonto_orani = Column(Float, default=0.0)
-    ara_toplam = Column(Float, default=0.0)
+    iskonto_yuzde_1 = Column(Float, default=0.0) # Yeni eklendi
+    iskonto_yuzde_2 = Column(Float, default=0.0) # Yeni eklendi
+    birim_fiyat_kdv_haric = Column(Float, default=0.0) # Yeni eklendi
     toplam_tutar = Column(Float, default=0.0)
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+
+    siparis = relationship("Siparis", back_populates="kalemler")
+    urun = relationship("Stok", back_populates="siparis_kalemleri")
     
 class KasaBankaHesap(Base):
     __tablename__ = 'kasalar_bankalar'
     id = Column(Integer, primary_key=True, index=True)
     hesap_adi = Column(String(100), unique=True, index=True, nullable=False)
-    hesap_turu = Column(String(20), nullable=False)
-    aktif_durum = Column(Boolean, default=True)
-    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
+    tip = Column(Enum(KasaBankaTipiEnum), nullable=False)
+    aktif = Column(Boolean, default=True)
+    bakiye = Column(Float, default=0.0)
+    para_birimi = Column(String(10), default="TL")
+    banka_adi = Column(String(100), nullable=True)
+    hesap_no = Column(String(50), nullable=True, unique=True, index=True)
+    iban = Column(String(50), nullable=True, unique=True, index=True)
+    swift_kodu = Column(String(20), nullable=True)
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
+
+    kullanici = relationship("Kullanici", back_populates="kasalar_bankalar")
+    faturalar = relationship("Fatura", back_populates="kasa_banka")
+    cari_hareketler = relationship("CariHareket", back_populates="kasa_banka")
 
 class GelirGider(Base):
-    __tablename__ = 'gelir_gider'
+    __tablename__ = 'gelir_giderler'
     id = Column(Integer, primary_key=True, index=True)
     tarih = Column(Date, nullable=False)
-    tip = Column(String(20), index=True, nullable=False)
-    tutar = Column(Float, default=0.0)
-    aciklama = Column(Text, nullable=True)
-    siniflandirma = Column(String(100), nullable=True)
-    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
+    tip = Column(Enum(GelirGiderTipEnum), nullable=False)
+    tutar = Column(Float, nullable=False)
+    aciklama = Column(Text, nullable=False)
+    kasa_banka_id = Column(Integer, ForeignKey('kasalar_bankalar.id'), nullable=True)
+    cari_id = Column(Integer, nullable=True) # Opsiyonel
+    kaynak = Column(String(50), nullable=False) # 'MANUEL'
+    kaynak_id = Column(Integer, nullable=True) # Opsiyonel
+    olusturma_tarihi = Column(DateTime, server_default=func.now())
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
+    
+    kullanici = relationship("Kullanici", back_populates="gelir_giderler")
+    kasa_banka = relationship("KasaBankaHesap", foreign_keys=[kasa_banka_id])
+
+class UrunNitelik(Base):
+    __tablename__ = 'urun_nitelikleri'
+    id = Column(Integer, primary_key=True, index=True)
+    ad = Column(String(100), nullable=False)
+    nitelik_tipi = Column(String(50), nullable=False) # 'kategori', 'marka', 'urun_grubu'
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
+
+    kullanici = relationship("Kullanici", back_populates="urun_nitelikleri")    

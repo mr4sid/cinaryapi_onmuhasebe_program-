@@ -1,18 +1,20 @@
-# api/api_ana.py dosyasının TAMAMI
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import text # EKLENDİ: text objesi için import
+from sqlalchemy import text 
 import logging
 from datetime import datetime
-from contextlib import asynccontextmanager # EKLENDİ: asynccontextmanager için import
-# Gerekli içe aktarmalar
-# Base ve engine, veritabani.py'den import edilmeli
-from .veritabani import Base
-
+from contextlib import asynccontextmanager 
+from typing import AsyncGenerator
+from sqlalchemy.future import create_engine 
+from sqlalchemy.orm import sessionmaker 
+from .veritabani import DATABASE_URL, get_db, SessionLocal 
 # Başlangıç verileri için kullanılacak modeller
-from .semalar import Musteri, KasaBanka, Tedarikci
-
+from .modeller import (
+    Base, Musteri, Tedarikci, Kullanici, Stok, Fatura, FaturaKalemi,
+    CariHareket, Siparis, SiparisKalemi, StokHareket,
+    SirketBilgileri, SirketAyarlari, KasaBankaHesap, GelirGider, UrunNitelik
+)
 # Mevcut rotaların içe aktarılması
 from .rotalar import (
     dogrulama, musteriler, tedarikciler, stoklar,
@@ -24,6 +26,9 @@ from .rotalar import (
 # Loglama ayarları
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Uygulama başlangıcında tabloları oluşturacak motor
+engine = create_engine(str(DATABASE_URL))
 
 app = FastAPI(
     title="Ön Muhasebe Sistemi API",
@@ -42,19 +47,34 @@ app.add_middleware(
 
 # Uygulama başladıktan sonra çalışacak olay
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
-    Uygulama başladığında ve kapandığında çalışacak olay yönetimi.
+    Uygulama başlangıç ve kapanışında çalışacak kod.
+    Veritabanı tablolarını oluşturur ve başlangıç verilerini ekler.
     """
     logger.info("API başlatılıyor...")
     
-    # Yeni yaklaşıma göre, veritabanı tablolarının oluşturulması veya başlangıç verilerinin eklenmesi
-    # FastAPI'nin değil, ayrı bir script'in görevi olmalıdır (ör. create_or_update_pg_tables.py).
-    # Bu, uygulamanın her başladığında bu işlemleri tekrarlamasını engeller ve daha sağlam bir yapı sunar.
-    # Bu nedenle, buradaki veritabanı oluşturma ve veri ekleme kodları kaldırıldı.
+    # Düzeltme: Veritabanı motorunu doğrudan oluşturup tabloları yaratıyoruz
+    try:
+        from .veritabani import get_engine
+        engine = get_engine()
+        Base.metadata.create_all(bind=engine)
+        logger.info("Veritabanı tabloları başarıyla oluşturuldu/güncellendi.")
+    except Exception as e:
+        logger.error(f"Veritabanı tabloları oluşturulurken hata oluştu: {e}")
+    
+    # Başlangıç verilerini kontrol etme
+    db = next(get_db()) # Düzeltme: get_db() fonksiyonu ile bir oturum alınıyor.
+    try:
+        if db.query(Kullanici).count() == 0:
+            logger.info("Hiç kullanıcı yok. Örnek kullanıcı ve veriler oluşturulacak.")
+            # Burada create_initial_data() gibi bir fonksiyon çağırılabilir
+    except Exception as e:
+        logger.error(f"Başlangıç verileri kontrol edilirken hata oluştu: {e}")
+    finally:
+        db.close()
     
     yield
-    
     logger.info("API kapanıyor...")
 
 app = FastAPI(
@@ -86,10 +106,9 @@ app.include_router(gelir_gider.router, tags=["Gelir ve Giderler"])
 app.include_router(nitelikler.router, tags=["Nitelikler"])
 app.include_router(sistem.router, tags=["Sistem"])
 app.include_router(raporlar.router, tags=["Raporlar"])
-app.include_router(yedekleme.router, tags=["Veritabanı Yedekleme"])
-app.include_router(siparis_faturalar.siparisler_router, tags=["Siparişler"])
-app.include_router(siparis_faturalar.faturalar_router, tags=["Faturalar"])
-app.include_router(yonetici.router, tags=["Yönetici İşlemleri"])
+app.include_router(yedekleme.router, tags=["Yedekleme"])
+app.include_router(yonetici.router, tags=["Yönetici"])
+app.include_router(siparis_faturalar.router, tags=["Siparişler ve Faturalar"])
 
 @app.get("/")
 def read_root():
