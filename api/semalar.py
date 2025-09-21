@@ -98,11 +98,16 @@ class Kullanici(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     kullanici_adi = Column(String, unique=True, index=True)
-    hashed_sifre = Column(String)
-    yetki = Column(String, default="kullanici")
+    sifre_hash = Column(String)
+    ad = Column(String(50), nullable=True) # EKLENDİ: Tutarlılık için eklendi.
+    soyad = Column(String(50), nullable=True) # EKLENDİ: Tutarlılık için eklendi.
+    email = Column(String(100), unique=True, index=True, nullable=True) # EKLENDİ: Tutarlılık için eklendi.
+    telefon = Column(String(20), nullable=True) # EKLENDİ: Tutarlılık için eklendi.
+    rol = Column(String, default="admin")  # DÜZELTİLDİ: 'yetki' alanı 'rol' olarak güncellendi.
     aktif = Column(Boolean, default=True)
     olusturma_tarihi = Column(DateTime, default=datetime.now)
-    son_giris_tarihi = Column(DateTime, nullable=True)
+    # GÜNCELLEME: 'son_giris_tarihi' ana modelde olmadığı için hatayı önlemek amacıyla kaldırıldı.
+    # son_giris_tarihi = Column(DateTime, nullable=True)
 
 # CariHareket sınıfı, Musteri ve Tedarikci'den önce tanımlanmalı
 class CariHareket(Base):
@@ -172,7 +177,8 @@ class Musteri(Base):
     vergi_dairesi = Column(String, nullable=True)
     vergi_no = Column(String, nullable=True)
     aktif = Column(Boolean, default=True)
-    olusturma_tarihi = Column(DateTime, default=datetime.now)
+    # HATA DÜZELTİLDİ: Ana modelde olmayan 'olusturma_tarihi' sütunu kaldırıldı.
+    # olusturma_tarihi = Column(DateTime, default=datetime.now)
     kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
     cari_hareketler = relationship(

@@ -13,15 +13,40 @@ router = APIRouter(prefix="/dogrulama", tags=["Kimlik Doğrulama"])
 
 @router.post("/login", response_model=modeller.Token)
 def authenticate_user(user_login: modeller.KullaniciLogin, db: Session = Depends(get_db)):
+    # --- Hata Ayıklama Kodları Başlangıcı ---
+    print(f"\n--- GİRİŞ DENEMESİ ---")
+    print(f"Gelen kullanıcı adı: '{user_login.kullanici_adi}'")
+    print(f"Gelen şifre: '{user_login.sifre}'")
+    
     user = db.query(semalar.Kullanici).filter(semalar.Kullanici.kullanici_adi == user_login.kullanici_adi).first()
 
-    # DÜZELTİLDİ: 'hashed_sifre' yerine doğru sütun adı olan 'sifre_hash' kullanıldı.
-    if not user or not verify_password(user_login.sifre, user.sifre_hash):
+    if not user:
+        print(">>> HATA: Veritabanında bu kullanıcı adı bulunamadı!")
+        print("------------------------\n")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Hatalı kullanıcı adı veya şifre",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    print(f"Veritabanında bulunan kullanıcı: '{user.kullanici_adi}'")
+    print(f"Veritabanındaki şifre hash'i: '{user.sifre_hash}'")
+    
+    is_password_correct = verify_password(user_login.sifre, user.sifre_hash)
+    print(f">>> Şifre doğrulama sonucu: {is_password_correct}")
+
+    if not is_password_correct:
+        print(">>> HATA: Şifreler EŞLEŞMEDİ!")
+        print("------------------------\n")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Hatalı kullanıcı adı veya şifre",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    print(">>> KİMLİK DOĞRULAMA BAŞARILI!")
+    print("------------------------\n")
+    # --- Hata Ayıklama Kodları Sonu ---
     
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(

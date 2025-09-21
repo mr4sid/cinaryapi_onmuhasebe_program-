@@ -883,7 +883,7 @@ class Kullanici(Base):
     __tablename__ = 'kullanicilar'
     id = Column(Integer, primary_key=True, index=True)
     kullanici_adi = Column(String(50), unique=True, index=True, nullable=False)
-    sifre_hash = Column(String(255), nullable=False)
+    sifre_hash = Column(String(255), nullable=True)
     ad = Column(String(50), nullable=True)
     soyad = Column(String(50), nullable=True)
     email = Column(String(100), unique=True, index=True, nullable=True)
@@ -1099,12 +1099,13 @@ class Siparis(Base):
     tedarikci = relationship("Tedarikci", 
                              primaryjoin="and_(foreign(Siparis.cari_id) == Tedarikci.id, Siparis.cari_tip == 'TEDARIKCI')",
                              overlaps="siparisler, kalemler")
-
+ 
 class CariHareket(Base):
     __tablename__ = 'cari_hareketler'
     id = Column(Integer, primary_key=True, index=True)
     tarih = Column(Date, nullable=False)
     islem_turu = Column(String(50), nullable=False)  # 'TAHSILAT', 'ODEME', 'FATURA'
+    islem_yone = Column(Enum(IslemYoneEnum), nullable=False)  # 'GIRIS' veya 'CIKIS'
     cari_id = Column(Integer, nullable=False) # Hangi cari ile ilgili olduğu
     cari_tip = Column(Enum(CariTipiEnum), nullable=False) # Cari tipi: Musteri veya Tedarikci
     tutar = Column(Float, nullable=False)

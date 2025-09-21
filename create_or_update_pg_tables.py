@@ -7,7 +7,9 @@ import logging
 
 # DÜZELTİLDİ: Tüm içe aktarmalar buraya taşındı.
 from api.modeller import (
-    Base, Musteri, Tedarikci, KasaBankaHesap, UrunNitelik, Kullanici
+    Base, Musteri, Tedarikci, KasaBankaHesap, UrunNitelik, Kullanici,
+    CariHareket, Fatura, FaturaKalemi, GelirGider, Siparis, SiparisKalemi,
+    Stok, StokHareket, Sirket, SirketAyarlari, SirketBilgileri
 )
 from api.guvenlik import get_password_hash
 
@@ -52,7 +54,7 @@ def create_or_update_tables():
         logger.info("Varsayılan veriler ekleniyor...")
         
         if not db.query(Kullanici).filter_by(kullanici_adi="admin").first():
-            hashed_password = get_password_hash("admin") # Varsayılan şifre 'admin'
+            hashed_password = get_password_hash("755397")
             default_user = Kullanici(
                 kullanici_adi="admin",
                 sifre_hash=hashed_password,

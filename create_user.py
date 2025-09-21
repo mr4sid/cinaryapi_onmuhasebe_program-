@@ -22,8 +22,14 @@ if not logger.handlers:
         # Oluşturulacak kullanıcı bilgileri
         user_data = {
             "kullanici_adi": "admin",
-            "sifre": "755397",
-            "yetki": "admin",
+            # DEĞİŞİKLİK BURADA: Şifreyi istediğiniz gibi bırakabilirsiniz, 
+            # ancak giriş yaparken burada ne yazıyorsa onu kullanmalısınız.
+            "sifre": "755397", 
+            "ad": "Varsayılan",      # EKLENDİ: Model ile uyumlu hale getirmek için
+            "soyad": "Yönetici",    # EKLENDİ: Model ile uyumlu hale getirmek için
+            "email": "admin@example.com", # EKLENDİ: Model ile uyumlu hale getirmek için
+            "telefon": "0",             # EKLENDİ: Model ile uyumlu hale getirmek için
+            "rol": "admin"          # DÜZELTİLDİ: 'yetki' anahtarı 'rol' olarak değiştirildi
         }
 
         try:
