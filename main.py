@@ -647,18 +647,18 @@ class App(QMainWindow):
         self.siparis_karti_penceresi = SiparisPenceresi(self, self.db_manager, app_ref=self, siparis_tipi="SATIŞ_SIPARIS", yenile_callback=self.siparis_listesi_sayfasi.siparis_listesini_yukle)
         self.siparis_karti_penceresi.show()
 
-    def _on_cari_secim_yapildi(self, cari_id, cari_turu_str):
+    def _on_cari_secim_yapildi(self, cari_id, cari_tip_str):
         from pencereler import CariHesapEkstresiPenceresi
-        cari_tip_enum = "MUSTERI" if cari_turu_str == "Müşteri" else "TEDARIKCI"
+        cari_tip_enum = "MUSTERI" if cari_tip_str == "Müşteri" else "TEDARIKCI"
         dialog = CariHesapEkstresiPenceresi(
             self,
             self.db_manager,
             cari_id, 
             cari_tip_enum, 
-            cari_turu_str 
+            cari_tip_str 
         )
         dialog.exec()
-        self.set_status_message(f"Cari '{cari_turu_str}' ID: {cari_id} için ekstre açıldı.")
+        self.set_status_message(f"Cari '{cari_tip_str}' ID: {cari_id} için ekstre açıldı.")
 
     def _cari_hareketler_penceresi_ac(self):
         from pencereler import CariSecimPenceresi

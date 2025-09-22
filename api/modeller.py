@@ -1,6 +1,6 @@
 from __future__ import annotations # Model referans sorunlarını çözmek için
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from datetime import date, datetime
 from typing import List, Optional, Union, Literal # Literal eklendi
 import enum
@@ -25,9 +25,8 @@ Base = declarative_base()
 
 # Ortak Temel Modeller
 class BaseOrmModel(BaseModel):
-    class Config:
-        from_attributes = True # Pydantic v2 için orm_mode yerine from_attributes kullanılır
-
+    model_config = ConfigDict(from_attributes=True)
+    
 class SirketBilgileri(Base):
     __tablename__ = 'sirket_bilgileri'
     id = Column(Integer, primary_key=True, index=True)
@@ -554,7 +553,7 @@ class GelirGiderListResponse(BaseModel): # Liste yanıtı
 # Cari Hareket Modelleri
 class CariHareketBase(BaseOrmModel):
     cari_id: int
-    cari_turu: CariTipiEnum # Enum olarak kullanılacak
+    cari_tip: CariTipiEnum # Enum olarak kullanılacak
     tarih: date
     islem_turu: str
     islem_yone: IslemYoneEnum # Enum olarak kullanılacak
@@ -572,7 +571,7 @@ class CariHareketCreate(CariHareketBase):
 class CariHareketUpdate(CariHareketBase):
     # Tüm alanlar optional, güncellenecek alanlar belirtilir
     cari_id: Optional[int] = None
-    cari_turu: Optional[CariTipiEnum] = None
+    cari_tip: Optional[CariTipiEnum] = None
     tarih: Optional[date] = None
     islem_turu: Optional[str] = None
     islem_yone: Optional[IslemYoneEnum] = None
@@ -798,8 +797,8 @@ class SiparisKalemiRead(BaseModel):
     urun_kodu: Optional[str]
     urun_adi: Optional[str]
 
-    class Config:
-        from_attributes = True
+    # Bu sınıfa da yeni yapılandırmayı ekliyoruz.
+    model_config = ConfigDict(from_attributes=True)
 
 class FaturaTuruEnum(str, enum.Enum):
     SATIŞ = "SATIŞ"
@@ -918,23 +917,21 @@ class Musteri(Base):
     vergi_dairesi = Column(String(100))
     vergi_no = Column(String(20))
     aktif = Column(Boolean, default=True)
+    olusturma_tarihi = Column(DateTime, server_default=func.now()) # YENİ EKLENEN SATIR
     kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
     
     kullanici = relationship("Kullanici", back_populates="musteriler")
     
-    # DÜZELTİLDİ: foreign() anotasyonu eklendi
     faturalar = relationship("Fatura", 
-                             primaryjoin="and_(foreign(Fatura.cari_id) == Musteri.id, Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ_IADE']))",
+                             primaryjoin="and_(foreign(Fatura.cari_id) == Musteri.id, Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ_İADE']))",
                              back_populates="musteri",
                              overlaps="faturalar")
                              
-    # DÜZELTİLDİ: foreign() anotasyonu eklendi
     cari_hareketler = relationship("CariHareket",
                                   primaryjoin="and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_tip=='MUSTERI')",
                                   back_populates="musteri",
                                   overlaps="cari_hareketler")
                                   
-    # DÜZELTİLDİ: foreign() anotasyonu eklendi
     siparisler = relationship("Siparis",
                               primaryjoin="and_(foreign(Siparis.cari_id) == Musteri.id, Siparis.siparis_turu=='SATIŞ')",
                               back_populates="musteri",
@@ -951,23 +948,21 @@ class Tedarikci(Base):
     vergi_dairesi = Column(String(100))
     vergi_no = Column(String(20))
     aktif = Column(Boolean, default=True)
+    olusturma_tarihi = Column(DateTime, server_default=func.now()) # YENİ EKLENEN SATIR
     kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
 
     kullanici = relationship("Kullanici", back_populates="tedarikciler")
     
-    # DÜZELTİLDİ: foreign() anotasyonu eklendi
     faturalar = relationship("Fatura",
                              primaryjoin="and_(foreign(Fatura.cari_id) == Tedarikci.id, Fatura.fatura_turu.in_(['ALIŞ', 'ALIS_IADE', 'DEVIR_GIRIS']))",
                              back_populates="tedarikci",
                              overlaps="faturalar")
                              
-    # DÜZELTİLDİ: foreign() anotasyonu eklendi
     cari_hareketler = relationship("CariHareket",
                                   primaryjoin="and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_tip=='TEDARIKCI')",
                                   back_populates="tedarikci",
                                   overlaps="cari_hareketler")
                                   
-    # DÜZELTİLDİ: foreign() anotasyonu eklendi
     siparisler = relationship("Siparis",
                               primaryjoin="and_(foreign(Siparis.cari_id) == Tedarikci.id, Siparis.siparis_turu=='ALIŞ')",
                               back_populates="tedarikci",
@@ -1006,7 +1001,7 @@ class Fatura(Base):
     tarih = Column(Date, nullable=False)
     fatura_turu = Column(Enum(FaturaTuruEnum), nullable=False)
     cari_id = Column(Integer, nullable=False) # Hangi cari ile ilgili olduğu
-    cari_tipi = Column(String(20), nullable=False) # Cari tipi: Musteri veya Tedarikci
+    cari_tip = Column(String(20), nullable=False) # Cari tipi: Musteri veya Tedarikci
     odeme_turu = Column(Enum(OdemeTuruEnum), nullable=False)
     odeme_durumu = Column(String(20), default="ÖDENMEDİ")
     toplam_tutar = Column(Float, default=0.0)
@@ -1028,12 +1023,12 @@ class Fatura(Base):
     
     # DÜZELTİLDİ: primaryjoin ve foreign() anotasyonu eklendi
     musteri = relationship("Musteri",
-                          primaryjoin="and_(Fatura.cari_id == foreign(Musteri.id), Fatura.cari_tipi == 'MUSTERI')",
+                          primaryjoin="and_(Fatura.cari_id == foreign(Musteri.id), Fatura.cari_tip == 'MUSTERI')",
                           overlaps="faturalar")
                           
     # DÜZELTİLDİ: primaryjoin ve foreign() anotasyonu eklendi
     tedarikci = relationship("Tedarikci",
-                             primaryjoin="and_(Fatura.cari_id == foreign(Tedarikci.id), Fatura.cari_tipi == 'TEDARIKCI')",
+                             primaryjoin="and_(Fatura.cari_id == foreign(Tedarikci.id), Fatura.cari_tip == 'TEDARIKCI')",
                              overlaps="faturalar")
 
 class FaturaKalemi(Base):
@@ -1107,7 +1102,7 @@ class CariHareket(Base):
     islem_turu = Column(String(50), nullable=False)  # 'TAHSILAT', 'ODEME', 'FATURA'
     islem_yone = Column(Enum(IslemYoneEnum), nullable=False)  # 'GIRIS' veya 'CIKIS'
     cari_id = Column(Integer, nullable=False) # Hangi cari ile ilgili olduğu
-    cari_tip = Column(Enum(CariTipiEnum), nullable=False) # Cari tipi: Musteri veya Tedarikci
+    cari_tip = Column(String, nullable=False)
     tutar = Column(Float, nullable=False)
     odeme_turu = Column(Enum(OdemeTuruEnum), nullable=True)
     aciklama = Column(Text, nullable=True)
@@ -1194,7 +1189,7 @@ class CariHesap(Base):
     __tablename__ = 'cari_hesaplar'
     id = Column(Integer, primary_key=True, index=True)
     cari_id = Column(Integer, nullable=False)
-    cari_tipi = Column(String(20), nullable=False)
+    cari_tip = Column(String(20), nullable=False)
     bakiye = Column(Float, default=0.0)
 
 class SiparisKalemi(Base):

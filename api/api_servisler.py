@@ -24,7 +24,7 @@ class CariHesaplamaService:
             func.coalesce(func.sum(case((semalar.CariHareket.islem_yone == "BORC", semalar.CariHareket.tutar), else_=0)), 0).label('borc_toplami')
         ).filter(
             semalar.CariHareket.cari_id == cari_id,
-            semalar.CariHareket.cari_tip == cari_turu  # Hatalı olan 'cari_turu' ifadesi 'cari_tip' ile değiştirildi.
+            semalar.CariHareket.cari_tip == cari_turu  # Bu satırın 'cari_tip' kullandığından emin olun.
         ).one()
 
         net_bakiye = result.alacak_toplami - result.borc_toplami

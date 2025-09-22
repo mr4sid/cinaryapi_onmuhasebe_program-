@@ -58,10 +58,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         from .veritabani import get_engine
         engine = get_engine()
-        Base.metadata.create_all(bind=engine)
-        logger.info("Veritabanı tabloları başarıyla oluşturuldu/güncellendi.")
+        # --- BU SATIRI YORUM SATIRI YAPIYORUZ ---
+        # Base.metadata.create_all(bind=engine) 
+        logger.info("Veritabanı tablolarının kontrolü Alembic'e devredildi.")
     except Exception as e:
-        logger.error(f"Veritabanı tabloları oluşturulurken hata oluştu: {e}")
+        logger.error(f"Veritabanı motoru başlatılırken hata oluştu: {e}")
     
     # Başlangıç verilerini kontrol etme
     db = next(get_db()) # Düzeltme: get_db() fonksiyonu ile bir oturum alınıyor.

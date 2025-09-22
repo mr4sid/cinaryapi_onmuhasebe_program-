@@ -417,13 +417,13 @@ class OnMuhasebe:
             logger.warning(f"Varsayılan perakende müşteri ID'si API'den alınamadı: {e}. None dönülüyor.")
             return None
                     
-    def get_cari_ekstre_ozet(self, cari_id: int, cari_turu: str, baslangic_tarihi: str, bitis_tarihi: str):
+    def get_cari_ekstre_ozet(self, cari_id: int, cari_tip: str, baslangic_tarihi: str, bitis_tarihi: str):
         """
         Cari hesap ekstresindeki hareketleri alarak finansal özet verilerini hesaplar.
         """
         try:
             hareketler, devreden_bakiye, success, message = self.cari_hesap_ekstresi_al(
-                cari_id, cari_turu, baslangic_tarihi, bitis_tarihi
+                cari_id, cari_tip, baslangic_tarihi, bitis_tarihi
             )
 
             if not success:
@@ -1095,10 +1095,10 @@ class OnMuhasebe:
             logger.error(f"Manuel cari hareket silinirken hata: {e}")
             return False, f"Manuel cari hareket silinirken hata: {e}"
 
-    def cari_hesap_ekstresi_al(self, cari_id: int, cari_turu: str, baslangic_tarihi: str, bitis_tarihi: str, kullanici_id: int):
+    def cari_hesap_ekstresi_al(self, cari_id: int, cari_tip: str, baslangic_tarihi: str, bitis_tarihi: str, kullanici_id: int):
         params = {
             "cari_id": cari_id,
-            "cari_turu": cari_turu,
+            "cari_tip": cari_tip,
             "baslangic_tarihi": baslangic_tarihi,
             "bitis_tarihi": bitis_tarihi,
             "kullanici_id": kullanici_id
@@ -1664,7 +1664,7 @@ class OnMuhasebe:
         """
         data = {
             "cari_id": cari_id,
-            "cari_turu": cari_tip,
+            "cari_tip": cari_tip,
             "tarih": tarih,
             "islem_turu": "VERESİYE_BORÇ",
             "islem_yone": self.CARI_ISLEM_YON_BORC,

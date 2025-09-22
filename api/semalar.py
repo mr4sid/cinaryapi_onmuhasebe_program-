@@ -116,7 +116,8 @@ class CariHareket(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     cari_id = Column(Integer, index=True) 
-    cari_turu = Column(Enum(CariTipiEnum), index=True)
+    # --- BU SATIRI DÜZELTİYORUZ ---
+    cari_tip = Column(Enum(CariTipiEnum), index=True) # 'cari_turu' -> 'cari_tip' olarak değiştirildi
     tarih = Column(Date)
     islem_turu = Column(String)
     islem_yone = Column(Enum(IslemYoneEnum))
@@ -132,15 +133,16 @@ class CariHareket(Base):
     olusturma_tarihi_saat = Column(DateTime, default=datetime.now)
     olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
+    # --- BU İLİŞKİLERİ DE DÜZELTİYORUZ ---
     musteri_iliski = relationship(
         "Musteri", 
-        primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_turu == 'MUSTERI'),
+        primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_tip == 'MUSTERI'),
         viewonly=True,
         overlaps="cari_hareketler"
     )
     tedarikci_iliski = relationship(
         "Tedarikci", 
-        primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_turu == 'TEDARIKCI'),
+        primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_tip == 'TEDARIKCI'),
         viewonly=True,
         overlaps="cari_hareketler"
     )
@@ -177,13 +179,13 @@ class Musteri(Base):
     vergi_dairesi = Column(String, nullable=True)
     vergi_no = Column(String, nullable=True)
     aktif = Column(Boolean, default=True)
-    # HATA DÜZELTİLDİ: Ana modelde olmayan 'olusturma_tarihi' sütunu kaldırıldı.
-    # olusturma_tarihi = Column(DateTime, default=datetime.now)
+    olusturma_tarihi = Column(DateTime, default=datetime.now)
     kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True)
 
+    # --- BU İLİŞKİYİ DÜZELTİYORUZ ---
     cari_hareketler = relationship(
         "CariHareket",
-        primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_turu == 'MUSTERI'), 
+        primaryjoin=lambda: and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_tip == 'MUSTERI'), 
         back_populates="musteri_iliski",
         cascade="all, delete-orphan",
         overlaps="musteri_iliski" 
@@ -208,7 +210,7 @@ class Tedarikci(Base):
 
     cari_hareketler = relationship(
         "CariHareket",
-        primaryjoin=lambda: and_(Tedarikci.id == foreign(CariHareket.cari_id), CariHareket.cari_turu == 'TEDARIKCI'),
+        primaryjoin=lambda: and_(Tedarikci.id == foreign(CariHareket.cari_id), CariHareket.cari_tip == 'TEDARIKCI'),
         back_populates="tedarikci_iliski",
         cascade="all, delete-orphan",
         overlaps="tedarikci_iliski" 
