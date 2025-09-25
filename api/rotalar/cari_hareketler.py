@@ -5,6 +5,7 @@ from typing import List, Optional
 from .. import semalar, modeller
 from ..veritabani import get_db
 from datetime import date, datetime # date ve datetime objeleri için
+from .. import guvenlik # Yeni eklenen import
 
 router = APIRouter(
     prefix="/cari_hareketler",
@@ -20,12 +21,12 @@ def read_cari_hareketler(
     cari_tip: Optional[str] = None,
     baslangic_tarihi: Optional[str] = None,
     bitis_tarihi: Optional[str] = None,
-    kullanici_id: int = Query(..., description="Kullanıcı ID"),
+    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user), # Güvenli kullanıcı kimliği
     db: Session = Depends(get_db)
 ):
     query = db.query(semalar.CariHareket, semalar.KasaBanka.hesap_adi.label("kasa_banka_adi"))\
               .outerjoin(semalar.KasaBanka, semalar.CariHareket.kasa_banka_id == semalar.KasaBanka.id)\
-              .filter(semalar.CariHareket.kullanici_id == kullanici_id)
+              .filter(semalar.CariHareket.kullanici_id == current_user.id) # Sorgu güncellendi
 
     if cari_id is not None:
         query = query.filter(semalar.CariHareket.cari_id == cari_id)
@@ -53,14 +54,14 @@ def read_cari_hareketler(
 
 @router.get("/count", response_model=int)
 def get_cari_hareketler_count(
-    kullanici_id: int = Query(..., description="Kullanıcı ID"),
     cari_id: Optional[int] = None,
     cari_tip: Optional[str] = None,
     baslangic_tarihi: Optional[date] = None,
     bitis_tarihi: Optional[date] = None,
+    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user), # Güvenli kullanıcı kimliği
     db: Session = Depends(get_db)
 ):
-    query = db.query(semalar.CariHareket).filter(semalar.CariHareket.kullanici_id == kullanici_id)
+    query = db.query(semalar.CariHareket).filter(semalar.CariHareket.kullanici_id == current_user.id) # Sorgu güncellendi
 
     if cari_id:
         query = query.filter(semalar.CariHareket.cari_id == cari_id)
@@ -75,8 +76,12 @@ def get_cari_hareketler_count(
 
 # --- VERİ OLUŞTURMA (CREATE) ---
 @router.post("/manuel", response_model=modeller.CariHareketRead)
-def create_manuel_cari_hareket(hareket: modeller.CariHareketCreate, db: Session = Depends(get_db)):
-    db_hareket = semalar.CariHareket(**hareket.model_dump())
+def create_manuel_cari_hareket(
+    hareket: modeller.CariHareketCreate,
+    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user), # Güvenli kullanıcı kimliği
+    db: Session = Depends(get_db)
+):
+    db_hareket = semalar.CariHareket(**hareket.model_dump(), kullanici_id=current_user.id) # Kullanıcı ID'si eklendi
     db.add(db_hareket)
     db.commit()
     db.refresh(db_hareket)
@@ -85,8 +90,12 @@ def create_manuel_cari_hareket(hareket: modeller.CariHareketCreate, db: Session 
 
 # --- VERİ SİLME (DELETE) ---
 @router.delete("/{hareket_id}", status_code=204)
-def delete_cari_hareket(hareket_id: int, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
-    db_hareket = db.query(semalar.CariHareket).filter(semalar.CariHareket.id == hareket_id, semalar.CariHareket.kullanici_id == kullanici_id).first()
+def delete_cari_hareket(
+    hareket_id: int, 
+    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user), # Güvenli kullanıcı kimliği
+    db: Session = Depends(get_db)
+):
+    db_hareket = db.query(semalar.CariHareket).filter(semalar.CariHareket.id == hareket_id, semalar.CariHareket.kullanici_id == current_user.id).first() # Sorgu güncellendi
     if db_hareket is None:
         raise HTTPException(status_code=404, detail="Cari hareket bulunamadı")
     

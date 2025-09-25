@@ -223,23 +223,25 @@ class OnMuhasebe:
                 # Önce giriş token'ını alıyoruz
                 response_data = self._make_api_request("POST", "/dogrulama/login", data=login_data)
 
-                if response_data and "access_token" in response_data:
+                if response_data and "access_token" in response_data and "token_type" in response_data:
                     self.access_token = response_data["access_token"]
+                    self.token_type = response_data["token_type"]
+                    # Authorization header'ı güncelle
+                    if not hasattr(self, "session"):
+                        import requests
+                        self.session = requests.Session()
+                    self.session.headers.update({"Authorization": f"{self.token_type} {self.access_token}"})
+
                     # Token'ı kullanarak kullanıcı bilgilerini çekiyoruz
                     user_info = self._get_current_user()
-                    
                     if user_info:
                         self.current_user_id = user_info["id"]
                         logger.info(f"Kullanıcı API üzerinden başarıyla doğrulandı: {kullanici_adi}")
-                        
                         try:
                             self.lokal_db.kullanici_kaydet_veya_guncelle(user_info)
                             logger.info(f"Kullanıcı bilgileri yerel veritabanına senkronize edildi: {kullanici_adi}")
-                            # Ana pencerede senkronizasyon tetiklenecek.
                         except Exception as e:
                             logger.error(f"Kullanıcı yerel veritabanına kaydedilirken hata oluştu: {e}", exc_info=True)
-
-                        # Başarılı giriş durumunda direkt kullanıcı bilgisini döndür
                         return {"kullanici": user_info}
                     else:
                         logger.warning("API üzerinden kullanıcı bilgisi çekilemedi. Giriş başarısız.")
@@ -252,7 +254,7 @@ class OnMuhasebe:
                 self.is_online = False
                 # Hata durumunda yerel veritabanına düşüşü sağla
                 return self.kullanici_dogrula_yerel(kullanici_adi, sifre)
-        
+
         # 2. Adım: Çevrimdışı modda yerel veritabanı üzerinden doğrula.
         else:
             logger.info("Çevrimdışı mod: Yerel veritabanı üzerinden kullanıcı doğrulaması deneniyor...")
@@ -262,17 +264,17 @@ class OnMuhasebe:
         """
         Çevrimdışı modda yerel veritabanı üzerinden kullanıcı doğrular.
         """
-        # DÜZELTME: Kullanici modeli direkt olarak içe aktarılmalı, servis üzerinden değil.
         from api.modeller import Kullanici
+        from api.guvenlik import verify_password
         try:
             with lokal_db_servisi.get_db() as db_session:
                 user_data = db_session.query(Kullanici).filter(
                     Kullanici.kullanici_adi == kullanici_adi
                 ).first()
-                
+
                 if user_data:
-                    # DÜZELTME: verify_password metodu çağrılıyor.
-                    if self.verify_password(sifre, user_data.hashed_sifre):
+                    # Şifre hash ile doğrulanıyor
+                    if verify_password(sifre, user_data.hashed_sifre):
                         logging.info("Yerel veritabanı üzerinden kullanıcı başarıyla doğrulandı.")
                         return True, {"id": user_data.id, "kullanici_adi": user_data.kullanici_adi}
                     else:
@@ -366,19 +368,19 @@ class OnMuhasebe:
             logger.error(f"Müşteri eklenirken hata: {e}")
             return False, f"Müşteri eklenirken hata: {e}"
 
-    def musteri_listesi_al(self, kullanici_id: int, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
+    def musteri_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
         if self.is_online:
             try:
-                params = {"skip": skip, "limit": limit, "arama": arama, "aktif_durum": aktif_durum, "kullanici_id": kullanici_id}
+                params = {"skip": skip, "limit": limit, "arama": arama, "aktif_durum": aktif_durum}
                 response = self._make_api_request("GET", "/musteriler/", params=params)
                 if response is not None:
                     return response
             except Exception as e:
                 logger.error(f"Müşteri listesi API'den çekilirken hata: {e}", exc_info=True)
                 self.is_online = False
-        
+
         # OFFLINE KISMI:
-        filtre = {"aktif_durum": aktif_durum, "kullanici_id": kullanici_id} if aktif_durum is not None else {"kullanici_id": kullanici_id}
+        filtre = {"aktif_durum": aktif_durum} if aktif_durum is not None else {}
         lokal_musteriler = self.lokal_db.listele(model_adi="Musteri", filtre=filtre)
         return {"items": lokal_musteriler, "total": len(lokal_musteriler)}
 
@@ -509,10 +511,10 @@ class OnMuhasebe:
             logger.error(f"Tedarikçi eklenirken hata: {e}")
             return False, f"Tedarikçi eklenirken hata: {e}"
 
-    def tedarikci_listesi_al(self, kullanici_id: int, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
+    def tedarikci_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, aktif_durum: bool = None):
         if self.is_online:
             try:
-                params = {"skip": skip, "limit": limit, "arama": arama, "aktif_durum": aktif_durum, "kullanici_id": kullanici_id}
+                params = {"skip": skip, "limit": limit, "arama": arama, "aktif_durum": aktif_durum}
                 response = self._make_api_request("GET", "/tedarikciler/", params=params)
                 if response is not None:
                     return response
@@ -520,7 +522,7 @@ class OnMuhasebe:
                 logger.error(f"Tedarikçi listesi API'den çekilirken hata: {e}", exc_info=True)
                 self.is_online = False
 
-        filtre = {"aktif_durum": aktif_durum, "kullanici_id": kullanici_id} if aktif_durum is not None else {"kullanici_id": kullanici_id}
+        filtre = {"aktif_durum": aktif_durum} if aktif_durum is not None else {}
         lokal_tedarikciler = self.lokal_db.listele(model_adi="Tedarikci", filtre=filtre)
         return {"items": lokal_tedarikciler, "total": len(lokal_tedarikciler)}
 
@@ -682,10 +684,10 @@ class OnMuhasebe:
             logger.error(f"Toplu stok ekleme/güncelleme sırasında beklenmedik hata: {e}", exc_info=True)
             raise
 
-    def stok_listesi_al(self, kullanici_id: int, skip: int = 0, limit: int = 100, arama: str = None,
-                        aktif_durum: Optional[bool] = None, kritik_stok_altinda: Optional[bool] = None,
-                        kategori_id: Optional[int] = None, marka_id: Optional[int] = None,
-                        urun_grubu_id: Optional[int] = None, stokta_var: Optional[bool] = None):
+    def stok_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None,
+                         aktif_durum: Optional[bool] = None, kritik_stok_altinda: Optional[bool] = None,
+                         kategori_id: Optional[int] = None, marka_id: Optional[int] = None,
+                         urun_grubu_id: Optional[int] = None, stokta_var: Optional[bool] = None):
         params = {
             "skip": skip,
             "limit": limit,
@@ -695,8 +697,7 @@ class OnMuhasebe:
             "kategori_id": kategori_id,
             "marka_id": marka_id,
             "urun_grubu_id": urun_grubu_id,
-            "stokta_var": stokta_var,
-            "kullanici_id": kullanici_id
+            "stokta_var": stokta_var
         }
         cleaned_params = {k: v for k, v in params.items() if v is not None}
         
@@ -709,13 +710,13 @@ class OnMuhasebe:
                 logger.error(f"Stok listesi API'den çekilirken hata: {e}", exc_info=True)
                 self.is_online = False
                 
-        # API'ye erişim yoksa veya hata oluştuysa yerel veritabanı kullanılır.
+        # Yerel veritabanı için user ID'yi kullan
         filtre = {
             "aktif": aktif_durum,
             "kategori_id": kategori_id,
             "marka_id": marka_id,
             "urun_grubu_id": urun_grubu_id,
-            "kullanici_id": kullanici_id
+            "kullanici_id": getattr(self, "current_user_id", None)
         }
         
         lokal_stoklar = self.lokal_db.listele(model_adi="Stok", filtre=filtre)
@@ -848,7 +849,7 @@ class OnMuhasebe:
         except Exception as e:
             raise ValueError(f"API'den hata: {e}")
 
-    def fatura_listesi_al(self, kullanici_id: int, skip: int = 0, limit: int = 100, arama: str = None, fatura_turu: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, cari_id: int = None, odeme_turu: str = None, kasa_banka_id: int = None):
+    def fatura_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, fatura_turu: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, cari_id: int = None, odeme_turu: str = None, kasa_banka_id: int = None):
         params = {
             "skip": skip,
             "limit": limit,
@@ -858,11 +859,10 @@ class OnMuhasebe:
             "bitis_tarihi": bitis_tarihi,
             "cari_id": cari_id,
             "odeme_turu": odeme_turu,
-            "kasa_banka_id": kasa_banka_id,
-            "kullanici_id": kullanici_id
+            "kasa_banka_id": kasa_banka_id
         }
         cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
-        
+
         if self.is_online:
             try:
                 response = self._make_api_request("GET", "/faturalar/", params=cleaned_params)
@@ -871,13 +871,12 @@ class OnMuhasebe:
             except Exception as e:
                 logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
-                
+
         filtre = {
             "fatura_turu": fatura_turu,
             "cari_id": cari_id,
             "odeme_turu": odeme_turu,
-            "kasa_banka_id": kasa_banka_id,
-            "kullanici_id": kullanici_id
+            "kasa_banka_id": kasa_banka_id
         }
         lokal_faturalar = self.lokal_db.listele(model_adi="Fatura", filtre=filtre)
         return {"items": lokal_faturalar, "total": len(lokal_faturalar)}
@@ -962,7 +961,7 @@ class OnMuhasebe:
             logger.error(f"Sipariş eklenirken hata: {e}")
             raise
 
-    def siparis_listesi_al(self, kullanici_id: int, skip: int = 0, limit: int = 100, arama: str = None, siparis_turu: str = None, durum: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, cari_id: int = None):
+    def siparis_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, siparis_turu: str = None, durum: str = None, baslangic_tarihi: str = None, bitis_tarihi: str = None, cari_id: int = None):
         params = {
             "skip": skip,
             "limit": limit,
@@ -971,8 +970,7 @@ class OnMuhasebe:
             "durum": durum,
             "baslangic_tarihi": baslangic_tarihi,
             "bitis_tarihi": bitis_tarihi,
-            "cari_id": cari_id,
-            "kullanici_id": kullanici_id
+            "cari_id": cari_id
         }
         params = {k: v for k, v in params.items() if v is not None}
         
@@ -986,8 +984,7 @@ class OnMuhasebe:
         filtre = {
             "cari_id": cari_id,
             "durum": durum,
-            "siparis_tipi": siparis_turu,
-            "kullanici_id": kullanici_id
+            "siparis_tipi": siparis_turu
         }
         lokal_siparisler = self.lokal_db.listele(model_adi="Siparis", filtre=filtre)
         return {"items": lokal_siparisler, "total": len(lokal_siparisler)}
@@ -1180,23 +1177,22 @@ class OnMuhasebe:
             logger.error(f"Nitelik tipi {nitelik_tipi} ID {nitelik_id} silinirken hata: {e}")
             raise
 
-    def kategori_listele(self, kullanici_id: int, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
+    def kategori_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
         if self.is_online:
             try:
-                params = {"skip": skip, "limit": limit, "kullanici_id": kullanici_id}
+                params = {"skip": skip, "limit": limit}
                 response = self._make_api_request("GET", "/nitelikler/kategoriler", params=params)
                 if response is not None:
                     return response
             except Exception as e:
-                # self.app.set_status_message() çağrısı kaldırıldı.
                 logger.error(f"Kategori listesi API'den alınamadı: {e}", exc_info=True)
 
-        return self.lokal_db.listele(model_adi="Nitelik", filtre={"tip": "kategori", "kullanici_id": kullanici_id})
+        return self.lokal_db.listele(model_adi="Nitelik", filtre={"tip": "kategori"})
 
-    def marka_listele(self, kullanici_id: int, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
+    def marka_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
         if self.is_online:
             try:
-                params = {"skip": skip, "limit": limit, "kullanici_id": kullanici_id}
+                params = {"skip": skip, "limit": limit}
                 response = self._make_api_request("GET", "/nitelikler/markalar", params=params)
                 if isinstance(response, dict) and "items" in response:
                     return response
@@ -1209,10 +1205,10 @@ class OnMuhasebe:
                 logger.error(f"Marka listesi API'den alınamadı: {e}", exc_info=True)
                 return {"items": [], "total": 0}
                         
-    def urun_grubu_listele(self, kullanici_id: int, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
+    def urun_grubu_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
         if self.is_online:
             try:
-                params = {"skip": skip, "limit": limit, "kullanici_id": kullanici_id}
+                params = {"skip": skip, "limit": limit}
                 response = self._make_api_request("GET", "/nitelikler/urun_gruplari", params=params)
                 if isinstance(response, dict) and "items" in response:
                     return response
@@ -1222,7 +1218,6 @@ class OnMuhasebe:
                     logger.warning(f"urun_grubu_listele: API'den beklenmedik yanıt formatı. Yanıt: {response}")
                     return {"items": [], "total": 0}
             except Exception as e:
-                # self.app.set_status_message() çağrısı kaldırıldı.
                 logger.error(f"Ürün grubu listesi API'den alınamadı: {e}", exc_info=True)
                 return {"items": [], "total": 0}
 
@@ -1291,8 +1286,8 @@ class OnMuhasebe:
         return {"items": lokal_list, "total": len(lokal_list)}
     
     # --- RAPORLAR ---
-    def get_dashboard_summary(self, kullanici_id: int, baslangic_tarihi: str = None, bitis_tarihi: str = None):
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "kullanici_id": kullanici_id}
+    def get_dashboard_summary(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
+        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
         
         if self.is_online:
             try:
@@ -1314,10 +1309,14 @@ class OnMuhasebe:
             "vadesi_gecmis_borclar_toplami": 0.0
         }
 
-    def get_total_sales(self, kullanici_id: int, baslangic_tarihi: str = None, bitis_tarihi: str = None):
+    def get_total_sales(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
         if self.is_online:
             try:
-                summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "kullanici_id": kullanici_id})
+                summary = self._make_api_request(
+                    "GET",
+                    "/raporlar/dashboard_ozet",
+                    params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
+                )
                 if summary is not None:
                     return summary.get("toplam_satislar", 0.0)
             except Exception as e:
@@ -1325,10 +1324,14 @@ class OnMuhasebe:
                 self.is_online = False
         return 0.0
 
-    def get_total_collections(self, kullanici_id: int, baslangic_tarihi: str = None, bitis_tarihi: str = None):
+    def get_total_collections(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
         if self.is_online:
             try:
-                summary = self._make_api_request("GET", "/raporlar/dashboard_ozet", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "kullanici_id": kullanici_id})
+                summary = self._make_api_request(
+                    "GET",
+                    "/raporlar/dashboard_ozet",
+                    params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
+                )
                 if summary is not None:
                     return summary.get("toplam_tahsilatlar", 0.0)
             except Exception as e:
@@ -1360,18 +1363,24 @@ class OnMuhasebe:
 
         return {"items": [], "total": 0}
 
-    def get_kar_zarar_verileri(self, kullanici_id: int, baslangic_tarihi: str, bitis_tarihi: str):
-        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "kullanici_id": kullanici_id}
+    def get_kar_zarar_verileri(self, baslangic_tarihi: str, bitis_tarihi: str) -> dict:
+        """
+        Belirtilen tarih aralığı için kar/zarar verilerini API üzerinden çeker.
+        """
+        # GÜNCELLEME: 'kullanici_id' parametresi kaldırıldı.
+        params = {"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
         
         if self.is_online:
             try:
+                # GÜNCELLEME: API isteğinden 'kullanici_id' parametresi kaldırıldı.
                 response = self._make_api_request("GET", "/raporlar/kar_zarar_verileri", params=params)
                 if response is not None:
                     return response
             except Exception as e:
-                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
+                logger.error(f"Kar/Zarar verileri API isteği sırasında hata oluştu: {e}", exc_info=True)
                 self.is_online = False
         
+        # Hata durumunda veya çevrimdışı modda dönecek varsayılan değer
         return {
             "toplam_satis_geliri": 0.0,
             "toplam_satis_maliyeti": 0.0,
@@ -1425,21 +1434,25 @@ class OnMuhasebe:
             logger.error(f"Brüt kar ve maliyet verileri çekilirken hata: {e}")
             return 0.0, 0.0, 0.0
 
-    def get_nakit_akisi_verileri(self, kullanici_id: int, baslangic_tarihi: str, bitis_tarihi: str):
+    def get_nakit_akisi_verileri(self, baslangic_tarihi: str, bitis_tarihi: str):
         if self.is_online:
             try:
-                response = self._make_api_request("GET", "/raporlar/nakit_akisi_raporu", params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "kullanici_id": kullanici_id})
+                response = self._make_api_request(
+                    "GET",
+                    "/raporlar/nakit_akisi_raporu",
+                    params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
+                )
                 if response is not None:
                     return response
             except Exception as e:
                 logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
-        
+
         return {"nakit_girisleri": 0.0, "nakit_cikislar": 0.0, "net_nakit_akisi": 0.0}
 
-    def get_tum_kasa_banka_bakiyeleri(self, kullanici_id: int):
+    def get_tum_kasa_banka_bakiyeleri(self):
         try:
-            response = self.kasa_banka_listesi_al(kullanici_id=kullanici_id, limit=1000)
+            response = self.kasa_banka_listesi_al(kullanici_id=self.current_user_id, limit=1000)
             return response.get("items", [])
         except Exception as e:
             logger.error(f"Tüm kasa/banka bakiyeleri çekilirken hata: {e}")
@@ -1468,10 +1481,10 @@ class OnMuhasebe:
         logger.warning(f"get_stock_value_by_category metodu API'de doğrudan karşılığı yok. Simüle ediliyor.")
         return {"items": [], "total": 0}
 
-    def get_critical_stock_items(self, kullanici_id: int):
+    def get_critical_stock_items(self):
         if self.is_online:
             try:
-                response = self.stok_listesi_al(kullanici_id=kullanici_id, kritik_stok_altinda=True, limit=1000)
+                response = self.stok_listesi_al(kritik_stok_altinda=True, limit=1000)
                 if response is not None:
                     return response.get("items", [])
             except Exception as e:
@@ -1741,7 +1754,7 @@ class OnMuhasebe:
         lokal_siparisler = self.lokal_db.listele(model_adi="Siparis", filtre=filtre)
         return {"items": lokal_siparisler, "total": len(lokal_siparisler)}
 
-    def get_gelir_gider_aylik_ozet(self, kullanici_id: int, baslangic_tarihi: str, bitis_tarihi: str) -> Dict[str, Any]:
+    def get_gelir_gider_aylik_ozet(self, baslangic_tarihi: str, bitis_tarihi: str) -> Dict[str, Any]:
         """
         Belirtilen tarih aralığına göre aylık gelir ve giderlerin özetini döndürür.
         """
@@ -1755,7 +1768,6 @@ class OnMuhasebe:
                     func.sum(case((GelirGider.tip == 'GELİR', GelirGider.tutar), else_=0)).label('toplam_gelir'),
                     func.sum(case((GelirGider.tip == 'GİDER', GelirGider.tutar), else_=0)).label('toplam_gider')
                 ).filter(
-                    GelirGider.kullanici_id == kullanici_id,
                     GelirGider.tarih >= baslangic_tarihi,
                     GelirGider.tarih <= bitis_tarihi
                 ).group_by(

@@ -5,6 +5,7 @@ from typing import List, Optional
 from .. import semalar, modeller
 from ..veritabani import get_db
 from datetime import date, datetime
+from .. import guvenlik # Yeni eklenen import
 
 router = APIRouter(
     prefix="/gelir_gider",
@@ -15,33 +16,35 @@ router = APIRouter(
 def read_gelir_gider(
     skip: int = 0,
     limit: int = 20,
-    kullanici_id: int = Query(..., description="Kullanıcı ID"),
     tip_filtre: Optional[semalar.GelirGiderTipEnum] = None,
     baslangic_tarihi: Optional[date] = None,
     bitis_tarihi: Optional[date] = None,
     aciklama_filtre: Optional[str] = None,
+    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user),
     db: Session = Depends(get_db)
 ):
-    query = db.query(semalar.GelirGider).filter(semalar.GelirGider.kullanici_id == kullanici_id)
+    query = db.query(semalar.GelirGider).filter(semalar.GelirGider.kullanici_id == current_user.id)
 
     if tip_filtre:
         query = query.filter(semalar.GelirGider.tip == tip_filtre)
     
     if baslangic_tarihi:
         query = query.filter(semalar.GelirGider.tarih >= baslangic_tarihi)
-
+    
     if bitis_tarihi:
         query = query.filter(semalar.GelirGider.tarih <= bitis_tarihi)
-        
+
     if aciklama_filtre:
         query = query.filter(semalar.GelirGider.aciklama.ilike(f"%{aciklama_filtre}%"))
-
+    
     total_count = query.count()
-    gelir_gider_listesi = query.offset(skip).limit(limit).all()
+    items = query.order_by(semalar.GelirGider.tarih.desc()).offset(skip).limit(limit).all()
 
+    # Model dönüşümü kısmı, eski koddaki gibi list comprehension ile güncellendi.
+    # Mevcut fonksiyonelliği korumak adına bu şekilde bıraktım.
     items = [
         modeller.GelirGiderRead.model_validate(gg, from_attributes=True)
-        for gg in gelir_gider_listesi
+        for gg in items
     ]
 
     return {"items": items, "total": total_count}
@@ -52,10 +55,10 @@ def get_gelir_gider_count(
     baslangic_tarihi: Optional[date] = None,
     bitis_tarihi: Optional[date] = None,
     aciklama_filtre: Optional[str] = None,
-    kullanici_id: int = Query(..., description="Kullanıcı ID"),
+    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user),
     db: Session = Depends(get_db)
 ):
-    query = db.query(semalar.GelirGider).filter(semalar.GelirGider.kullanici_id == kullanici_id)
+    query = db.query(semalar.GelirGider).filter(semalar.GelirGider.kullanici_id == current_user.id)
 
     if tip_filtre:
         query = query.filter(semalar.GelirGider.tip == tip_filtre)
@@ -68,18 +71,26 @@ def get_gelir_gider_count(
             
     return query.count()
 
+
 @router.post("/", response_model=modeller.GelirGiderBase)
-def create_gelir_gider(kayit: modeller.GelirGiderCreate, db: Session = Depends(get_db)):
+def create_gelir_gider(
+    kayit: modeller.GelirGiderCreate, 
+    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user),
+    db: Session = Depends(get_db)
+):
     db.begin_nested()
     try:
+        # Yeni güvenlik yaklaşımına göre kullanıcı ID'si doğrudan token'dan alınmalı.
         kayit_data = kayit.model_dump(exclude={"kaynak", "cari_tip", "cari_id", "odeme_turu"})
-
+        kayit_data['kullanici_id'] = current_user.id
+        
         db_kayit = semalar.GelirGider(
             **kayit_data
         )
         db.add(db_kayit)
 
-        kasa_hesabi = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == kayit.kasa_banka_id, semalar.KasaBanka.kullanici_id == kayit.kullanici_id).first()
+        # Kasa/Banka hesabı sorgusu da kullanici_id ile filtrelenmeli
+        kasa_hesabi = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == kayit.kasa_banka_id, semalar.KasaBanka.kullanici_id == current_user.id).first()
         if not kasa_hesabi:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kasa/Banka hesabı bulunamadı.")
         
@@ -107,7 +118,7 @@ def create_gelir_gider(kayit: modeller.GelirGiderCreate, db: Session = Depends(g
                     kaynak=semalar.KaynakTipEnum.MANUEL,
                     kasa_banka_id=kayit.kasa_banka_id,
                     odeme_turu=kayit.odeme_turu,
-                    kullanici_id=kayit.kullanici_id
+                    kullanici_id=current_user.id
                 )
                 db.add(db_cari_hareket)
 
@@ -115,7 +126,8 @@ def create_gelir_gider(kayit: modeller.GelirGiderCreate, db: Session = Depends(g
         db.refresh(db_kayit)
         
         kayit_model = modeller.GelirGiderRead.model_validate(db_kayit, from_attributes=True)
-        kasa_banka = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == kayit.kasa_banka_id).first()
+        # Kasa/Banka adı sorgusu da güncellenmeli.
+        kasa_banka = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == kayit.kasa_banka_id, semalar.KasaBanka.kullanici_id == current_user.id).first()
         kayit_model.kasa_banka_adi = kasa_banka.hesap_adi if kasa_banka else None
         
         return kayit_model
@@ -124,15 +136,19 @@ def create_gelir_gider(kayit: modeller.GelirGiderCreate, db: Session = Depends(g
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Gelir/Gider kaydı oluşturulurken hata: {str(e)}")
         
 @router.delete("/{kayit_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_gelir_gider(kayit_id: int, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
-    db_kayit = db.query(semalar.GelirGider).filter(semalar.GelirGider.id == kayit_id, semalar.GelirGider.kullanici_id == kullanici_id).first()
+def delete_gelir_gider(
+    kayit_id: int, 
+    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user), 
+    db: Session = Depends(get_db)
+):
+    db_kayit = db.query(semalar.GelirGider).filter(semalar.GelirGider.id == kayit_id, semalar.GelirGider.kullanici_id == current_user.id).first()
     if db_kayit is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gelir/Gider kaydı bulunamadı")
     
     db.begin_nested()
     try:
         if db_kayit.kasa_banka_id:
-            kasa_hesabi = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == db_kayit.kasa_banka_id, semalar.KasaBanka.kullanici_id == kullanici_id).first()
+            kasa_hesabi = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == db_kayit.kasa_banka_id, semalar.KasaBanka.kullanici_id == current_user.id).first()
             if kasa_hesabi:
                 if db_kayit.tip == semalar.GelirGiderTipEnum.GELIR:
                     kasa_hesabi.bakiye -= db_kayit.tutar
@@ -143,7 +159,7 @@ def delete_gelir_gider(kayit_id: int, kullanici_id: int = Query(..., description
             semalar.CariHareket.aciklama == db_kayit.aciklama,
             semalar.CariHareket.tutar == db_kayit.tutar,
             semalar.CariHareket.kaynak == semalar.KaynakTipEnum.MANUEL,
-            semalar.CariHareket.kullanici_id == kullanici_id
+            semalar.CariHareket.kullanici_id == current_user.id
         ).first()
 
         if cari_hareket:

@@ -7228,7 +7228,8 @@ class RaporlamaMerkeziSayfasi(QWidget):
 
     def _update_genel_bakis_tab(self, bas_t_str, bit_t_str):
         try:
-            dashboard_summary = self.db.get_dashboard_summary(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
+            # 1. GÜNCELLEME: kullanici_id parametresi kaldırıldı.
+            dashboard_summary = self.db.get_dashboard_summary(baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
             
             toplam_satislar = dashboard_summary.get("toplam_satislar", 0.0)
             toplam_alislar = dashboard_summary.get("toplam_alislar", 0.0)
@@ -7246,18 +7247,21 @@ class RaporlamaMerkeziSayfasi(QWidget):
             self.lbl_metric_approaching_receivables.setText(self.db._format_currency(vadesi_yaklasan_alacaklar_toplami))
             self.lbl_metric_overdue_payables.setText(self.db._format_currency(vadesi_gecmis_borclar_toplami))
 
-            kar_zarar_data = self.db.get_kar_zarar_verileri(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
+            # 2. GÜNCELLEME: kullanici_id parametresi kaldırıldı.
+            kar_zarar_data = self.db.get_kar_zarar_verileri(baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
             self.lbl_genel_bakis_donem_gelir.setText(self.db._format_currency(kar_zarar_data.get("diger_gelirler", 0.0)))
             self.lbl_genel_bakis_donem_gider.setText(self.db._format_currency(kar_zarar_data.get("diger_giderler", 0.0)))
             self.lbl_genel_bakis_brut_kar.setText(self.db._format_currency(kar_zarar_data.get("brut_kar", 0.0)))
             self.lbl_genel_bakis_net_kar.setText(self.db._format_currency(kar_zarar_data.get("net_kar", 0.0)))
 
-            nakit_akis_data = self.db.get_nakit_akisi_verileri(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
+            # 3. GÜNCELLEME: kullanici_id parametresi kaldırıldı.
+            nakit_akis_data = self.db.get_nakit_akisi_verileri(baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
             self.lbl_genel_bakis_nakit_girisleri.setText(self.db._format_currency(nakit_akis_data.get("nakit_girisleri", 0.0)))
             self.lbl_genel_bakis_nakit_cikislar.setText(self.db._format_currency(nakit_akis_data.get("nakit_cikislar", 0.0)))
             self.lbl_genel_bakis_net_nakit_akisi.setText(self.db._format_currency(nakit_akis_data.get("net_nakit_akisi", 0.0)))
 
-            kasa_banka_bakiyeleri = self.db.get_tum_kasa_banka_bakiyeleri(kullanici_id=self.app.current_user_id) or []
+            # 4. GÜNCELLEME: kullanici_id parametresi kaldırıldı.
+            kasa_banka_bakiyeleri = self.db.get_tum_kasa_banka_bakiyeleri() or []
             self.kasa_banka_list_widget.clear()
             if kasa_banka_bakiyeleri:
                 for hesap in kasa_banka_bakiyeleri:
@@ -7271,7 +7275,8 @@ class RaporlamaMerkeziSayfasi(QWidget):
             else:
                 self.kasa_banka_list_widget.addItem("Kasa/Banka Bakiyesi Bulunamadı.")
 
-            critical_stock_items = self.db.get_critical_stock_items(kullanici_id=self.app.current_user_id) or []
+            # 5. GÜNCELLEME: kullanici_id parametresi kaldırıldı.
+            critical_stock_items = self.db.get_critical_stock_items() or []
             self.kritik_stok_urunler_list_widget.clear()
             if critical_stock_items:
                 for urun in critical_stock_items:
@@ -7282,7 +7287,8 @@ class RaporlamaMerkeziSayfasi(QWidget):
             else:
                 self.kritik_stok_urunler_list_widget.addItem("Kritik stok altında ürün bulunamadı.")
 
-            aylik_gelir_gider_ozet_data = self.db.get_gelir_gider_aylik_ozet(kullanici_id=self.app.current_user_id, baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
+            # 6. GÜNCELLEME: kullanici_id parametresi kaldırıldı.
+            aylik_gelir_gider_ozet_data = self.db.get_gelir_gider_aylik_ozet(baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
             
             aylar_labels = [item.get('ay_adi') for item in aylik_gelir_gider_ozet_data.get('aylik_ozet', [])]
             toplam_gelirler = [item.get('toplam_gelir') for item in aylik_gelir_gider_ozet_data.get('aylik_ozet', [])]
