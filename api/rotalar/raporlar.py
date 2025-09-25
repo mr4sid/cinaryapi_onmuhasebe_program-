@@ -1,3 +1,4 @@
+# api/rotalar/raporlar.py dosyasının tamamı (güncel hali)
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, extract, case, String

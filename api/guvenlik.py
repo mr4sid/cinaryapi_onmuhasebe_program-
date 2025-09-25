@@ -48,6 +48,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """
     JWT token'ı kullanarak geçerli kullanıcıyı doğrular ve döndürür.
+    
+    KRİTİK GÜNCELLEME: db.query'de semalar.Kullanici yerine modeller.Kullanici kullanıldı.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -56,14 +58,18 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        kullanici_adi: str = payload.get("sub")
+        # Token içeriğinde kullanıcı adının 'sub' anahtarıyla gelmesi beklenir.
+        kullanici_adi: str = payload.get("sub") 
         if kullanici_adi is None:
             raise credentials_exception
-        token_data = modeller.TokenData(kullanici_adi=kullanici_adi)
+        # TokenData nesnesi oluşturma adımı gereksizdi, kaldırıldı.
     except JWTError:
         raise credentials_exception
     
-    user = db.query(semalar.Kullanici).filter(semalar.Kullanici.kullanici_adi == token_data.kullanici_adi).first()
+    # DÜZELTME: SQLAlchemy sorgusu için modeller.Kullanici kullanıldı.
+    # Bu düzeltme, 401 hatasını çözmelidir.
+    user = db.query(modeller.Kullanici).filter(modeller.Kullanici.kullanici_adi == kullanici_adi).first()
+    
     if user is None:
         raise credentials_exception
     return user

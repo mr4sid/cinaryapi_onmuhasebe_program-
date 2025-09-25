@@ -121,61 +121,62 @@ class CariService:
     def __init__(self, db_manager):
         self.db = db_manager
         
-    def musteri_listesi_al(self, kullanici_id: int, **kwargs):
+    def musteri_listesi_al(self, **kwargs):
+        if 'kullanici_id' in kwargs:
+            del kwargs['kullanici_id']
+            
         cleaned_params = {k: v for k, v in kwargs.items() if v is not None}
         try:
-            return self.db.musteri_listesi_al(kullanici_id=kullanici_id, **cleaned_params)
+            return self.db.musteri_listesi_al(**cleaned_params)
         except Exception as e:
             logger.error(f"Müşteri listesi CariService üzerinden alınırken hata: {e}", exc_info=True)
             return {"items": [], "total": 0}
 
     def musteri_getir_by_id(self, musteri_id: int):
         try:
-            # DÜZELTME: musteri_getir_by_id metoduna kullanici_id eklendi
-            return self.db.musteri_getir_by_id(musteri_id, kullanici_id=self.db.app.current_user_id)
+            return self.db.musteri_getir_by_id(musteri_id)
         except Exception as e:
             logger.error(f"Müşteri ID {musteri_id} CariService üzerinden çekilirken hata: {e}")
             raise
 
     def musteri_sil(self, musteri_id: int):
         try:
-            # DÜZELTME: musteri_sil metoduna kullanici_id eklendi
-            return self.db.musteri_sil(musteri_id, kullanici_id=self.db.app.current_user_id)
+            return self.db.musteri_sil(musteri_id)
         except Exception as e:
             logger.error(f"Müşteri ID {musteri_id} CariService üzerinden silinirken hata: {e}")
             raise
 
-    def tedarikci_listesi_al(self, kullanici_id: int, **kwargs):
+    def tedarikci_listesi_al(self, **kwargs):
+        if 'kullanici_id' in kwargs:
+            del kwargs['kullanici_id']
+            
         cleaned_params = {k: v for k, v in kwargs.items() if v is not None}
         try:
-            return self.db.tedarikci_listesi_al(kullanici_id=kullanici_id, **cleaned_params)
+            return self.db.tedarikci_listesi_al(**cleaned_params)
         except Exception as e:
             logger.error(f"Tedarikçi listesi CariService üzerinden alınırken hata: {e}", exc_info=True)
             return {"items": [], "total": 0}
 
     def tedarikci_getir_by_id(self, tedarikci_id: int):
         try:
-            # DÜZELTME: tedarikci_getir_by_id metoduna kullanici_id eklendi
-            return self.db.tedarikci_getir_by_id(tedarikci_id, kullanici_id=self.db.app.current_user_id)
+            return self.db.tedarikci_getir_by_id(tedarikci_id)
         except Exception as e:
             logger.error(f"Tedarikçi ID {tedarikci_id} CariService üzerinden çekilirken hata: {e}")
             raise
 
     def tedarikci_sil(self, tedarikci_id: int):
         try:
-            # DÜZELTME: tedarikci_sil metoduna kullanici_id eklendi
-            return self.db.tedarikci_sil(tedarikci_id, kullanici_id=self.db.app.current_user_id)
+            # DÜZELTME: kullanici_id parametresi kaldırıldı
+            return self.db.tedarikci_sil(tedarikci_id)
         except Exception as e:
             logger.error(f"Tedarikçi ID {tedarikci_id} CariService üzerinden silinirken hata: {e}")
             raise
 
     def cari_getir_by_id(self, cari_id: int, cari_tipi: str):
         if cari_tipi == self.db.CARI_TIP_MUSTERI:
-            # DÜZELTME: musteri_getir_by_id metoduna kullanici_id eklendi
-            return self.db.musteri_getir_by_id(cari_id, kullanici_id=self.db.app.current_user_id)
+            return self.db.musteri_getir_by_id(cari_id)
         elif cari_tipi == self.db.CARI_TIP_TEDARIKCI:
-            # DÜZELTME: tedarikci_getir_by_id metoduna kullanici_id eklendi
-            return self.db.tedarikci_getir_by_id(cari_id, kullanici_id=self.db.app.current_user_id)
+            return self.db.tedarikci_getir_by_id(cari_id)
         else:
             raise ValueError("Geçersiz cari tipi belirtildi. 'MUSTERI' veya 'TEDARIKCI' olmalı.")
 
@@ -316,13 +317,20 @@ class LokalVeritabaniServisi:
         finally:
             db.close()
 
-    def senkronize_veriler(self, sunucu_adresi: str, kullanici_id: Optional[int] = None):
+    def senkronize_veriler(self, sunucu_adresi: str, access_token: Optional[str] = None):
+        """
+        Yerel verileri sunucudan senkronize eder.
+        DÜZELTME: API isteklerine Authorization header'ı eklenmiştir.
+        """
         if not sunucu_adresi:
             return False, "Sunucu adresi belirtilmedi. Senkronizasyon atlandı."
-        if kullanici_id is None:
-            return False, "Kullanıcı kimliği belirtilmedi. Senkronizasyon atlandı."
+        if not access_token:
+            print("JWT Token mevcut değil. Senkronizasyon atlandı.")
+            return False, "JWT Token mevcut değil. Lütfen önce giriş yapın."
 
         lokal_db = None
+        api_headers = {"Authorization": f"Bearer {access_token}"} # Token'ı header olarak tanımla
+        
         try:
             lokal_db = self.get_db()
 
@@ -374,7 +382,7 @@ class LokalVeritabaniServisi:
             }
 
             for endpoint, model in endpoints.items():
-                response = requests.get(f"{sunucu_adresi}/{endpoint}", params={"limit": 999999, "kullanici_id": kullanici_id})
+                response = requests.get(f"{sunucu_adresi}/{endpoint}", params={"limit": 999999}, headers=api_headers)
                 response.raise_for_status()
                 response_data = response.json()
                 if isinstance(response_data, dict) and "items" in response_data:
