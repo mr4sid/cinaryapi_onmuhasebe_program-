@@ -522,4 +522,43 @@ class LokalVeritabaniServisi:
             self.logger.error(f"Yerel veritabanından kullanıcı çekilirken hata oluştu: {e}", exc_info=True)
             return None
 
+    def ayarlari_kaydet(self, ayarlar: Dict[str, Any]):
+        """
+        Uygulama ayarlarını yerel veritabanına kaydeder.
+        """
+        from api.modeller import Ayarlar # Veya Nitelik modelini kullanıyorsanız onu import edin
+        
+        with self.get_db() as db:
+            for key, value in ayarlar.items():
+                # Ayar kaydının adı 'SISTEM_AYARLARI_{anahtar}' şeklinde olsun
+                ayar_adi = f"SISTEM_AYARLARI_{key.upper()}" 
+                
+                # Mevcut kaydı bul
+                mevcut_ayar = db.query(Ayarlar).filter(Ayarlar.ad == ayar_adi).first()
+
+                if mevcut_ayar:
+                    mevcut_ayar.deger = str(value)
+                else:
+                    yeni_ayar = Ayarlar(ad=ayar_adi, deger=str(value), kullanici_id=None) # Kullanici ID burada None olabilir veya ana kullanıcı ID'si verilir.
+                    db.add(yeni_ayar)
+            db.commit()
+
+    def ayarlari_yukle(self) -> Dict[str, Any]:
+        """
+        Uygulama ayarlarını yerel veritabanından yükler.
+        """
+        from api.modeller import Ayarlar # Veya Nitelik modelini kullanıyorsanız onu import edin
+        
+        ayarlar = {}
+        with self.get_db() as db:
+            # Sadece sistem ayarlarını çek
+            kayitlar = db.query(Ayarlar).all()
+            
+            for kayit in kayitlar:
+                if kayit.ad.startswith("SISTEM_AYARLARI_"):
+                    # 'SISTEM_AYARLARI_' ön ekini kaldırarak anahtarı belirle
+                    key = kayit.ad.replace("SISTEM_AYARLARI_", "").lower()
+                    ayarlar[key] = kayit.deger # Değeri string olarak sakla
+        return ayarlar
+
 lokal_db_servisi = LokalVeritabaniServisi()

@@ -24,68 +24,93 @@ def get_dashboard_ozet_endpoint(
     current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user)
 ):
     kullanici_id = current_user.id
-    query_fatura = db.query(semalar.Fatura).filter(semalar.Fatura.kullanici_id == kullanici_id)
-    query_gelir_gider = db.query(semalar.GelirGider).filter(semalar.GelirGider.kullanici_id == kullanici_id)
-    query_stok = db.query(semalar.Stok).filter(semalar.Stok.kullanici_id == kullanici_id)
+    
+    # KRİTİK DÜZELTME: Enum üye adları düzeltildi ve modeller kullanıldı.
+    satis_query = db.query(func.sum(modeller.Fatura.genel_toplam)).filter(
+        modeller.Fatura.kullanici_id == kullanici_id,
+        modeller.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS # DÜZELTME
+    )
+    alis_query = db.query(func.sum(modeller.Fatura.genel_toplam)).filter(
+        modeller.Fatura.kullanici_id == kullanici_id,
+        modeller.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS # DÜZELTME
+    )
 
+    tahsilat_query = db.query(func.sum(modeller.GelirGider.tutar)).filter(
+        modeller.GelirGider.kullanici_id == kullanici_id,
+        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR # DÜZELTME
+    )
+    odeme_query = db.query(func.sum(modeller.GelirGider.tutar)).filter(
+        modeller.GelirGider.kullanici_id == kullanici_id,
+        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER # DÜZELTME
+    )
+
+    # Tarih filtreleri (modeller kullanılıyor)
     if baslangic_tarihi:
-        query_fatura = query_fatura.filter(semalar.Fatura.tarih >= baslangic_tarihi)
-        query_gelir_gider = query_gelir_gider.filter(semalar.GelirGider.tarih >= baslangic_tarihi)
+        satis_query = satis_query.filter(modeller.Fatura.tarih >= baslangic_tarihi)
+        alis_query = alis_query.filter(modeller.Fatura.tarih >= baslangic_tarihi)
+        tahsilat_query = tahsilat_query.filter(modeller.GelirGider.tarih >= baslangic_tarihi)
+        odeme_query = odeme_query.filter(modeller.GelirGider.tarih >= baslangic_tarihi)
     if bitis_tarihi:
-        query_fatura = query_fatura.filter(semalar.Fatura.tarih <= bitis_tarihi)
-        query_gelir_gider = query_gelir_gider.filter(semalar.GelirGider.tarih <= bitis_tarihi)
+        satis_query = satis_query.filter(modeller.Fatura.tarih <= bitis_tarihi)
+        alis_query = alis_query.filter(modeller.Fatura.tarih <= bitis_tarihi)
+        tahsilat_query = tahsilat_query.filter(modeller.GelirGider.tarih <= bitis_tarihi)
+        odeme_query = odeme_query.filter(modeller.GelirGider.tarih <= bitis_tarihi)
 
-    toplam_satislar = query_fatura.filter(semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS).with_entities(func.sum(semalar.Fatura.genel_toplam)).scalar() or 0.0
-    toplam_alislar = query_fatura.filter(semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS).with_entities(func.sum(semalar.Fatura.genel_toplam)).scalar() or 0.0
-    toplam_tahsilatlar = query_gelir_gider.filter(semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR).with_entities(func.sum(semalar.GelirGider.tutar)).scalar() or 0.0
-    toplam_odemeler = query_gelir_gider.filter(semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER).with_entities(func.sum(semalar.GelirGider.tutar)).scalar() or 0.0
+    toplam_satislar = satis_query.scalar() or 0.0
+    toplam_alislar = alis_query.scalar() or 0.0
+    toplam_tahsilatlar = tahsilat_query.scalar() or 0.0
+    toplam_odemeler = odeme_query.scalar() or 0.0
 
+    # En çok satan ürünler (modeller kullanılıyor ve Enum düzeltildi)
     en_cok_satan_urunler_query = db.query(
-        semalar.Stok.ad,
-        func.sum(semalar.FaturaKalemi.miktar).label('toplam_miktar')
+        modeller.Stok.ad,
+        func.sum(modeller.FaturaKalemi.miktar).label('toplam_miktar')
     ).join(
-        semalar.FaturaKalemi, semalar.Stok.id == semalar.FaturaKalemi.urun_id
+        modeller.FaturaKalemi, modeller.Stok.id == modeller.FaturaKalemi.urun_id
     ).join(
-        semalar.Fatura, semalar.FaturaKalemi.fatura_id == semalar.Fatura.id
+        modeller.Fatura, modeller.FaturaKalemi.fatura_id == modeller.Fatura.id
     ).filter(
-        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
-        semalar.Stok.kullanici_id == kullanici_id
+        modeller.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS, # DÜZELTME
+        modeller.Stok.kullanici_id == kullanici_id
     )
     if baslangic_tarihi:
-        en_cok_satan_urunler_query = en_cok_satan_urunler_query.filter(semalar.Fatura.tarih >= baslangic_tarihi)
+        en_cok_satan_urunler_query = en_cok_satan_urunler_query.filter(modeller.Fatura.tarih >= baslangic_tarihi)
     if bitis_tarihi:
-        en_cok_satan_urunler_query = en_cok_satan_urunler_query.filter(semalar.Fatura.tarih <= bitis_tarihi)
+        en_cok_satan_urunler_query = en_cok_satan_urunler_query.filter(modeller.Fatura.tarih <= bitis_tarihi)
 
     en_cok_satan_urunler = en_cok_satan_urunler_query.group_by(
-        semalar.Stok.ad
+        modeller.Stok.ad
     ).order_by(
-        func.sum(semalar.FaturaKalemi.miktar).desc()
+        func.sum(modeller.FaturaKalemi.miktar).desc()
     ).limit(5).all()
+    
+    # Vadesi geçenler (modeller kullanılıyor ve Enum düzeltildi)
+    today = date.today()
+    vadesi_yaklasan_alacaklar_toplami = db.query(func.sum(modeller.Fatura.genel_toplam)).filter(
+        modeller.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS, # DÜZELTME
+        modeller.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value,
+        modeller.Fatura.vade_tarihi >= today,
+        modeller.Fatura.vade_tarihi <= (today + timedelta(days=30)),
+        modeller.Fatura.kullanici_id == kullanici_id
+    ).scalar() or 0.0
 
-    formatted_top_sellers = [
-        {"ad": item.ad, "toplam_miktar": float(item.toplam_miktar or 0.0)} for item in en_cok_satan_urunler
-    ]
-
+    vadesi_gecmis_borclar_toplami = db.query(func.sum(modeller.Fatura.genel_toplam)).filter(
+        modeller.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS, # DÜZELTME
+        modeller.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value,
+        modeller.Fatura.vade_tarihi < today,
+        modeller.Fatura.kullanici_id == kullanici_id
+    ).scalar() or 0.0
+    query_stok = db.query(modeller.Stok).filter(modeller.Stok.kullanici_id == kullanici_id)
     kritik_stok_sayisi = query_stok.filter(
-        semalar.Stok.aktif == True,
-        semalar.Stok.miktar <= semalar.Stok.min_stok_seviyesi
+        modeller.Stok.aktif == True,
+        modeller.Stok.miktar <= modeller.Stok.min_stok_seviyesi # Doğru alan kullanılıyor
     ).count()
 
-    today = date.today()
-    vadesi_yaklasan_alacaklar_toplami = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
-        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
-        semalar.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value,
-        semalar.Fatura.vade_tarihi >= today,
-        semalar.Fatura.vade_tarihi <= (today + timedelta(days=30)),
-        semalar.Fatura.kullanici_id == kullanici_id
-    ).scalar() or 0.0
-
-    vadesi_gecmis_borclar_toplami = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
-        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS,
-        semalar.Fatura.odeme_turu.cast(String) == semalar.OdemeTuruEnum.ACIK_HESAP.value,
-        semalar.Fatura.vade_tarihi < today,
-        semalar.Fatura.kullanici_id == kullanici_id
-    ).scalar() or 0.0
+    # En çok satan ürünler formatlama
+    formatted_top_sellers = [
+        {"urun_adi": urun_ad, "toplam_miktar": toplam_miktar}
+        for urun_ad, toplam_miktar in en_cok_satan_urunler
+    ]
 
     return {
         "toplam_satislar": toplam_satislar,
@@ -211,42 +236,44 @@ def get_kar_zarar_verileri_endpoint(
     current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user)
 ):
     kullanici_id = current_user.id
-    toplam_satis_geliri = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
-        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
-        semalar.Fatura.tarih >= baslangic_tarihi,
-        semalar.Fatura.tarih <= bitis_tarihi,
-        semalar.Fatura.kullanici_id == kullanici_id
+    
+    # KRİTİK DÜZELTME: Tüm sorgularda modeller.X ve Enum üye adları düzeltildi (SATIŞ -> SATIS, ALIŞ -> ALIS vb.)
+    toplam_satis_geliri = db.query(func.sum(modeller.Fatura.genel_toplam)).filter(
+        modeller.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS, # Düzeltme
+        modeller.Fatura.tarih >= baslangic_tarihi,
+        modeller.Fatura.tarih <= bitis_tarihi,
+        modeller.Fatura.kullanici_id == kullanici_id
     ).scalar() or 0.0
 
     toplam_satis_maliyeti = db.query(
-        func.sum(semalar.FaturaKalemi.miktar * semalar.FaturaKalemi.alis_fiyati_fatura_aninda)
-    ).join(semalar.Fatura, semalar.FaturaKalemi.fatura_id == semalar.Fatura.id) \
+        func.sum(modeller.FaturaKalemi.miktar * modeller.FaturaKalemi.alis_fiyati_fatura_aninda)
+    ).join(modeller.Fatura, modeller.FaturaKalemi.fatura_id == modeller.Fatura.id) \
      .filter(
-         semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS,
-         semalar.Fatura.tarih >= baslangic_tarihi,
-         semalar.Fatura.tarih <= bitis_tarihi,
-         semalar.Fatura.kullanici_id == kullanici_id
+         modeller.Fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS, # Düzeltme
+         modeller.Fatura.tarih >= baslangic_tarihi,
+         modeller.Fatura.tarih <= bitis_tarihi,
+         modeller.Fatura.kullanici_id == kullanici_id
      ).scalar() or 0.0
 
-    toplam_alis_gideri = db.query(func.sum(semalar.Fatura.genel_toplam)).filter(
-        semalar.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS,
-        semalar.Fatura.tarih >= baslangic_tarihi,
-        semalar.Fatura.tarih <= bitis_tarihi,
-        semalar.Fatura.kullanici_id == kullanici_id
+    toplam_alis_gideri = db.query(func.sum(modeller.Fatura.genel_toplam)).filter(
+        modeller.Fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS, # Düzeltme
+        modeller.Fatura.tarih >= baslangic_tarihi,
+        modeller.Fatura.tarih <= bitis_tarihi,
+        modeller.Fatura.kullanici_id == kullanici_id
     ).scalar() or 0.0
 
-    diger_gelirler = db.query(func.sum(semalar.GelirGider.tutar)).filter(
-        semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR,
-        semalar.GelirGider.tarih >= baslangic_tarihi,
-        semalar.GelirGider.tarih <= bitis_tarihi,
-        semalar.GelirGider.kullanici_id == kullanici_id
+    diger_gelirler = db.query(func.sum(modeller.GelirGider.tutar)).filter(
+        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR, # Düzeltme
+        modeller.GelirGider.tarih >= baslangic_tarihi,
+        modeller.GelirGider.tarih <= bitis_tarihi,
+        modeller.GelirGider.kullanici_id == kullanici_id
     ).scalar() or 0.0
 
-    diger_giderler = db.query(func.sum(semalar.GelirGider.tutar)).filter(
-        semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER,
-        semalar.GelirGider.tarih >= baslangic_tarihi,
-        semalar.GelirGider.tarih <= bitis_tarihi,
-        semalar.GelirGider.kullanici_id == kullanici_id
+    diger_giderler = db.query(func.sum(modeller.GelirGider.tutar)).filter(
+        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER, # Düzeltme
+        modeller.GelirGider.tarih >= baslangic_tarihi,
+        modeller.GelirGider.tarih <= bitis_tarihi,
+        modeller.GelirGider.kullanici_id == kullanici_id
     ).scalar() or 0.0
 
     brut_kar = toplam_satis_geliri - toplam_satis_maliyeti

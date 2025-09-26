@@ -70,6 +70,14 @@ class SirketListResponse(BaseModel): # <-- BU MODEL YENİDEN EKLENDİ
     items: List[SirketRead]
     total: int
 
+class Ayarlar(Base):
+    __tablename__ = 'ayarlar'
+    id = Column(Integer, primary_key=True, index=True)
+    ad = Column(String(100), unique=True, index=True, nullable=False) # Örneğin: 'access_token'
+    deger = Column(Text, nullable=True) # Token değerini tutar
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True) # Genel ayarlar için None, kullanıcıya özel ayarlar için ID
+
+    kullanici = relationship("Kullanici", backref=backref("ayarlar", cascade="all, delete-orphan"))
 
 # Kullanıcı Modelleri
 class KullaniciBase(BaseOrmModel):

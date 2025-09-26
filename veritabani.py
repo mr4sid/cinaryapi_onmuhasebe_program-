@@ -101,6 +101,7 @@ class OnMuhasebe:
             raise
 
         self.check_online_status()
+        self._load_access_token()
 
     def verify_password(self, plain_password, hashed_password):
         """
@@ -220,8 +221,14 @@ class OnMuhasebe:
                 if response_data and "access_token" in response_data and "token_type" in response_data:
                     self.access_token = response_data["access_token"]
                     self.token_type = response_data["token_type"]
-                    # NOT: self.session header'ı artık _make_api_request içinde kuruluyor.
-
+                    
+                    # KRİTİK DÜZELTME: Token'ı kalıcı olarak kaydet
+                    # (lokal_db_servisi'nizde ayarlari_kaydet metodunun var olduğunu varsayıyoruz)
+                    self.lokal_db.ayarlari_kaydet({
+                        "access_token": self.access_token, 
+                        "token_type": self.token_type
+                    }) 
+                    
                     # Token'ı kullanarak kullanıcı bilgilerini çekiyoruz
                     user_info = self._get_current_user()
                     if user_info:
@@ -262,8 +269,7 @@ class OnMuhasebe:
                 ).first()
 
                 if user_data:
-                    # Şifre hash ile doğrulanıyor
-                    if verify_password(sifre, user_data.hashed_sifre):
+                    if verify_password(sifre, user_data.sifre_hash): 
                         logging.info("Yerel veritabanı üzerinden kullanıcı başarıyla doğrulandı.")
                         return True, {"id": user_data.id, "kullanici_adi": user_data.kullanici_adi}
                     else:
@@ -857,7 +863,7 @@ class OnMuhasebe:
 
         if self.is_online:
             try:
-                response = self._make_api_request("GET", "/faturalar/", params=cleaned_params)
+                response = self._make_api_request("GET", "/faturalar", params=cleaned_params)
                 if response is not None:
                     return response
             except Exception as e:
@@ -1978,3 +1984,16 @@ class OnMuhasebe:
             return True, response.text
         except Exception as e:
             return False, f"API bağlantıları kapatılırken hata: {e}"
+        
+    def _load_access_token(self):
+        """Yerel veritabanından access token'ı yükler."""
+        try:
+            # Buradaki metod adlarını kendi lokal_db_servisi'nizdeki karşılıklarıyla doğrulayın
+            ayarlar = self.lokal_db.ayarlari_yukle() 
+            self.access_token = ayarlar.get("access_token")
+            self.token_type = ayarlar.get("token_type")
+            if self.access_token:
+                logger.info("Kalıcı depolamadan access token başarıyla yüklendi.")
+        except Exception as e:
+            logger.warning(f"Access token yüklenirken hata oluştu: {e}")
+            pass
