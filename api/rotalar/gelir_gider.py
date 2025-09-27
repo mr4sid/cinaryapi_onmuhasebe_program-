@@ -26,7 +26,7 @@ def read_gelir_gider(
     query = db.query(semalar.GelirGider).filter(semalar.GelirGider.kullanici_id == current_user.id)
 
     if tip_filtre:
-        query = query.filter(semalar.GelirGider.tip == tip_filtre)
+        query = query.filter(modeller.GelirGider.tip == tip_filtre.value) 
     
     if baslangic_tarihi:
         query = query.filter(semalar.GelirGider.tarih >= baslangic_tarihi)

@@ -6182,7 +6182,6 @@ class BaseFinansalIslemSayfasi(QWidget):
 
         try:
             hareketler_response = self.db.cari_hareketleri_listele(
-                kullanici_id=self.app.current_user_id,
                 cari_id=cari_id,
                 limit=10
             )
@@ -6314,7 +6313,7 @@ class BaseFinansalIslemSayfasi(QWidget):
         if secilen_cari_id:
             cari_id_int = int(secilen_cari_id)
             if self.cari_tip == self.db.CARI_TIP_MUSTERI:
-                net_bakiye = self.db.get_musteri_net_bakiye(musteri_id=cari_id_int, kullanici_id=self.app.current_user_id)
+                net_bakiye = self.db.get_musteri_net_bakiye(musteri_id=cari_id_int) 
                 if net_bakiye is not None:
                     if net_bakiye > 0:
                         bakiye_text = f"Borç: {self.db._format_currency(net_bakiye)}"

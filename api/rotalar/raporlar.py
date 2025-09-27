@@ -37,11 +37,11 @@ def get_dashboard_ozet_endpoint(
 
     tahsilat_query = db.query(func.sum(modeller.GelirGider.tutar)).filter(
         modeller.GelirGider.kullanici_id == kullanici_id,
-        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR # DÜZELTME
+        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GELİR
     )
     odeme_query = db.query(func.sum(modeller.GelirGider.tutar)).filter(
         modeller.GelirGider.kullanici_id == kullanici_id,
-        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER # DÜZELTME
+        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GİDER # DÜZELTME
     )
 
     # Tarih filtreleri (modeller kullanılıyor)
@@ -263,14 +263,14 @@ def get_kar_zarar_verileri_endpoint(
     ).scalar() or 0.0
 
     diger_gelirler = db.query(func.sum(modeller.GelirGider.tutar)).filter(
-        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR, # Düzeltme
+        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GELİR, # Düzeltme
         modeller.GelirGider.tarih >= baslangic_tarihi,
         modeller.GelirGider.tarih <= bitis_tarihi,
         modeller.GelirGider.kullanici_id == kullanici_id
     ).scalar() or 0.0
 
     diger_giderler = db.query(func.sum(modeller.GelirGider.tutar)).filter(
-        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER, # Düzeltme
+        modeller.GelirGider.tip == semalar.GelirGiderTipEnum.GİDER, # Düzeltme
         modeller.GelirGider.tarih >= baslangic_tarihi,
         modeller.GelirGider.tarih <= bitis_tarihi,
         modeller.GelirGider.kullanici_id == kullanici_id
@@ -458,8 +458,8 @@ def get_gelir_gider_aylik_ozet_endpoint(
     kullanici_id = current_user.id
     gelir_gider_ozet = db.query(
         extract('month', semalar.GelirGider.tarih).label('ay'),
-        func.sum(case((semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GELIR, semalar.GelirGider.tutar), else_=0)).label('toplam_gelir'),
-        func.sum(case((semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GIDER, semalar.GelirGider.tutar), else_=0)).label('toplam_gider')
+        func.sum(case((semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GELİR, semalar.GelirGider.tutar), else_=0)).label('toplam_gelir'),
+        func.sum(case((semalar.GelirGider.tip == semalar.GelirGiderTipEnum.GİDER, semalar.GelirGider.tutar), else_=0)).label('toplam_gider')
     ).filter(
         extract('year', semalar.GelirGider.tarih) == yil,
         semalar.GelirGider.kullanici_id == kullanici_id

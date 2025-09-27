@@ -587,12 +587,12 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
         logger.error(f"Fatura oluşturulurken hata: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Fatura oluşturulurken hata: {e}")
     
-@faturalar_router.get("/", response_model=modeller.FaturaListResponse)
-@faturalar_router.get("", response_model=modeller.FaturaListResponse) 
+@faturalar_router.get("/", response_model=modeller.FaturaListResponse) 
+@faturalar_router.get("", response_model=modeller.FaturaListResponse)
 def read_faturalar(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000000),
-    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # JWT Devri
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user),
     arama: str = Query(None, min_length=1, max_length=50),
     fatura_turu: Optional[semalar.FaturaTuruEnum] = Query(None),
     baslangic_tarihi: date = Query(None),
@@ -604,7 +604,6 @@ def read_faturalar(
 ):
     kullanici_id = current_user.id 
 
-    # DÜZELTME: Tüm sorgularda modeller kullanıldı (semalar yerine modeller)
     query = db.query(modeller.Fatura).filter(modeller.Fatura.kullanici_id == kullanici_id) \
                                    .join(modeller.Musteri, modeller.Fatura.cari_id == modeller.Musteri.id, isouter=True) \
                                    .join(modeller.Tedarikci, modeller.Fatura.cari_id == modeller.Tedarikci.id, isouter=True)

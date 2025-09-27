@@ -20,8 +20,9 @@ from .rotalar import (
     dogrulama, musteriler, tedarikciler, stoklar,
     kasalar_bankalar, cari_hareketler,
     gelir_gider, nitelikler, sistem, raporlar, yedekleme, kullanicilar,
-    siparis_faturalar, yonetici
+    yonetici
 )
+from .rotalar.siparis_faturalar import siparisler_router, faturalar_router 
 
 # Loglama ayarları
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -109,7 +110,8 @@ app.include_router(sistem.router, tags=["Sistem"])
 app.include_router(raporlar.router, tags=["Raporlar"])
 app.include_router(yedekleme.router, tags=["Yedekleme"])
 app.include_router(yonetici.router, tags=["Yönetici"])
-app.include_router(siparis_faturalar.router, tags=["Siparişler ve Faturalar"])
+app.include_router(siparisler_router, tags=["Siparişler"])
+app.include_router(faturalar_router, tags=["Faturalar"])
 
 @app.get("/")
 def read_root():

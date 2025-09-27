@@ -1,14 +1,21 @@
+# api/rotalar/sistem.py dosyasının TAMAMI
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .. import modeller, semalar
 from ..veritabani import get_db, reset_db_connection
+from .. import guvenlik # KRİTİK: guvenlik modülü eklendi
 
 router = APIRouter(prefix="/sistem", tags=["Sistem"])
 
 @router.get("/varsayilan_cariler/perakende_musteri_id", response_model=modeller.DefaultIdResponse)
-def get_perakende_musteri_id_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+def get_perakende_musteri_id_endpoint(
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    db: Session = Depends(get_db)
+):
+    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
     musteri = db.query(semalar.Musteri).filter(semalar.Musteri.kod == "PERAKENDE_MUSTERI", semalar.Musteri.kullanici_id == kullanici_id).first()
     if not musteri:
         musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == 1, semalar.Musteri.kullanici_id == kullanici_id).first()
@@ -20,7 +27,11 @@ def get_perakende_musteri_id_endpoint(kullanici_id: int = Query(..., description
     return {"id": musteri.id}
 
 @router.get("/varsayilan_cariler/genel_tedarikci_id", response_model=modeller.DefaultIdResponse)
-def get_genel_tedarikci_id_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+def get_genel_tedarikci_id_endpoint(
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    db: Session = Depends(get_db)
+):
+    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
     tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.kod == "GENEL_TEDARIKCI", semalar.Tedarikci.kullanici_id == kullanici_id).first()
     if not tedarikci:
         tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == 1, semalar.Tedarikci.kullanici_id == kullanici_id).first()
@@ -32,7 +43,12 @@ def get_genel_tedarikci_id_endpoint(kullanici_id: int = Query(..., description="
     return {"id": tedarikci.id}
 
 @router.get("/varsayilan_kasa_banka/{odeme_turu}", response_model=modeller.KasaBankaRead)
-def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+def get_varsayilan_kasa_banka_endpoint(
+    odeme_turu: str, 
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # JWT'den user ID geliyor
+    db: Session = Depends(get_db)
+):
+    kullanici_id = current_user.id 
     hesap_tipi = None
     if odeme_turu.upper() == "NAKİT":
         hesap_tipi = semalar.KasaBankaTipiEnum.KASA
@@ -45,9 +61,10 @@ def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, kullanici_id: int = Quer
         )
 
     varsayilan_kod = f"VARSAYILAN_{hesap_tipi.value}_{kullanici_id}"
-    hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.kod == varsayilan_kod, semalar.KasaBanka.kullanici_id == kullanici_id).first()
+    
+    hesap = db.query(modeller.KasaBankaHesap).filter(modeller.KasaBankaHesap.kod == varsayilan_kod, modeller.KasaBankaHesap.kullanici_id == kullanici_id).first()
     if not hesap:
-        hesap = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.tip == hesap_tipi, semalar.KasaBanka.kullanici_id == kullanici_id).first()
+        hesap = db.query(modeller.KasaBankaHesap).filter(modeller.KasaBankaHesap.tip == hesap_tipi, modeller.KasaBankaHesap.kullanici_id == kullanici_id).first()
     if not hesap:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -56,7 +73,11 @@ def get_varsayilan_kasa_banka_endpoint(odeme_turu: str, kullanici_id: int = Quer
     return hesap
 
 @router.get("/bilgiler", response_model=modeller.SirketRead)
-def get_sirket_bilgileri_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+def get_sirket_bilgileri_endpoint(
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    db: Session = Depends(get_db)
+):
+    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
     sirket_bilgisi = db.query(semalar.Sirket).filter(semalar.Sirket.kullanici_id == kullanici_id).first()
     if not sirket_bilgisi:
         raise HTTPException(
@@ -66,7 +87,12 @@ def get_sirket_bilgileri_endpoint(kullanici_id: int = Query(..., description="Ku
     return sirket_bilgisi
 
 @router.put("/bilgiler", response_model=modeller.SirketRead)
-def update_sirket_bilgileri_endpoint(sirket_update: modeller.SirketCreate, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+def update_sirket_bilgileri_endpoint(
+    sirket_update: modeller.SirketCreate, 
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    db: Session = Depends(get_db)
+):
+    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
     sirket_bilgisi = db.query(semalar.Sirket).filter(semalar.Sirket.kullanici_id == kullanici_id).first()
     if not sirket_bilgisi:
         sirket_update.kullanici_id = kullanici_id
@@ -81,7 +107,12 @@ def update_sirket_bilgileri_endpoint(sirket_update: modeller.SirketCreate, kulla
     return sirket_bilgisi
 
 @router.get("/next_fatura_number/{fatura_turu}", response_model=modeller.NextFaturaNoResponse)
-def get_next_fatura_number_endpoint(fatura_turu: str, kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+def get_next_fatura_number_endpoint(
+    fatura_turu: str, 
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    db: Session = Depends(get_db)
+):
+    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
     last_fatura = db.query(semalar.Fatura).filter(semalar.Fatura.fatura_turu == fatura_turu.upper(), semalar.Fatura.kullanici_id == kullanici_id) \
                                        .order_by(semalar.Fatura.fatura_no.desc()).first()
 
@@ -106,7 +137,11 @@ def get_next_fatura_number_endpoint(fatura_turu: str, kullanici_id: int = Query(
     return {"fatura_no": next_fatura_no}
 
 @router.get("/next_musteri_code", response_model=dict)
-def get_next_musteri_code_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+def get_next_musteri_code_endpoint(
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    db: Session = Depends(get_db)
+):
+    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
     last_musteri = db.query(semalar.Musteri).filter(semalar.Musteri.kullanici_id == kullanici_id).order_by(semalar.Musteri.kod.desc()).first()
 
     prefix = "M"
@@ -123,7 +158,11 @@ def get_next_musteri_code_endpoint(kullanici_id: int = Query(..., description="K
     return {"next_code": next_musteri_code}
 
 @router.get("/next_tedarikci_code", response_model=dict)
-def get_next_tedarikci_code_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+def get_next_tedarikci_code_endpoint(
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    db: Session = Depends(get_db)
+):
+    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
     last_tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.kullanici_id == kullanici_id).order_by(semalar.Tedarikci.kod.desc()).first()
 
     prefix = "T"
@@ -140,7 +179,11 @@ def get_next_tedarikci_code_endpoint(kullanici_id: int = Query(..., description=
     return {"next_code": next_tedarikci_code}
 
 @router.get("/next_stok_code", response_model=dict)
-def get_next_stok_code_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+def get_next_stok_code_endpoint(
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    db: Session = Depends(get_db)
+):
+    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
     last_stok = db.query(semalar.Stok).filter(semalar.Stok.kullanici_id == kullanici_id).order_by(semalar.Stok.kod.desc()).first()
 
     prefix = "STK"
@@ -157,7 +200,11 @@ def get_next_stok_code_endpoint(kullanici_id: int = Query(..., description="Kull
     return {"next_code": next_stok_code}
 
 @router.get("/next_siparis_kodu", response_model=modeller.NextSiparisKoduResponse)
-def get_next_siparis_kodu_endpoint(kullanici_id: int = Query(..., description="Kullanıcı ID"), db: Session = Depends(get_db)):
+def get_next_siparis_kodu_endpoint(
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    db: Session = Depends(get_db)
+):
+    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
     son_siparis = db.query(semalar.Siparis).filter(semalar.Siparis.kullanici_id == kullanici_id).order_by(semalar.Siparis.id.desc()).first()
     
     prefix = "S-"

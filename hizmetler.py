@@ -317,19 +317,21 @@ class LokalVeritabaniServisi:
         finally:
             db.close()
 
-    def senkronize_veriler(self, sunucu_adresi: str, access_token: Optional[str] = None):
+    def senkronize_veriler(self, sunucu_adresi: str, access_token: Optional[str] = None, current_user_id: Optional[int] = None):
         """
         Yerel verileri sunucudan senkronize eder.
-        DÜZELTME: API isteklerine Authorization header'ı eklenmiştir.
+        KRİTİK DÜZELTME: current_user_id parametresi eklendi ve veriye atandı.
         """
         if not sunucu_adresi:
             return False, "Sunucu adresi belirtilmedi. Senkronizasyon atlandı."
         if not access_token:
             print("JWT Token mevcut değil. Senkronizasyon atlandı.")
             return False, "JWT Token mevcut değil. Lütfen önce giriş yapın."
+        if current_user_id is None: # Kullanıcı ID'si yoksa senkronizasyon başarısız olur.
+             return False, "Kullanıcı ID'si mevcut değil. Senkronizasyon atlandı."
 
         lokal_db = None
-        api_headers = {"Authorization": f"Bearer {access_token}"} # Token'ı header olarak tanımla
+        api_headers = {"Authorization": f"Bearer {access_token}"}
         
         try:
             lokal_db = self.get_db()
@@ -382,6 +384,10 @@ class LokalVeritabaniServisi:
             }
 
             for endpoint, model in endpoints.items():
+                # Fatura/Sipariş Kalemleri gibi alt öğeler listenmez.
+                if endpoint.endswith('kalemleri'):
+                    continue 
+
                 response = requests.get(f"{sunucu_adresi}/{endpoint}", params={"limit": 999999}, headers=api_headers)
                 response.raise_for_status()
                 response_data = response.json()
@@ -394,6 +400,9 @@ class LokalVeritabaniServisi:
 
                 for item_data in server_data:
                     item_data = _convert_dates(item_data, date_fields.get(endpoint.split('/')[-1], []), datetime_fields.get(endpoint.split('/')[-1], []))
+                    
+                    if "kullanici_id" in model.__table__.columns.keys():
+                        item_data['kullanici_id'] = current_user_id
 
                     existing_item = lokal_db.query(model).filter_by(id=item_data["id"]).first()
 

@@ -75,8 +75,8 @@ class KaynakTipEnum(str, enum.Enum):
 
 # YENİ EKLENEN ENUM: Gelir/Gider tipi için özel enum
 class GelirGiderTipEnum(str, enum.Enum):
-    GELIR = "GELİR"
-    GIDER = "GİDER"
+    GELİR = "GELİR" 
+    GİDER = "GİDER"
 
 # Tablo Modelleri
 class Sirket(Base):

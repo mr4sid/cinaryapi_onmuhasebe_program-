@@ -150,10 +150,10 @@ class OnMuhasebe:
         if headers:
             api_headers.update(headers)
 
-        # GÜVENLİK FİXİ: URL'ye kullanici_id parametresini ekleyen blok TAMAMEN KALDIRILDI.
         if params is None:
             params = {}
         
+        # KRİTİK TEMİZLİK: URL manipülasyon mantığı KALDIRILDI. Endpoint olduğu gibi kullanılır.
         url = f"{self.api_base_url}{endpoint}"
         try:
             # POST veya PUT istekleri için 'data' parametresini 'json' olarak gönder.
@@ -863,7 +863,7 @@ class OnMuhasebe:
 
         if self.is_online:
             try:
-                response = self._make_api_request("GET", "/faturalar", params=cleaned_params)
+                response = self._make_api_request("GET", "/faturalar/", params=cleaned_params)
                 if response is not None:
                     return response
             except Exception as e:
@@ -879,15 +879,14 @@ class OnMuhasebe:
         lokal_faturalar = self.lokal_db.listele(model_adi="Fatura", filtre=filtre)
         return {"items": lokal_faturalar, "total": len(lokal_faturalar)}
                 
-    def fatura_getir_by_id(self, fatura_id: int, kullanici_id: int):
+    def fatura_getir_by_id(self, fatura_id: int):
         try:
-            return self._make_api_request("GET", f"/faturalar/{fatura_id}", params={"kullanici_id": kullanici_id})
+            return self._make_api_request("GET", f"/faturalar/{fatura_id}")
         except (ValueError, ConnectionError, Exception) as e:
             logger.error(f"Fatura ID {fatura_id} çekilirken hata: {e}")
             return None
 
-    def fatura_guncelle(self, fatura_id: int, data: dict, kullanici_id: int):
-        data['kullanici_id'] = kullanici_id
+    def fatura_guncelle(self, fatura_id: int, data: dict):
         try:
             return self._make_api_request("PUT", f"/faturalar/{fatura_id}", json=data)
         except (ValueError, ConnectionError, Exception) as e:
@@ -1045,14 +1044,19 @@ class OnMuhasebe:
     def gelir_gider_listesi_al(self, skip: int = 0, limit: int = 20, tip_filtre: str = None,
                             baslangic_tarihi: str = None, bitis_tarihi: str = None,
                             aciklama_filtre: str = None):
-        """Gelir/Gider listesini çeker. (kullanici_id kaldırıldı)"""
-        # DÜZELTME: kullanici_id imzadan kaldırıldı.
+        """Gelir/Gider listesini çeker."""
         params = {"skip": skip, "limit": limit, "tip_filtre": tip_filtre, "baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "aciklama_filtre": aciklama_filtre}
         cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
 
         if self.is_online:
             try:
-                # API çağrısından kullanici_id kaldırıldı.
+                # KRİTİK DÜZELTME: API'ye göndermeden önce tip_filtre değerini Latin karaktere çeviriyoruz.
+                if 'tip_filtre' in cleaned_params:
+                    if cleaned_params['tip_filtre'] == 'GELİR':
+                        cleaned_params['tip_filtre'] = 'GELIR'
+                    elif cleaned_params['tip_filtre'] == 'GİDER':
+                        cleaned_params['tip_filtre'] = 'GIDER'
+                        
                 response = self._make_api_request("GET", "/gelir_gider/", params=cleaned_params)
                 if response is not None:
                     return response
@@ -1942,10 +1946,12 @@ class OnMuhasebe:
     def senkronize_veriler_lokal_db_icin(self, kullanici_id: int):
         """
         Lokal veritabanı senkronizasyonunu başlatmak için bir aracı metot.
+        KRİTİK DÜZELTME: current_user_id parametresi servise geçirildi.
         """
         return lokal_db_servisi.senkronize_veriler(
             self.api_base_url, 
-            access_token=self.access_token
+            access_token=self.access_token,
+            current_user_id=self.current_user_id 
         )
     
     def _close_local_db_connections(self):

@@ -949,32 +949,33 @@ class Tedarikci(Base):
     __tablename__ = 'tedarikciler'
     id = Column(Integer, primary_key=True, index=True)
     ad = Column(String(100), index=True)
-    kod = Column(String(50), unique=True, index=True, nullable=False)
+    kod = Column(String(50), unique=True, index=True, nullable=False) 
     adres = Column(String(255))
     telefon = Column(String(20))
     email = Column(String(100))
     vergi_dairesi = Column(String(100))
     vergi_no = Column(String(20))
     aktif = Column(Boolean, default=True)
-    olusturma_tarihi = Column(DateTime, server_default=func.now()) # YENİ EKLENEN SATIR
+    olusturma_tarihi = Column(DateTime, server_default=func.now()) 
     kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
 
     kullanici = relationship("Kullanici", back_populates="tedarikciler")
     
+    # KRİTİK DÜZELTME: Tüm çakışmaların listesi eklendi.
     faturalar = relationship("Fatura",
-                             primaryjoin="and_(foreign(Fatura.cari_id) == Tedarikci.id, Fatura.fatura_turu.in_(['ALIŞ', 'ALIS_IADE', 'DEVIR_GIRIS']))",
+                             primaryjoin="and_(foreign(Fatura.cari_id) == Tedarikci.id, Fatura.cari_tip == 'TEDARIKCI')", 
                              back_populates="tedarikci",
-                             overlaps="faturalar")
+                             overlaps="faturalar, musteri") 
                              
     cari_hareketler = relationship("CariHareket",
                                   primaryjoin="and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_tip=='TEDARIKCI')",
                                   back_populates="tedarikci",
-                                  overlaps="cari_hareketler")
+                                  overlaps="cari_hareketler, musteri") 
                                   
     siparisler = relationship("Siparis",
-                              primaryjoin="and_(foreign(Siparis.cari_id) == Tedarikci.id, Siparis.siparis_turu=='ALIŞ')",
+                              primaryjoin="and_(foreign(Siparis.cari_id) == Tedarikci.id, Siparis.cari_tip=='TEDARIKCI')",
                               back_populates="tedarikci",
-                              overlaps="siparisler")
+                              overlaps="siparisler, musteri")
 
 class Stok(Base):
     __tablename__ = 'stoklar'
@@ -1098,10 +1099,10 @@ class Siparis(Base):
                            primaryjoin="and_(foreign(Siparis.cari_id) == Musteri.id, Siparis.cari_tip == 'MUSTERI')",
                            overlaps="siparisler, kalemler")
 
-    # DÜZELTİLDİ: foreign() anotasyonu eklendi
+    # GÜNCELLEME: overlaps="siparisler, kalemler, musteri" eklendi
     tedarikci = relationship("Tedarikci", 
                              primaryjoin="and_(foreign(Siparis.cari_id) == Tedarikci.id, Siparis.cari_tip == 'TEDARIKCI')",
-                             overlaps="siparisler, kalemler")
+                             overlaps="siparisler, kalemler, musteri") 
  
 class CariHareket(Base):
     __tablename__ = 'cari_hareketler'
@@ -1128,10 +1129,10 @@ class CariHareket(Base):
                           primaryjoin="and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_tip == 'MUSTERI')",
                           overlaps="cari_hareketler") 
                           
-    # DÜZELTİLDİ: primaryjoin ve foreign() anotasyonu eklendi
+    # GÜNCELLEME: overlaps="cari_hareketler, musteri" eklendi
     tedarikci = relationship("Tedarikci",
                              primaryjoin="and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_tip == 'TEDARIKCI')",
-                             overlaps="cari_hareketler")
+                             overlaps="cari_hareketler, musteri")
 
 class UrunKategori(Base):
     __tablename__ = 'urun_kategorileri'
@@ -1221,6 +1222,7 @@ class KasaBankaHesap(Base):
     __tablename__ = 'kasalar_bankalar'
     id = Column(Integer, primary_key=True, index=True)
     hesap_adi = Column(String(100), unique=True, index=True, nullable=False)
+    kod = Column(String(50), nullable=True, unique=True, index=True) # KRİTİK DÜZELTME: Bu kolonun varlığından emin olmalıyız.
     tip = Column(Enum(KasaBankaTipiEnum), nullable=False)
     aktif = Column(Boolean, default=True)
     bakiye = Column(Float, default=0.0)
