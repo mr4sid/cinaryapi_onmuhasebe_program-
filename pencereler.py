@@ -131,10 +131,9 @@ class CariHesapEkstresiPenceresi(QDialog):
         self.cari_tip = cari_tip
         self.cari_ad_gosterim = pencere_basligi
         self.parent_list_refresh_func = parent_list_refresh_func
+        self.current_user_id = self.app.current_user.get("id") if self.app and hasattr(self.app, 'current_user') else None        
         self.hareket_detay_map = {}
         self.kasa_banka_map = {}
-        # DÜZELTME: Kullanıcı ID'sini başlangıçta alıyoruz
-        self.current_user_id = self.app.current_user[0] if self.app and hasattr(self.app, 'current_user') else None
 
         self.setWindowTitle(f"Cari Hesap Ekstresi: {self.cari_ad_gosterim}")
         self.setWindowState(Qt.WindowMaximized)
@@ -768,7 +767,6 @@ class CariHesapEkstresiPenceresi(QDialog):
             if self.cari_tip == "MUSTERI":
                 cari_data = self.db.musteri_getir_by_id(self.cari_id)
                 if cari_data:
-                    from pencereler import YeniMusteriEklePenceresi
                     dialog = YeniMusteriEklePenceresi(self, self.db, self._ozet_ve_liste_yenile, musteri_duzenle=cari_data, app_ref=self.app)
                     dialog.exec()
                 else:
@@ -1808,12 +1806,16 @@ class YeniMusteriEklePenceresi(QDialog):
         self.iptal_button.clicked.connect(self.reject)
         button_layout.addWidget(self.iptal_button)
         
-        self.entries["entry_ad"].setFocus()
         if self.musteri_duzenle_id:
             self._mevcut_musteriyi_yukle()
         else:
+            # Yeni müşteri: Formu sıfırla ve kodu üret (Hata veren akış düzeltildi)
             self._formu_sifirla()
-            self._oto_kod_uret(self.db.get_next_musteri_kodu())
+            kullanici_id = self.app.current_user.get("id") # ID'yi al
+            
+            # Hata veren doğrudan çağrıyı ID parametresi ile düzelt
+            yeni_kod = self.db.get_next_musteri_kodu(kullanici_id=kullanici_id)
+            self._oto_kod_uret(yeni_kod) 
 
     def _oto_kod_uret(self, yeni_kod):
         """Yeni cari kodu oluşturur ve forma yazar."""
@@ -1829,6 +1831,23 @@ class YeniMusteriEklePenceresi(QDialog):
             self.entries["entry_adres"].setPlainText(self.musteri_duzenle_data.get('adres', ''))
             self.entries["entry_vd"].setText(self.musteri_duzenle_data.get('vergi_dairesi', ''))
             self.entries["entry_vn"].setText(self.musteri_duzenle_data.get('vergi_no', ''))
+            self.entries["entry_kod"].setReadOnly(True)
+
+    def _verileri_yukle(self):
+        """
+        Müşteri verilerini forma yükler (düzenleme modu) VEYA yeni kod üretir (yeni ekleme modu).
+        [KRİTİK DÜZELTME 1: Yeni müşteriler için _mevcut_musteriyi_yukle çağrısı _verileri_yukle ile değiştirildi.]
+        """
+        kullanici_id = self.app.current_user.get("id")
+        
+        if self.musteri_duzenle_data:
+            # Düzenleme modu: Mevcut veriyi yükle (bu zaten doğru çalışıyordu)
+            self._mevcut_musteriyi_yukle() 
+        else:
+            # Yeni ekleme modu: Kodu üret ve ata
+            self._formu_sifirla()
+            generated_code = self.db.get_next_musteri_kodu(kullanici_id=kullanici_id)
+            self._oto_kod_uret(generated_code) 
             self.entries["entry_kod"].setReadOnly(True)
 
     def _formu_sifirla(self):
@@ -3617,8 +3636,11 @@ class StokKartiPenceresi(QDialog):
         # Alt Sekmeler
         self.bottom_tab_widget = QTabWidget(self)
         self.layout().addWidget(self.bottom_tab_widget)
-        from arayuz import StokHareketiSekmesi, IlgiliFaturalarSekmesi
-        self.stok_hareketleri_sekmesi = StokHareketiSekmesi(
+        
+        # KRİTİK DÜZELTME: Hatalı 'StokHareketiSekmesi' adı, doğru olan 'StokHareketleriSekmesi' ile düzeltildi.
+        from arayuz import StokHareketleriSekmesi, IlgiliFaturalarSekmesi 
+        
+        self.stok_hareketleri_sekmesi = StokHareketleriSekmesi(
             self.bottom_tab_widget, self.db, self.stok_id,
             self.urun_duzenle.get('ad', '-') if self.urun_duzenle else '',
             self.app)
@@ -3776,11 +3798,17 @@ class StokKartiPenceresi(QDialog):
 
     def _load_combobox_data(self):
         try:
+            kullanici_id = self.app.current_user.get("id")
+            if kullanici_id is None:
+                raise Exception("Kullanıcı ID'si alınamadı. Lütfen tekrar giriş yapın.")
+                
             kategoriler_response = self.db.kategori_listele()
             markalar_response = self.db.marka_listele()
             urun_gruplari_response = self.db.urun_grubu_listele()
-            urun_birimleri_response = self.db.urun_birimi_listele()
-            ulkeler_response = self.db.ulke_listele()
+            
+            urun_birimleri_response = self.db.urun_birimi_listele(kullanici_id=kullanici_id)
+            
+            ulkeler_response = self.db.ulke_listele(kullanici_id=kullanici_id)
             
             # API'den gelen yanıtın sözlük veya liste olabileceğini kontrol et
             kategoriler = kategoriler_response.get("items", []) if isinstance(kategoriler_response, dict) else kategoriler_response
@@ -3989,11 +4017,16 @@ class StokKartiPenceresi(QDialog):
             "mense_id": mense_id,
             "urun_resmi_yolu": self.yeni_urun_resmi_yolu if self.yeni_urun_resmi_yolu else self.mevcut_urun_resmi_yolu
         }
+        
+        # KRİTİK DÜZELTME: API'nin zorunlu tuttuğu kullanici_id'yi request body'ye (urun_data) ekle
+        urun_data["kullanici_id"] = self.app.current_user.get("id")
 
         try:
             if self.duzenleme_modu and self.stok_id:
+                # Stok güncelleme işlemi
                 success, message = self.db.stok_guncelle(self.stok_id, urun_data)
             else:
+                # Yeni stok ekleme işlemi
                 success, message = self.db.stok_ekle(urun_data)
 
             if success:
@@ -4219,7 +4252,9 @@ class YeniTedarikciEklePenceresi(QDialog):
         self._verileri_yukle()
 
     def _verileri_yukle(self):
-        """Mevcut tedarikçi verilerini düzenleme modunda forma yükler."""
+        """Mevcut tedarikçi verilerini düzenleme modunda forma yükler ve yeni kod üretir."""
+        kullanici_id = self.app.current_user.get("id")
+        
         if self.tedarikci_duzenle_data:
             self.entries["entry_kod"].setText(self.tedarikci_duzenle_data.get('kod', ''))
             self.entries["entry_ad"].setText(self.tedarikci_duzenle_data.get('ad', ''))
@@ -4229,7 +4264,7 @@ class YeniTedarikciEklePenceresi(QDialog):
             self.entries["entry_vn"].setText(self.tedarikci_duzenle_data.get('vergi_no', ''))
             self.entries["entry_kod"].setReadOnly(True)
         else:
-            generated_code = self.db.get_next_tedarikci_kodu()
+            generated_code = self.db.get_next_tedarikci_kodu(kullanici_id=kullanici_id)
             self.entries["entry_kod"].setText(generated_code)
             self.entries["entry_kod"].setReadOnly(True)
 

@@ -236,3 +236,42 @@ def get_sistem_status(db: Session = Depends(get_db)):
 async def veritabani_baglantilarini_kapat():
     reset_db_connection()
     return PlainTextResponse("Veritabanı bağlantıları başarıyla kapatıldı.")
+
+@router.get("/next_fatura_no", response_model=modeller.NextCodeResponse)
+def get_next_fatura_no_endpoint(
+    fatura_turu: semalar.FaturaTuruEnum = Query(..., description="Fatura türü (SATIŞ/ALIŞ)"),
+    db: Session = Depends(get_db),
+    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user)
+):
+    kullanici_id = current_user.id
+    try:
+        # Fatura numarasını bulmak için en son kaydı çek
+        son_fatura = db.query(modeller.Fatura.fatura_no).filter(
+            modeller.Fatura.kullanici_id == kullanici_id,
+            modeller.Fatura.fatura_turu == fatura_turu
+        ).order_by(modeller.Fatura.fatura_no.desc()).first()
+
+        if son_fatura:
+            son_no = son_fatura[0]
+            try:
+                # Metin ve sayı kısmını ayır
+                import re
+                sayi_match = re.search(r'\d+$', son_no)
+                if sayi_match:
+                    sayi_kismi = sayi_match.group(0)
+                    metin_kismi = son_no[:sayi_match.start()]
+                    
+                    yeni_sayi = int(sayi_kismi) + 1
+                    yeni_fatura_no = f"{metin_kismi}{yeni_sayi:0{len(sayi_kismi)}}" # Aynı basamak sayısını koru
+                else:
+                    # Sadece metin varsa, sonuna '1' ekle
+                    yeni_fatura_no = f"{son_no}1"
+            except Exception:
+                yeni_fatura_no = f"{fatura_turu.value}-1"
+        else:
+            yeni_fatura_no = f"{fatura_turu.value}-1"
+
+        return {"next_code": yeni_fatura_no}
+
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Fatura numarası alınırken hata: {e}")

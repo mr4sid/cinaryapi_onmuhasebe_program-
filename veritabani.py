@@ -919,27 +919,24 @@ class OnMuhasebe:
             return yeni_fatura_no
         
         try:
-            params = {"kullanici_id": kullanici_id, "fatura_turu": fatura_tipi}
+            params = {"fatura_turu": fatura_tipi}
+            
+            # KRİTİK DÜZELTME: Hatalı '/raporlar/son_fatura_no_getir' rotası, 
+            # API'deki doğru rota olan '/sistem/next_fatura_no' ile değiştirildi.
             response_data = self._make_api_request(
-                "GET", "/raporlar/son_fatura_no_getir", params=params
+                "GET", "/sistem/next_fatura_no", params=params
             )
 
-            if response_data and "son_fatura_no" in response_data:
-                son_fatura_no = response_data["son_fatura_no"]
-                if not son_fatura_no:
-                    return "1"
-                try:
-                    sadece_numara = int(''.join(filter(str.isdigit, son_fatura_no)))
-                    yeni_numara = sadece_numara + 1
-                    # Fatura numarasındaki metin kısmını koru
-                    metin_kismi = ''.join(filter(str.isalpha, son_fatura_no))
-                    return f"{metin_kismi}{yeni_numara}"
-                except ValueError:
-                    return "FATURA_NO_HATA"
+            if response_data and "next_code" in response_data:
+                return response_data["next_code"]
             else:
                 return "FATURA_NO_HATA"
-        except (ConnectionError, Timeout, RequestException) as e:
+                
+        except (ValueError, ConnectionError, Timeout, RequestException) as e:
             logger.error(f"API'den son fatura numarası çekilirken hata: {e}")
+            self.is_online = False # Hata alınınca çevrimdışı moda geçiyoruz
+            
+            # Çevrimdışı mod mantığına geri dönüyoruz
             yeni_fatura_no = f"MANUEL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
             return yeni_fatura_no
                 
@@ -1049,14 +1046,7 @@ class OnMuhasebe:
         cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
 
         if self.is_online:
-            try:
-                # KRİTİK DÜZELTME: API'ye göndermeden önce tip_filtre değerini Latin karaktere çeviriyoruz.
-                if 'tip_filtre' in cleaned_params:
-                    if cleaned_params['tip_filtre'] == 'GELİR':
-                        cleaned_params['tip_filtre'] = 'GELIR'
-                    elif cleaned_params['tip_filtre'] == 'GİDER':
-                        cleaned_params['tip_filtre'] = 'GIDER'
-                        
+            try:                
                 response = self._make_api_request("GET", "/gelir_gider/", params=cleaned_params)
                 if response is not None:
                     return response
@@ -1946,12 +1936,18 @@ class OnMuhasebe:
     def senkronize_veriler_lokal_db_icin(self, kullanici_id: int):
         """
         Lokal veritabanı senkronizasyonunu başlatmak için bir aracı metot.
-        KRİTİK DÜZELTME: current_user_id parametresi servise geçirildi.
+        KRİTİK DÜZELTME: current_user_id yerine metoda gelen kullanici_id kullanıldı.
         """
+        # API'den veri çekerken access_token'ın olması gerekir.
+        if self.access_token is None:
+            self._load_access_token() 
+            if self.access_token is None:
+                return False, "JWT Token mevcut değil. Lütfen önce giriş yapın."
+
         return lokal_db_servisi.senkronize_veriler(
             self.api_base_url, 
             access_token=self.access_token,
-            current_user_id=self.current_user_id 
+            current_user_id=kullanici_id # KRİTİK DÜZELTME: Fonksiyona gelen argüman kullanılıyor.
         )
     
     def _close_local_db_connections(self):

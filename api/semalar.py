@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship, declarative_base, sessionmaker, Mapped,
 from sqlalchemy.dialects import postgresql
 from datetime import datetime, date
 import enum
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from .veritabani import Base
 
@@ -250,6 +251,30 @@ class KasaBanka(Base):
     olusturma_tarihi = Column(DateTime, default=datetime.now)
 
     hareketler = relationship("KasaBankaHareket", back_populates="kasa_banka_hesabi", cascade="all, delete-orphan")
+
+class StokCreate(BaseModel):
+    kod: str
+    ad: str
+    miktar: Optional[float] = 0.0
+    alis_fiyati: Optional[float] = 0.0
+    satis_fiyati: Optional[float] = 0.0
+    kdv_orani: Optional[float] = 0.0
+    min_stok_seviyesi: Optional[float] = 0.0
+    aktif: Optional[bool] = True
+    detay: Optional[str] = None
+    urun_resmi_yolu: Optional[str] = None
+    
+    # Nitelik Foreign Key'ler
+    kategori_id: Optional[int] = None
+    marka_id: Optional[int] = None
+    urun_grubu_id: Optional[int] = None
+    birim_id: Optional[int] = None
+    mense_id: Optional[int] = None
+    
+    # Bu alan, istemciden gelebilecek ancak rota tarafından dikkate alınmayacak ID'yi tutar.
+    kullanici_id: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 class Stok(Base):
     __tablename__ = 'stoklar'

@@ -297,26 +297,80 @@ def get_nakit_akisi_raporu_endpoint(
     current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user)
 ):
     kullanici_id = current_user.id
-    nakit_girisleri = db.query(func.sum(semalar.KasaBankaHareket.tutar)).filter(
-        semalar.KasaBankaHareket.islem_yone == semalar.IslemYoneEnum.GIRIS,
-        semalar.KasaBankaHareket.tarih >= baslangic_tarihi,
-        semalar.KasaBankaHareket.tarih <= bitis_tarihi,
-        semalar.KasaBankaHareket.kullanici_id == kullanici_id
-    ).scalar() or 0.0
+    
+    # 1.1. CARİ HAREKETLER (Tahsilat/Ödeme) - Sadece nakit hareketler
+    # islem_turu zaten VARCHAR'dır.
+    cari_nakit_select = db.query(
+        modeller.CariHareket.islem_turu.label('tip'),
+        modeller.CariHareket.tutar,
+        modeller.CariHareket.tarih,
+        modeller.CariHareket.aciklama,
+        modeller.KasaBankaHesap.hesap_adi.label('hesap_adi'),
+        modeller.CariHareket.kaynak.label('kaynak')
+    ).join(
+        modeller.KasaBankaHesap, modeller.KasaBankaHesap.id == modeller.CariHareket.kasa_banka_id
+    ).filter(
+        modeller.CariHareket.kullanici_id == kullanici_id,
+        modeller.CariHareket.tarih >= baslangic_tarihi if baslangic_tarihi else True,
+        modeller.CariHareket.tarih <= bitis_tarihi if bitis_tarihi else True,
+        modeller.CariHareket.odeme_turu.in_(['NAKİT', 'KART', 'EFT/HAVALE'])
+    ).subquery().select()
 
-    nakit_cikislar = db.query(func.sum(semalar.KasaBankaHareket.tutar)).filter(
-        semalar.KasaBankaHareket.islem_yone == semalar.IslemYoneEnum.CIKIS,
-        semalar.KasaBankaHareket.tarih >= baslangic_tarihi,
-        semalar.KasaBankaHareket.tarih <= bitis_tarihi,
-        semalar.KasaBankaHareket.kullanici_id == kullanici_id
-    ).scalar() or 0.0
+    # 1.2. GELİR/GİDER HAREKETLERİ (Manuel Girişler) - Sadece nakit hareketler
+    gg_nakit_select = db.query(
+        # KRİTİK DÜZELTME: tip sütununu String'e (VARCHAR) çevirerek DatatypeMismatch hatasını çöz
+        modeller.GelirGider.tip.cast(String).label('tip'),
+        modeller.GelirGider.tutar,
+        modeller.GelirGider.tarih,
+        modeller.GelirGider.aciklama,
+        modeller.KasaBankaHesap.hesap_adi.label('hesap_adi'),
+        modeller.GelirGider.kaynak.label('kaynak')
+    ).join(
+        modeller.KasaBankaHesap, modeller.KasaBankaHesap.id == modeller.GelirGider.kasa_banka_id
+    ).filter(
+        modeller.GelirGider.kullanici_id == kullanici_id,
+        modeller.GelirGider.tarih >= baslangic_tarihi if baslangic_tarihi else True,
+        modeller.GelirGider.tarih <= bitis_tarihi if bitis_tarihi else True,
+        modeller.GelirGider.kasa_banka_id.isnot(None) 
+    ).subquery().select()
+    
+    # Her iki sorguyu birleştir (UNION ALL)
+    nakit_akisi_union = cari_nakit_select.union_all(gg_nakit_select)
+    
+    # Birleşmiş sorguyu çalıştırıp sonuçları al ve sırala
+    nakit_akisi_data = db.execute(
+        nakit_akisi_union.order_by(nakit_akisi_union.c.tarih.desc())
+    ).all()
 
-    net_nakit_akisi = nakit_girisleri - nakit_cikislar
+    nakit_girisleri = 0.0
+    nakit_cikislar = 0.0
+    formatted_items = []
+    
+    for item in nakit_akisi_data:
+        tutar = float(item.tutar)
+        tip = str(item.tip).upper()
+        
+        # Giriş/Çıkış hesaplaması (Gelir = Giriş, Gider = Çıkış)
+        if tip == 'GELİR' or tip == 'TAHSILAT' or tip == 'FATURA_SATIS_PESIN':
+            nakit_girisleri += tutar
+        elif tip == 'GIDER' or tip == 'ODEME' or tip == 'FATURA_ALIS_PESIN':
+            nakit_cikislar += tutar
+
+        # Rapor satırı oluşturma
+        formatted_items.append({
+            "tarih": item.tarih.strftime('%Y-%m-%d'),
+            "tip": tip,
+            "tutar": tutar,
+            "aciklama": item.aciklama,
+            "hesap_adi": item.hesap_adi,
+            "kaynak": str(item.kaynak)
+        })
 
     return {
         "nakit_girisleri": nakit_girisleri,
         "nakit_cikislar": nakit_cikislar,
-        "net_nakit_akisi": net_nakit_akisi
+        "net_nakit_akisi": nakit_girisleri - nakit_cikislar,
+        "items": formatted_items
     }
 
 @router.get("/cari_yaslandirma_raporu", response_model=modeller.CariYaslandirmaResponse)

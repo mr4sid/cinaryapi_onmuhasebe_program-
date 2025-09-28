@@ -289,8 +289,6 @@ class App(QMainWindow):
 
         self._setup_ui_elements()
         self._setup_ui_connections()
-        self._initial_load_data()
-        self._start_background_sync()
         self._update_status_bar()
         self.set_status_message("Uygulama başlatılıyor, sunucuya bağlanılıyor...")
 
@@ -353,7 +351,7 @@ class App(QMainWindow):
         if success:
             final_message = f"Senkronizasyon başarıyla tamamlandı. {message}"
             self.set_status_message(final_message, "green")
-            self._initial_load_data() # Tüm UI listelerini yerel veritabanından yenile
+            self._initial_load_data() 
         else:
             final_message = f"Senkronizasyon işlemi tamamlanamadı: {message}"
             self.set_status_message(final_message, "red")
@@ -855,7 +853,14 @@ if __name__ == "__main__":
         # Eğer login başarılıysa, ana pencereyi oluşturup gösterin
         main_window = App(login_data["user_data"])
         db_manager_login.app = main_window 
+        
+        # KRİTİK DÜZELTME: UI hemen açılıyor (main_window.show)
         main_window.show()
+        
+        # UI açıldıktan hemen sonra, yerel verileri yüklüyor ve senkronizasyonu arka planda başlatıyor.
+        main_window._initial_load_data() # 1. UI'ı anında yerel verilerle doldur
+        main_window._start_background_sync() # 2. Ağ işlemini arka planda başlat
+
         sys.exit(app.exec())
     else:
         # Eğer login iptal edildiyse (kullanıcı kapattıysa), uygulamadan çıkın

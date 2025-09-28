@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
-from .. import modeller, semalar
+from .. import modeller, semalar, guvenlik
 from ..veritabani import get_db
 from typing import List, Optional, Any
 from datetime import datetime
 from sqlalchemy import String
-
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 # DEĞİŞİKLİK: Doğru içe aktarma yolu kullanıldı
 from hizmetler import FaturaService
 import logging
@@ -19,15 +19,44 @@ router = APIRouter(prefix="/stoklar", tags=["Stoklar"])
 
 @router.post("/", response_model=modeller.StokRead)
 def create_stok(
-    stok: modeller.StokCreate,
-    db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(get_current_user)
+    stok: semalar.StokCreate,
+    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user),
+    db: Session = Depends(get_db)
 ):
-    db_stok = semalar.Stok(**stok.model_dump(), kullanici_id=current_user.id)
-    db.add(db_stok)
-    db.commit()
-    db.refresh(db_stok)
-    return db_stok
+    try:
+        # KRİTİK DÜZELTME: model_dump()'tan 'kullanici_id' hariç tutuldu. 
+        # Böylece yalnızca JWT'den gelen ID (current_user.id) kullanılır.
+        stok_data = stok.model_dump(exclude={'kullanici_id', 'id'})
+        
+        db_stok = modeller.Stok(**stok_data, kullanici_id=current_user.id)
+        
+        db.add(db_stok)
+        db.commit()
+        db.refresh(db_stok)
+        
+        # Stok hareketi eklenir (İlk Giriş)
+        # Sadece yeni ürün ekleniyorsa ilk stok miktarını ekle
+        if stok.miktar and stok.miktar > 0:
+             modeller.StokHareket.create_stok_hareket(
+                db, 
+                urun_id=db_stok.id, 
+                islem_tipi=modeller.OnMuhasebe.STOK_ISLEM_TIP_GIRIS_MANUEL, 
+                miktar=stok.miktar, 
+                aciklama="İlk Stok Girişi", 
+                kaynak="MANUEL", 
+                kullanici_id=current_user.id
+             )
+        
+        return modeller.StokRead.model_validate(db_stok, from_attributes=True)
+    
+    except IntegrityError as e:
+        db.rollback()
+        if "unique_kod" in str(e):
+             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ürün kodu zaten mevcut.")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Stok kaydı oluşturulurken veritabanı hatası: {str(e)}")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Stok kaydı oluşturulurken beklenmedik hata: {str(e)}")
 
 @router.get("/", response_model=modeller.StokListResponse)
 def read_stoklar(

@@ -1263,3 +1263,7 @@ class UrunNitelik(Base):
     kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
 
     kullanici = relationship("Kullanici", back_populates="urun_nitelikleri")    
+
+class NextCodeResponse(BaseModel):
+    next_code: str
+    model_config = ConfigDict(from_attributes=True)    

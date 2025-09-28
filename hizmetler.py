@@ -24,8 +24,14 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 class FaturaService:
-    def __init__(self, db_manager):
+    def __init__(self, db_manager, app_ref=None): # DÜZELTME: app_ref parametresi eklendi ve None varsayılan değeri atandı
         self.db = db_manager
+        self.app = app_ref # DÜZELTME: app referansı kaydedildi
+        
+        # Eğer db_manager'da (OnMuhasebe) app referansı atanmadıysa, buradaki referansı atıyoruz.
+        if self.app is not None:
+             self.db.app = self.app
+             
         logger.info("FaturaService başlatıldı.")
 
     def fatura_olustur(self, fatura_no, tarih, fatura_tipi, cari_id, kalemler_data, odeme_turu,
@@ -83,11 +89,10 @@ class FaturaService:
             "genel_iskonto_tipi": genel_iskonto_tipi,
             "genel_iskonto_degeri": genel_iskonto_degeri,
             "kalemler": kalemler_data,
-            "kullanici_id": self.current_user_id # DÜZELTME: kullanici_id parametresi eklendi
+            "olusturan_kullanici_id": self.db.app.current_user_id # Geriye dönük uyumluluk ve API loglaması için eklenmiştir.
         }
         try:
-            # DÜZELTME: db.fatura_guncelle metoduna kullanici_id parametresi eklendi
-            response_data = self.db.fatura_guncelle(fatura_id, fatura_data, self.current_user_id)
+            response_data = self.db.fatura_guncelle(fatura_id, fatura_data)
             return True, response_data.get("message", "Fatura başarıyla güncellendi.")
         except ValueError as e:
             logger.error(f"Fatura güncellenirken API hatası: {e}")
@@ -120,7 +125,16 @@ class FaturaService:
 class CariService:
     def __init__(self, db_manager):
         self.db = db_manager
-        
+
+    def cari_ekle(self, data: dict):
+        """Müşteri ekleme işlemini db_manager'a yönlendirir (YeniMusteriEklePenceresi için)."""
+        return self.db.musteri_ekle(data)
+
+    # KRİTİK DÜZELTME 2: Müşteri güncelleme için cari_guncelle metodu eklendi
+    def cari_guncelle(self, cari_id: int, data: dict):
+        """Müşteri güncelleme işlemini db_manager'a yönlendirir (YeniMusteriEklePenceresi için)."""
+        return self.db.musteri_guncelle(cari_id, data)
+
     def musteri_listesi_al(self, **kwargs):
         if 'kullanici_id' in kwargs:
             del kwargs['kullanici_id']

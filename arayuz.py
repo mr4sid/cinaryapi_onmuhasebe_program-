@@ -1752,48 +1752,21 @@ class FaturaListesiSayfasi(QWidget):
             selected_widget.fatura_listesini_yukle()
             
     def fatura_listesini_yukle(self):
-        self.app.set_status_message("Fatura listesi güncelleniyor...")
-        self.fatura_tree.clear()
-        try:
-            fatura_listesi_response = self.db.fatura_listesi_al(
-                arama=self.arama_fatura_entry.text(),
-                fatura_turu=self.fatura_tipi_filter_cb.currentText() if self.fatura_tipi_filter_cb.currentText() != "TÜMÜ" else None,
-                odeme_turu=self.odeme_turu_filter_cb.currentText() if self.odeme_turu_filter_cb.currentText() != "TÜMÜ" else None,
-                baslangic_tarihi=self.bas_tarih_entry.text(),
-                bitis_tarihi=self.bit_tarih_entry.text(),
-                kasa_banka_id=self.kasa_banka_filter_cb.currentData()
-            )
-            
-            if not isinstance(fatura_listesi_response, dict) or "items" not in fatura_listesi_response:
-                raise ValueError("API'den geçersiz fatura listesi yanıtı alındı.")
-
-            faturalar = fatura_listesi_response["items"]
-            
-            for fatura_item in faturalar:
-                item = QTreeWidgetItem(self.fatura_tree)
-                item.setData(0, Qt.UserRole, fatura_item.get('id', -1))
-                item.setText(0, str(fatura_item.get('id', '')))
-                item.setText(1, fatura_item.get('fatura_no', '-'))
-                item.setText(2, str(fatura_item.get('tarih', '-')))
-                item.setText(3, fatura_item.get('fatura_turu', '-'))
-                
-                cari_adi_gosterim = fatura_item.get('cari_adi', '-')
-                if fatura_item.get('fatura_turu') == 'SATIŞ' and fatura_item.get('misafir_adi'):
-                    cari_adi_gosterim = f"Perakende ({fatura_item.get('misafir_adi')})"
-                item.setText(4, cari_adi_gosterim)
-                
-                item.setText(5, self.db._format_currency(fatura_item.get('toplam_kdv_haric', 0.0)))
-                item.setText(6, self.db._format_currency(fatura_item.get('toplam_kdv_dahil', 0.0)))
-                item.setText(7, self.db._format_currency(fatura_item.get('genel_toplam', 0.0)))
-                item.setText(8, str(fatura_item.get('odeme_turu', '-')))
-                
-                self.fatura_tree.addTopLevelItem(item)
-
-            self.app.set_status_message(f"{len(faturalar)} fatura listelendi.", "blue")
-            
-        except Exception as e:
-            QMessageBox.critical(self.app, "API Hatası", f"Fatura listesi çekilirken hata: {e}")
-            logger.error(f"Fatura listesi yükleme hatası: {e}", exc_info=True)
+        """
+        [KRİTİK DÜZELTME] FaturaListesiSayfasi bir konteynırdır ve fatura_tree'ye sahip değildir. 
+        Yenileme işini alt sınıflara (BaseFaturaListesi'nden miras alan sekmeler) devreder.
+        """
+        current_widget = self.main_tab_widget.currentWidget()
+        
+        # Eğer aktif widget'ın listeyi yükleme metodu varsa, sadece onu çağır.
+        if hasattr(current_widget, 'fatura_listesini_yukle'):
+            current_widget.fatura_listesini_yukle()
+            self.app.set_status_message(f"Aktif sekme ('{self.main_tab_widget.tabText(self.main_tab_widget.currentIndex())}') güncellendi.", "blue")
+        else:
+            # Eğer aktif sekme bulunamazsa (ki bu normalde olmamalı) yedekleme olarak her iki listeyi de yenilemeye zorla.
+            self.satis_fatura_frame.fatura_listesini_yukle()
+            self.alis_fatura_frame.fatura_listesini_yukle()
+            self.app.set_status_message("Tüm fatura listeleri yeniden yüklendi.", "blue")
 
     def yeni_fatura_ekle_ui(self, fatura_tipi):
         """
@@ -3446,9 +3419,9 @@ class BaseIslemSayfasi(QWidget):
             self.genel_iskonto_degeri_e.setEnabled(True)
         self.toplamlari_hesapla_ui()
 
-    def _carileri_yukle_ve_cachele(self):
+    def _carileri_yukle_ve_cachele(self): # Yaklaşık 3450. satır
         logging.debug(f"BaseIslemSayfasi: _carileri_yukle_ve_cachele çağrıldı. self.islem_tipi: {self.islem_tipi}")
-        kullanici_id = self.app.current_user_id # Düzeltme: kullanıcı ID'si alındı
+        kullanici_id = self.app.current_user_id 
 
         self.tum_cariler_cache_data = []
         self.cari_map_display_to_id = {}
@@ -3457,10 +3430,12 @@ class BaseIslemSayfasi(QWidget):
         try:
             cariler_list = []
             if self.islem_tipi in ["SATIŞ", "SATIŞ_SIPARIS", "SATIŞ İADE"]:
-                cariler_response = self.db.musteri_listesi_al(kullanici_id=kullanici_id)
+                # KRİTİK DÜZELTME 1: musteri_listesi_al() metodundan kullanici_id parametresi KALDIRILDI
+                cariler_response = self.db.musteri_listesi_al()
                 cariler_list = cariler_response.get("items", []) if isinstance(cariler_response, dict) else cariler_response
             elif self.islem_tipi in ["ALIŞ", "ALIŞ_SIPARIS", "ALIŞ İADE"]:
-                cariler_response = self.db.tedarikci_listesi_al(kullanici_id=kullanici_id)
+                # KRİTİK DÜZELTME 1: tedarikci_listesi_al() metodundan kullanici_id parametresi KALDIRILDI
+                cariler_response = self.db.tedarikci_listesi_al()
                 cariler_list = cariler_response.get("items", []) if isinstance(cariler_response, dict) else cariler_response
             else:
                 self.app.set_status_message("Uyarı: Geçersiz işlem tipi için cari listesi yüklenemedi.", "orange")
@@ -3533,14 +3508,56 @@ class BaseIslemSayfasi(QWidget):
         # Diyalogu kapat ve sonucu ACCEPTED olarak işaretle
         self.accept()
 
+    def _guncelle_cari_bilgileri_ve_bakiye_ui(self, cari_id, cari_display_text):
+        """
+        Seçili cariye ait ID ve Adı'nı kaydeder, UI'ı (buton/label) günceller ve bakiyeyi çeker.
+        Bu metod, ComboBox bağımlılığını ortadan kaldırır.
+        """
+        self.secili_cari_id = cari_id
+        self.secili_cari_adi = cari_display_text
+
+        # UI Elementlerini Güncelle
+        if hasattr(self, 'btn_cari_sec'):
+             self.btn_cari_sec.setText(f"{cari_display_text}")
+
+        # Bakiye Çekme ve Güncelleme (Fatura/Sipariş formları için geçerli)
+        if self.secili_cari_id is not None and hasattr(self, 'lbl_cari_bakiye'):
+            # islem_tipi SATIŞ_SIPARIS gibi olabilir. İlk kelimeyi alıyoruz.
+            cari_tip_str = self.islem_tipi.split("_")[0].upper() 
+            
+            # Cari tipini belirle
+            cari_tip_enum = self.db.CARI_TIP_MUSTERI if cari_tip_str in ["SATIŞ", "SATIŞ İADE", "SATIŞ_SIPARIS"] else self.db.CARI_TIP_TEDARIKCI
+            
+            net_bakiye = 0.0
+            if cari_tip_enum == self.db.CARI_TIP_MUSTERI:
+                 net_bakiye = self.db.get_musteri_net_bakiye(musteri_id=self.secili_cari_id)
+            else:
+                 net_bakiye = self.db.get_tedarikci_net_bakiye(tedarikci_id=self.secili_cari_id, kullanici_id=self.app.current_user_id) 
+            
+            bakiye_text, bakiye_color = "Bakiye: Yüklenemedi", "black"
+            if net_bakiye is not None:
+                if net_bakiye > 0:
+                    bakiye_text, bakiye_color = f"Borç: {self.db._format_currency(net_bakiye)}", "red"
+                elif net_bakiye < 0:
+                    bakiye_text, bakiye_color = f"Alacak: {self.db._format_currency(abs(net_bakiye))}", "green"
+                else:
+                    bakiye_text, bakiye_color = "Bakiye: 0,00 TL", "black"
+            
+            self.lbl_cari_bakiye.setText(bakiye_text)
+            self.lbl_cari_bakiye.setStyleSheet(f"color: {bakiye_color};")
+        elif hasattr(self, 'lbl_cari_bakiye'):
+            self.lbl_cari_bakiye.setText("Bakiye: ---")
+            self.lbl_cari_bakiye.setStyleSheet("color: black;")
+            
+        # Ek UI güncellemeleri
+        if hasattr(self, '_guncel_stok_miktarlarini_getir'):
+             self._guncel_stok_miktarlarini_getir()
+
     def _on_cari_secildi_callback(self, selected_cari_id, selected_cari_display_text):
-        self.secili_cari_id = selected_cari_id 
-        self.secili_cari_adi = selected_cari_display_text 
-        
-        # Düzeltildi: Butonun metnini seçilen cari adıyla güncelle
-        self.btn_cari_sec.setText(f"{self.secili_cari_adi}")
-        
-        self._on_cari_selected()
+        """
+        Cari Seçim penceresi kapatıldığında çağrılır. (Fatura/Sipariş Formları için ComboBox'ı kullanmayan formlar)
+        """
+        self._guncelle_cari_bilgileri_ve_bakiye_ui(selected_cari_id, selected_cari_display_text)
 
     def _on_cari_selected(self):
         selected_cari_id = self.cari_combo.currentData()
@@ -4457,7 +4474,8 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         
         if self.iade_modu_aktif:
             if hasattr(self, 'f_no_e'):
-                self.f_no_e.setEnabled(False)
+                # Fatura numarası atama mantığı burada olmalı
+                self.f_no_e.setText(self.db.son_fatura_no_getir(self.islem_tipi, kullanici_id=self.app.current_user_id))
             if hasattr(self, 'cari_sec_button'):
                 self.cari_sec_button.setEnabled(False)
             
@@ -4481,11 +4499,13 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
                 self.misafir_adi_container_frame.setVisible(False)
         else:
             if hasattr(self, 'f_no_e'):
-                self.f_no_e.setEnabled(True)
+                # KRİTİK DÜZELTME: Eksik kullanici_id parametresi eklendi (Eğer iade modu aktif değilse fatura numarasını tekrar ayarla)
+                self.f_no_e.setText(self.db.son_fatura_no_getir(self.islem_tipi, kullanici_id=self.app.current_user_id))
             if hasattr(self, 'cari_sec_button'):
                 self.cari_sec_button.setEnabled(True)
             if not self.duzenleme_id and hasattr(self, 'f_no_e'):
-                self.f_no_e.setText(self.db.son_fatura_no_getir(self.islem_tipi))
+                # Bu kısım artık yukarıdaki ilk if bloğunda çağrıldığı için burada tekrara gerek yok.
+                pass
             
             if hasattr(self, '_odeme_turu_ve_misafir_adi_kontrol'):
                 self._odeme_turu_ve_misafir_adi_kontrol()
@@ -4632,6 +4652,11 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         """
         FaturaOlusturmaSayfasi'na özel başlangıç veri yükleme mantığı.
         """
+        # Fatura sayfasında kullanılan widget'ları oluşturmak için özel metotları çağırıyoruz.
+        self._yukle_kasa_banka_hesaplarini()
+        self._carileri_yukle_ve_cachele() 
+        self._urunleri_yukle_ve_cachele_ve_goster()
+        
         if self.duzenleme_id:
             self._mevcut_faturayi_yukle()
             logging.debug("FaturaOlusturmaSayfasi - Düzenleme modunda, mevcut fatura yüklendi.")
@@ -4639,12 +4664,10 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
             self._load_temp_form_data(forced_temp_data=self.initial_data)
             logging.debug("FaturaOlusturmaSayfasi - initial_data ile taslak veri yüklendi.")
         else:
+            # Yeni bir fatura oluşturuluyor. Önce formu sıfırla.
             self._reset_form_for_new_invoice(ask_confirmation=False)
             logging.debug("FaturaOlusturmaSayfasi - Yeni fatura için form sıfırlandı.")
-            
-        # UI elemanları kurulduktan sonra ürünleri yükle
-        QTimer.singleShot(0, self._urunleri_yukle_ve_cachele_ve_goster)
-        
+                    
         if hasattr(self, 'urun_arama_entry'):
             self.urun_arama_entry.setFocus()
 
@@ -8618,21 +8641,27 @@ class UrunNitelikYonetimiSekmesi(QWidget):
     def _urun_grubu_listesini_yukle(self):
         self.urun_grubu_tree.clear()
         try:
-            urun_gruplari_response = self.db.urun_grubu_listele()
-            if isinstance(urun_gruplari_response, dict) and "items" in urun_gruplari_response:
-                urun_gruplari = urun_gruplari_response.get("items", [])
-            elif isinstance(urun_gruplari_response, list):
-                urun_gruplari = urun_gruplari_response
-            else:
-                raise ValueError("API'den geçersiz ürün grubu listesi yanıtı alındı.")
+            urun_gruplari_response = self.db.urun_grubu_listele() # API'den gelen tam yanıt
             
-            for grup_item in urun_gruplari:
+            if isinstance(urun_gruplari_response, dict) and "items" in urun_gruplari_response:
+                urun_gruplari_list = urun_gruplari_response.get("items", [])
+            elif isinstance(urun_gruplari_response, list):
+                urun_gruplari_list = urun_gruplari_response
+            else:
+                # KRİTİK DÜZELTME: Hata fırlatma yerine listeyi boşalt ve uyar
+                logging.warning(f"Ürün grubu listesi API'den beklenmeyen formatta geldi: {urun_gruplari_response}")
+                urun_gruplari_list = [] 
+                
+            if not urun_gruplari_list and self.db.is_online:
+                 self.app.set_status_message("Uyarı: Ürün grubu listesi API'den boş veya hatalı formatta geldi. Yerel veritabanı kullanılıyor olabilir.", "orange")
+
+            for grup_item in urun_gruplari_list: # urun_gruplari_list üzerinde döngü
                 item_qt = QTreeWidgetItem(self.urun_grubu_tree)
-                item_qt.setText(0, str(grup_item.get('id')))
-                item_qt.setText(1, grup_item.get('ad'))
+                item_qt.setText(0, str(grup_item.get('id'))) # .get() ile güvenli erişim
+                item_qt.setText(1, grup_item.get('ad')) # .get() ile güvenli erişim
                 item_qt.setData(0, Qt.UserRole, grup_item.get('id'))
             self.urun_grubu_tree.sortByColumn(1, Qt.AscendingOrder)
-            self.app.set_status_message(f"{len(urun_gruplari)} ürün grubu listelendi.", "blue")
+            self.app.set_status_message(f"{len(urun_gruplari_list)} ürün grubu listelendi.", "blue")
         except Exception as e:
             QMessageBox.critical(self.app, "API Hatası", f"Ürün grubu listesi çekilirken hata: {e}")
             logging.error(f"Ürün grubu listesi yükleme hatası: {e}", exc_info=True)
@@ -8743,7 +8772,9 @@ class UrunNitelikYonetimiSekmesi(QWidget):
             elif isinstance(urun_birimleri_response, list):
                 urun_birimleri = urun_birimleri_response
             else:
-                raise ValueError("API'den geçersiz ürün birimi listesi yanıtı alındı.")
+                # KRİTİK DÜZELTME: Hata fırlatma yerine listeyi boşalt ve uyar
+                logging.warning(f"Ürün birimi listesi API'den beklenmeyen formatta geldi: {urun_birimleri_response}")
+                urun_birimleri = []
 
             for birim_item in urun_birimleri:
                 item_qt = QTreeWidgetItem(self.urun_birimi_tree)
@@ -8862,7 +8893,8 @@ class UrunNitelikYonetimiSekmesi(QWidget):
             elif isinstance(ulkeler_response, list):
                 ulkeler = ulkeler_response
             else:
-                raise ValueError("API'den geçersiz ülke listesi yanıtı alındı.")
+                logging.warning(f"Ülke listesi API'den beklenmeyen formatta geldi: {ulkeler_response}")
+                ulkeler = []
 
             for ulke_item in ulkeler:
                 item_qt = QTreeWidgetItem(self.ulke_tree)
