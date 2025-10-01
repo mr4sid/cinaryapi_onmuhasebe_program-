@@ -1776,7 +1776,12 @@ class FaturaListesiSayfasi(QWidget):
         
         yeni_fatura_penceresi = QDialog(self)
         yeni_fatura_penceresi.setWindowTitle("Yeni Fatura Oluştur")
-        yeni_fatura_penceresi.setMinimumSize(1000, 700)
+        
+        # KRİTİK DÜZELTME: Pencereyi tam ekran aç
+        yeni_fatura_penceresi.setWindowState(Qt.WindowMaximized) 
+        
+        # YENİ EKLEME: Bazı sistemlerde maksimizasyonu zorlamak için büyük bir minimum boyut ipucu verilir.
+        yeni_fatura_penceresi.setMinimumSize(1200, 800) 
         
         fatura_form_page = FaturaOlusturmaSayfasi(
             yeni_fatura_penceresi, 
@@ -3853,25 +3858,29 @@ class BaseIslemSayfasi(QWidget):
         yeni_iskonto_yuzde_1 = self.db.safe_float(yeni_iskonto_yuzde_1)
         yeni_iskonto_yuzde_2 = self.db.safe_float(yeni_iskonto_yuzde_2)
         yeni_alis_fiyati_fatura_aninda = self.db.safe_float(yeni_alis_fiyati_fatura_aninda)
+        kullanici_id = self.app.current_user.get("id")
 
-        # DEĞİŞİKLİK BURADA: kalem_index'in geçerli bir indeks olup olmadığını kontrol ediyoruz
         if kalem_index != -1 and kalem_index is not None:
             item_to_update = list(self.fatura_kalemleri_ui[kalem_index])
             urun_id_current = item_to_update[0]
             # KDV oranını mevcut kalemden al
             kdv_orani_current = self.db.safe_float(item_to_update[4])
+            alis_fiyati_aninda = self.db.safe_float(item_to_update[8])
         else:
             if u_id is None or urun_adi is None:
                 QMessageBox.critical(self.app, "Hata", "Yeni kalem eklenirken ürün bilgileri eksik.")
                 return
             urun_id_current = u_id
-            urun_detaylari_db = self.db.stok_getir_by_id(u_id)
+            
+            urun_detaylari_db = self.db.stok_getir_by_id(u_id, kullanici_id=kullanici_id)
+            
             kdv_orani_current = self.db.safe_float(urun_detaylari_db.get('kdv_orani', 0.0)) if urun_detaylari_db else 0.0
+            alis_fiyati_aninda = self.db.safe_float(urun_detaylari_db.get('alis_fiyati', 0.0)) if urun_detaylari_db else 0.0
             
             # Yeni kalem için gerekli 15 elemanlı listeyi oluştur
             item_to_update = [
                 urun_id_current, urun_adi, yeni_miktar, 0.0, kdv_orani_current, 
-                0.0, 0.0, 0.0, yeni_alis_fiyati_fatura_aninda, kdv_orani_current, 
+                0.0, 0.0, 0.0, alis_fiyati_aninda, kdv_orani_current, 
                 yeni_iskonto_yuzde_1, yeni_iskonto_yuzde_2, "YOK", 0.0, 0.0
             ]
 
@@ -3879,6 +3888,10 @@ class BaseIslemSayfasi(QWidget):
         item_to_update[2] = yeni_miktar
         item_to_update[10] = yeni_iskonto_yuzde_1
         item_to_update[11] = yeni_iskonto_yuzde_2
+
+        # Fatura anı alış fiyatını güncelle (sadece Sales/Satış İade'de gereklidir)
+        if self.islem_tipi in [self.db.FATURA_TIP_SATIS, self.db.FATURA_TIP_SATIS_IADE]:
+            item_to_update[8] = yeni_alis_fiyati_fatura_aninda # Yeni değeri ata
 
         # İskları uygula
         fiyat_iskonto_1_sonrasi_dahil = yeni_fiyat_kdv_dahil_orijinal * (1 - yeni_iskonto_yuzde_1 / 100)
@@ -3891,13 +3904,9 @@ class BaseIslemSayfasi(QWidget):
         # İsk sonrası KDV hariç fiyatı hesapla
         if kdv_orani_current == 0:
             iskontolu_birim_fiyat_kdv_haric = iskontolu_birim_fiyat_kdv_dahil
-        else:
-            iskontolu_birim_fiyat_kdv_haric = iskontolu_birim_fiyat_kdv_dahil / (1 + kdv_orani_current / 100)
-
-        # Orijinal birim fiyatın KDV hariç halini hesapla ve ata
-        if kdv_orani_current == 0:
             original_birim_fiyat_kdv_haric = yeni_fiyat_kdv_dahil_orijinal
         else:
+            iskontolu_birim_fiyat_kdv_haric = iskontolu_birim_fiyat_kdv_dahil / (1 + kdv_orani_current / 100)
             original_birim_fiyat_kdv_haric = yeni_fiyat_kdv_dahil_orijinal / (1 + kdv_orani_current / 100)
 
         item_to_update[3] = original_birim_fiyat_kdv_haric
@@ -4284,7 +4293,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         self.sv_fatura_notlari = ""
         self.sv_genel_iskonto_tipi = "YOK"
         self.sv_genel_iskonto_degeri = "0,00"
-        self.form_entries_order = [] # Bu listeyi burada tanımlamalıyız
+        self.form_entries_order = [] 
 
         if initial_data and initial_data.get('iade_modu'):
             self.iade_modu_aktif = True
@@ -4706,15 +4715,15 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
                 "iskonto_yuzde_1": self.db.safe_float(k_ui[10]), "iskonto_yuzde_2": self.db.safe_float(k_ui[11]),
                 "iskonto_tipi": k_ui[12], "iskonto_degeri": self.db.safe_float(k_ui[13])
             })
-    
+
         fatura_tip_to_save = self.islem_tipi
         if self.iade_modu_aktif:
             if self.islem_tipi == self.db.FATURA_TIP_SATIS: fatura_tip_to_save = self.db.FATURA_TIP_SATIS_IADE
             elif self.islem_tipi == self.db.FATURA_TIP_ALIS: fatura_tip_to_save = self.db.FATURA_TIP_ALIS_IADE
 
         try:
-            # Düzeltildi: olusturan_kullanici_id değeri self.app.current_user'dan alınıyor
-            olusturan_kullanici_id = self.app.current_user[0] if self.app and hasattr(self.app, 'current_user') and self.app.current_user else 1
+            # KRİTİK DÜZELTME: Kullanıcı ID'sini list/tuple [0] yerine .get("id") ile al
+            olusturan_kullanici_id = self.app.current_user.get("id") if self.app and hasattr(self.app, 'current_user') and self.app.current_user else 1
 
             if self.duzenleme_id:
                 success, message = self.fatura_service.fatura_guncelle(
@@ -4739,7 +4748,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
                     cari_id=self.secili_cari_id,
                     kalemler_data=kalemler_to_send_to_api,
                     odeme_turu=odeme_turu,
-                    olusturan_kullanici_id=olusturan_kullanici_id, # <--- Bu satır güncellendi
+                    olusturan_kullanici_id=olusturan_kullanici_id,
                     kasa_banka_id=kasa_banka_id,
                     misafir_adi=misafir_adi,
                     fatura_notlari=fatura_notlari,
@@ -7864,98 +7873,49 @@ class GirisEkrani(QDialog):
             self._entry_password.setFocus()
 
 class StokHareketleriSekmesi(QWidget):
-    def __init__(self, parent_notebook, db_manager, app_ref, urun_id, urun_adi, parent_pencere=None):
-        super().__init__(parent_notebook)
+    def __init__(self, parent, db_manager, urun_id, urun_adi, app_ref):
+        super().__init__(parent)
         self.db = db_manager
-        self.app = app_ref
         self.urun_id = urun_id
         self.urun_adi = urun_adi
-        self.parent_pencere = parent_pencere
+        self.app = app_ref
         
-        self.main_layout = QVBoxLayout(self)
-        self.after_timer = QTimer(self)
-        self.after_timer.setSingleShot(True)
+        # UI'ı oluştur. Bu, bas_tarih_entry'yi de oluşturmalıdır.
+        self._setup_ui() 
+        
+        # Eğer ID varsa hareketleri yükle
+        if self.urun_id:
+            self._load_stok_hareketleri()
 
+    def _setup_ui(self):
+        main_layout = QVBoxLayout(self)
+        
+        # Filtreleme ve Buton Alanı
         filter_frame = QFrame(self)
         filter_layout = QHBoxLayout(filter_frame)
-        self.main_layout.addWidget(filter_frame)
-
-        filter_layout.addWidget(QLabel("İşlem Tipi:"))
-        self.stok_hareket_tip_filter_cb = QComboBox()
-        self.stok_hareket_tip_filter_cb.addItems(["TÜMÜ", self.db.STOK_ISLEM_TIP_GIRIS_MANUEL_DUZELTME, 
-                                                 self.db.STOK_ISLEM_TIP_CIKIS_MANUEL_DUZELTME, 
-                                                 self.db.STOK_ISLEM_TIP_GIRIS_MANUEL, 
-                                                 self.db.STOK_ISLEM_TIP_CIKIS_MANUEL, 
-                                                 self.db.STOK_ISLEM_TIP_SAYIM_FAZLASI, 
-                                                 self.db.STOK_ISLEM_TIP_SAYIM_EKSIGI, 
-                                                 self.db.STOK_ISLEM_TIP_ZAYIAT, 
-                                                 self.db.STOK_ISLEM_TIP_IADE_GIRIS, 
-                                                 self.db.STOK_ISLEM_TIP_FATURA_ALIS, 
-                                                 self.db.STOK_ISLEM_TIP_FATURA_SATIS])
-        self.stok_hareket_tip_filter_cb.setCurrentText("TÜMÜ")
-        self.stok_hareket_tip_filter_cb.currentIndexChanged.connect(self._load_stok_hareketleri)
-        filter_layout.addWidget(self.stok_hareket_tip_filter_cb)
-
+        main_layout.addWidget(filter_frame)
+        
         filter_layout.addWidget(QLabel("Başlangıç Tarihi:"))
-        self.stok_hareket_bas_tarih_entry = QLineEdit()
-        self.stok_hareket_bas_tarih_entry.setText((datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
-        filter_layout.addWidget(self.stok_hareket_bas_tarih_entry)
+        # self.bas_tarih_entry'yi burada tanımlıyoruz
+        self.bas_tarih_entry = QLineEdit((datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d'))
+        filter_layout.addWidget(self.bas_tarih_entry)
         
-        takvim_button_bas = QPushButton("🗓️")
-        takvim_button_bas.setFixedWidth(30)
-        takvim_button_bas.clicked.connect(lambda: DatePickerDialog(self.app, self.stok_hareket_bas_tarih_entry))
-        filter_layout.addWidget(takvim_button_bas)
-
         filter_layout.addWidget(QLabel("Bitiş Tarihi:"))
-        self.stok_hareket_bit_tarih_entry = QLineEdit()
-        self.stok_hareket_bit_tarih_entry.setText(datetime.now().strftime('%Y-%m-%d'))
-        filter_layout.addWidget(self.stok_hareket_bit_tarih_entry)
+        # self.bitis_tarih_entry'yi burada tanımlıyoruz
+        self.bitis_tarih_entry = QLineEdit(datetime.now().strftime('%Y-%m-%d'))
+        filter_layout.addWidget(self.bitis_tarih_entry)
+
+        btn_filter = QPushButton("Filtrele")
+        btn_filter.clicked.connect(self._load_stok_hareketleri)
+        filter_layout.addWidget(btn_filter)
         
-        takvim_button_bit = QPushButton("🗓️")
-        takvim_button_bit.setFixedWidth(30)
-        takvim_button_bit.clicked.connect(lambda: DatePickerDialog(self.app, self.stok_hareket_bit_tarih_entry))
-        filter_layout.addWidget(takvim_button_bit)
-
-        yenile_button = QPushButton("Yenile")
-        yenile_button.clicked.connect(self._load_stok_hareketleri)
-        filter_layout.addWidget(yenile_button)
-
-        tree_frame = QFrame(self)
-        tree_layout = QVBoxLayout(tree_frame)
-        self.main_layout.addWidget(tree_frame)
-        tree_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        cols_stok_hareket = ("ID", "Tarih", "İşlem Tipi", "Miktar", "Önceki Stok", "Sonraki Stok", "Açıklama", "Kaynak")
-        self.stok_hareket_tree = QTreeWidget(tree_frame)
-        self.stok_hareket_tree.setHeaderLabels(cols_stok_hareket)
-        self.stok_hareket_tree.setColumnCount(len(cols_stok_hareket))
-        self.stok_hareket_tree.setSelectionBehavior(QAbstractItemView.SelectRows)
+        # Ağaç Görünümü Alanı
+        self.stok_hareket_tree = QTreeWidget(self) 
+        self.stok_hareket_tree.setHeaderLabels(["ID", "Tarih", "İşlem Tipi", "Miktar", "Birim Fiyat", "Açıklama", "Kaynak", "Ref. ID", "Önceki Stok", "Sonraki Stok"])
         self.stok_hareket_tree.setSortingEnabled(True)
-
-        col_defs_stok_hareket = [
-            ("ID", 40, Qt.AlignCenter),
-            ("Tarih", 80, Qt.AlignCenter),
-            ("İşlem Tipi", 150, Qt.AlignCenter),
-            ("Miktar", 80, Qt.AlignCenter),
-            ("Önceki Stok", 90, Qt.AlignCenter),
-            ("Sonraki Stok", 90, Qt.AlignCenter),
-            ("Açıklama", 250, Qt.AlignCenter),
-            ("Kaynak", 100, Qt.AlignCenter)
-        ]
-        for i, (col_name, width, alignment) in enumerate(col_defs_stok_hareket):
-            self.stok_hareket_tree.setColumnWidth(i, width)
-            self.stok_hareket_tree.headerItem().setTextAlignment(i, alignment)
-            self.stok_hareket_tree.headerItem().setFont(i, QFont("Segoe UI", 9, QFont.Bold))
-
-        self.stok_hareket_tree.header().setStretchLastSection(False)
-        self.stok_hareket_tree.header().setSectionResizeMode(6, QHeaderView.Stretch)
-        
-        tree_layout.addWidget(self.stok_hareket_tree)
-
-        self.stok_hareket_tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.stok_hareket_tree.customContextMenuRequested.connect(self._open_stok_hareket_context_menu)
-
-        self._load_stok_hareketleri()
+        self.stok_hareket_tree.setColumnWidth(0, 50)
+        self.stok_hareket_tree.header().setSectionResizeMode(5, QHeaderView.Stretch)
+        main_layout.addWidget(self.stok_hareket_tree)
 
     def _open_stok_hareket_context_menu(self, pos):
         item = self.stok_hareket_tree.itemAt(pos)
@@ -8007,137 +7967,101 @@ class StokHareketleriSekmesi(QWidget):
         self._load_stok_hareketleri()
 
     def _load_stok_hareketleri(self):
-        self.stok_hareket_tree.clear()
-        if not self.urun_id:
-            item_qt = QTreeWidgetItem(self.stok_hareket_tree)
-            item_qt.setText(2, "Ürün Seçili Değil")
-            return
-        islem_tipi_filtre = self.stok_hareket_tip_filter_cb.currentText()
-        bas_tarih_str = self.stok_hareket_bas_tarih_entry.text()
-        bitis_tarih_str = self.stok_hareket_bit_tarih_entry.text()
+        # self.stok_hareket_tree'nin artık _setup_ui içinde oluşturulduğunu varsayıyoruz.
+        self.stok_hareket_tree.clear() 
+        
+        # KRİTİK DÜZELTME: self.urun_id integer olmalı ve bas_tarih_entry var olmalı.
+        if not self.urun_id or self.urun_id == 0: return
+
         try:
             hareketler = self.db.stok_hareketleri_listele(
-                self.urun_id,
-                kullanici_id=self.app.current_user_id,
-                islem_tipi=islem_tipi_filtre if islem_tipi_filtre != "TÜMÜ" else None,
-                baslangic_tarih=bas_tarih_str if bas_tarih_str else None,
-                bitis_tarihi=bitis_tarih_str if bitis_tarih_str else None
+                stok_id=self.urun_id,
+                # self.bas_tarih_entry'nin artık var olduğu varsayılır.
+                baslangic_tarihi=self.bas_tarih_entry.text(), 
+                bitis_tarihi=self.bitis_tarih_entry.text()
             )
-            if not hareketler:
-                item_qt = QTreeWidgetItem(self.stok_hareket_tree)
-                item_qt.setText(2, "Hareket Bulunamadı")
-                return
+
             for hareket in hareketler:
-                if not isinstance(hareket, dict):
-                    logging.warning(f"Stok hareketleri listesinde beklenmedik veri tipi: {type(hareket)}. Atlanıyor.")
-                    continue
-                
-                tarih_obj = hareket.get('tarih')
-                if isinstance(tarih_obj, (date, datetime)):
-                    tarih_formatted = tarih_obj.strftime('%d.%m.%Y')
-                else:
-                    tarih_formatted = str(tarih_obj or "")
-                miktar_formatted = f"{hareket.get('miktar', 0.0):.2f}".rstrip('0').rstrip('.')
-                onceki_stok_formatted = f"{hareket.get('onceki_stok', 0.0):.2f}".rstrip('0').rstrip('.')
-                sonraki_stok_formatted = f"{hareket.get('sonraki_stok', 0.0):.2f}".rstrip('0').rstrip('.')
-                item_qt = QTreeWidgetItem(self.stok_hareket_tree)
-                item_qt.setText(0, str(hareket.get('id', '')))
-                item_qt.setText(1, tarih_formatted)
-                item_qt.setText(2, hareket.get('islem_tipi', ''))
-                item_qt.setText(3, miktar_formatted)
-                item_qt.setText(4, onceki_stok_formatted)
-                item_qt.setText(5, sonraki_stok_formatted)
-                item_qt.setText(6, hareket.get('aciklama', '-') if hareket.get('aciklama') else "-")
-                item_qt.setText(7, hareket.get('kaynak', '-') if hareket.get('kaynak') else "-")
-                item_qt.setData(0, Qt.UserRole, hareket.get('id'))
-                item_qt.setData(3, Qt.UserRole, hareket.get('miktar'))
-                item_qt.setData(4, Qt.UserRole, hareket.get('onceki_stok'))
-                item_qt.setData(5, Qt.UserRole, hareket.get('sonraki_stok'))
-            self.app.set_status_message(f"Ürün '{self.urun_adi}' için {len(hareketler)} stok hareketi listelendi.")
+                item = QTreeWidgetItem(self.stok_hareket_tree) 
+                item.setText(0, str(hareket.get('id', '-')))
+                item.setText(1, hareket.get('tarih', ''))
+                item.setText(2, str(hareket.get('islem_tipi', '')))
+                item.setText(3, str(hareket.get('miktar', 0.0)))
+                item.setText(4, str(hareket.get('birim_fiyat', 0.0)))
+                item.setText(5, str(hareket.get('aciklama', '')))
+                item.setText(6, str(hareket.get('kaynak', '')))
+                item.setText(7, str(hareket.get('kaynak_id', '-')))
+                item.setText(8, str(hareket.get('onceki_stok', 0.0)))
+                item.setText(9, str(hareket.get('sonraki_stok', 0.0)))
+
         except Exception as e:
-            logger.error(f"Stok hareketleri yüklenirken hata: {e}", exc_info=True)
-            QMessageBox.critical(self.app, "Hata", f"Stok hareketleri yüklenirken bir hata oluştu:\n{e}")
+            QMessageBox.critical(self, "Hata", f"Stok hareketleri yüklenirken bir hata oluştu:\n{e}")
+            logging.error(f"Stok hareketleri yüklenirken hata: {e}", exc_info=True)
             
 class IlgiliFaturalarSekmesi(QWidget):
-    def __init__(self, parent_notebook, db_manager, app_ref, urun_id, urun_adi):
-        super().__init__(parent_notebook)
+    def __init__(self, parent, db_manager, urun_id, urun_adi, app_ref):
+        super().__init__(parent)
         self.db = db_manager
-        self.app = app_ref
         self.urun_id = urun_id
         self.urun_adi = urun_adi
+        self.app = app_ref
+        
+        self._setup_ui()
+        if self.urun_id:
+            self._load_ilgili_faturalar()
 
-        self.main_layout = QVBoxLayout(self)
-
+    def _setup_ui(self):
+        main_layout = QVBoxLayout(self)
         filter_frame = QFrame(self)
         filter_layout = QHBoxLayout(filter_frame)
-        self.main_layout.addWidget(filter_frame)
+        main_layout.addWidget(filter_frame)
 
         filter_layout.addWidget(QLabel("Fatura Tipi:"))
         self.fatura_tipi_filter_cb = QComboBox()
-        self.fatura_tipi_filter_cb.addItems(["TÜMÜ", self.db.FATURA_TIP_ALIS, self.db.FATURA_TIP_SATIS, self.db.FATURA_TIP_DEVIR_GIRIS, self.db.FATURA_TIP_ALIS_IADE, self.db.FATURA_TIP_SATIS_IADE])
-        self.fatura_tipi_filter_cb.setCurrentText("TÜMÜ")
+        self.fatura_tipi_filter_cb.addItems(["TÜMÜ", "ALIŞ", "SATIŞ"])
         self.fatura_tipi_filter_cb.currentIndexChanged.connect(self._load_ilgili_faturalar)
         filter_layout.addWidget(self.fatura_tipi_filter_cb)
+        filter_layout.addStretch()
 
-        filtrele_button = QPushButton("Filtrele")
-        filtrele_button.clicked.connect(self._load_ilgili_faturalar)
-        filter_layout.addWidget(filtrele_button)
-
-        cols_fatura = ("ID", "Fatura No", "Tarih", "Tip", "Cari/Misafir", "KDV Hariç Top.", "KDV Dahil Top.")
         self.ilgili_faturalar_tree = QTreeWidget(self)
-        self.ilgili_faturalar_tree.setHeaderLabels(cols_fatura)
-        self.ilgili_faturalar_tree.setColumnCount(len(cols_fatura))
-        self.ilgili_faturalar_tree.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.ilgili_faturalar_tree.setHeaderLabels(["ID", "Fatura No", "Tarih", "Tip", "Cari/Misafir", "KDV Hariç Top.", "KDV Dahil Top."])
         self.ilgili_faturalar_tree.setSortingEnabled(True)
-
-        col_defs_fatura = [
-            ("ID", 40, Qt.AlignCenter),
-            ("Fatura No", 120, Qt.AlignCenter),
-            ("Tarih", 85, Qt.AlignCenter),
-            ("Tip", 70, Qt.AlignCenter),
-            ("Cari/Misafir", 200, Qt.AlignCenter),
-            ("KDV Hariç Top.", 120, Qt.AlignCenter),
-            ("KDV Dahil Top.", 120, Qt.AlignCenter)
-        ]
-        for i, (col_name, width, alignment) in enumerate(col_defs_fatura):
-            self.ilgili_faturalar_tree.setColumnWidth(i, width)
-            self.ilgili_faturalar_tree.headerItem().setTextAlignment(i, alignment)
-            self.ilgili_faturalar_tree.headerItem().setFont(i, QFont("Segoe UI", 9, QFont.Bold))
-
-        self.ilgili_faturalar_tree.header().setStretchLastSection(False)
-        self.ilgili_faturalar_tree.header().setSectionResizeMode(1, QHeaderView.Stretch)
         self.ilgili_faturalar_tree.header().setSectionResizeMode(4, QHeaderView.Stretch)
-
-        self.main_layout.addWidget(self.ilgili_faturalar_tree)
-
-        self.ilgili_faturalar_tree.itemDoubleClicked.connect(self._on_fatura_double_click)
-
-        self._load_ilgili_faturalar()
+        main_layout.addWidget(self.ilgili_faturalar_tree)
 
     def _load_ilgili_faturalar(self):
         self.ilgili_faturalar_tree.clear()
-        if not self.urun_id:
-            item_qt = QTreeWidgetItem(self.ilgili_faturalar_tree)
-            item_qt.setText(4, "Ürün seçili değil.")
+        
+        # KRİTİK DÜZELTME: urun_id'yi integer'a çevirme garantisi
+        urun_id_int = None
+        if self.urun_id:
+            try:
+                # Gelen ID'yi zorla integer'a çevir
+                urun_id_int = int(self.urun_id)
+            except (ValueError, TypeError):
+                # ID dize ise (örneğin TEST ÜRÜNÜ ADMİN), geçersiz sayılır ve çıkılır.
+                return
+        
+        if urun_id_int is None or urun_id_int == 0: 
             return
-        fatura_tipi_filtre = self.fatura_tipi_filter_cb.currentText()
-        try:
-            faturalar_response = self.db.get_urun_faturalari(self.urun_id, fatura_tipi=fatura_tipi_filtre if fatura_tipi_filtre != "TÜMÜ" else None)
-            
-            # API'den gelen yanıtın formatını kontrol et
-            faturalar = []
-            if isinstance(faturalar_response, dict) and "items" in faturalar_response:
-                faturalar = faturalar_response.get("items", [])
-            elif isinstance(faturalar_response, list):
-                faturalar = faturalar_response
-            else:
-                raise ValueError("API'den beklenmeyen yanıt formatı")
 
+        fatura_tipi_filtre = self.fatura_tipi_filter_cb.currentText()
+        if fatura_tipi_filtre == "TÜMÜ":
+            fatura_tipi_filtre = None
+
+        try:
+            # API'ye her zaman INTEGER urun_id_int gönderilir.
+            response_data = self.db.get_urun_faturalari(urun_id_int, fatura_tipi_filtre)
+            
+            faturalar = response_data.get("items", []) if isinstance(response_data, dict) else (response_data if isinstance(response_data, list) else [])
+            
             if not faturalar:
                 item_qt = QTreeWidgetItem(self.ilgili_faturalar_tree)
-                item_qt.setText(4, "Bu ürüne ait fatura bulunamadı.")
+                item_qt.setText(3, "Fatura Yok")
                 return
+
             for fatura_item in faturalar:
+                item_qt = QTreeWidgetItem(self.ilgili_faturalar_tree)
                 fatura_id = fatura_item.get('id')
                 fatura_no = fatura_item.get('fatura_no')
                 tarih_obj = fatura_item.get('tarih')
@@ -8161,9 +8085,10 @@ class IlgiliFaturalarSekmesi(QWidget):
                 item_qt.setData(5, Qt.UserRole, toplam_kdv_haric)
                 item_qt.setData(6, Qt.UserRole, toplam_kdv_dahil)
             self.app.set_status_message(f"Ürün '{self.urun_adi}' için {len(faturalar)} fatura listelendi.")
+            
         except Exception as e:
-            logger.error(f"İlgili faturalar yüklenirken hata: {e}", exc_info=True)
-            QMessageBox.critical(self.app, "Hata", f"İlgili faturalar yüklenirken bir hata oluştu:\n{e}")
+            QMessageBox.critical(self.app, "Hata", f"İlgili faturalar yüklenirken hata: {e}")
+            logging.error(f"İlgili faturalar yükleme hatası: {e}", exc_info=True)
 
     def _on_fatura_double_click(self, item, column):
         fatura_id = int(item.text(0))

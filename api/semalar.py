@@ -325,7 +325,8 @@ class Fatura(Base):
     fatura_notlari = Column(Text, nullable=True)
     genel_iskonto_tipi = Column(String, default="YOK")
     genel_iskonto_degeri = Column(Float, default=0.0)
-    original_fatura_id = Column(Integer, ForeignKey('faturalar.id'), nullable=True)
+    # KRİTİK DÜZELTME: original_fatura_id KOLONU KALDIRILDI (DB Uyuşmazlığını çözmek için)
+    # original_fatura_id = Column(Integer, ForeignKey('faturalar.id'), nullable=True) 
 
     genel_toplam = Column(Float, nullable=False, default=0.0)
     toplam_kdv_haric = Column(Float, nullable=False, default=0.0)

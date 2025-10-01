@@ -155,7 +155,8 @@ def convert_siparis_to_fatura(
     fatura_donusum: modeller.SiparisFaturaDonusum,
     db: Session = Depends(get_db)
 ):
-    db_siparis = db.query(semalar.Siparis).filter(semalar.Siparis.id == siparis_id, semalar.Siparis.kullanici_id == fatura_donusum.kullanici_id).first()
+    # MODEL TUTARLILIĞI DÜZELTME: semalar.Siparis -> modeller.Siparis (ORM)
+    db_siparis = db.query(modeller.Siparis).filter(modeller.Siparis.id == siparis_id, modeller.Siparis.kullanici_id == fatura_donusum.kullanici_id).first()
     if not db_siparis:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sipariş bulunamadı.")
     
@@ -167,8 +168,9 @@ def convert_siparis_to_fatura(
 
     fatura_turu_olustur = semalar.FaturaTuruEnum.SATIS if db_siparis.siparis_turu == semalar.SiparisTuruEnum.SATIŞ_SIPARIS else semalar.FaturaTuruEnum.ALIS
 
-    last_fatura = db.query(semalar.Fatura).filter(semalar.Fatura.fatura_turu == fatura_turu_olustur, semalar.Fatura.kullanici_id == fatura_donusum.kullanici_id) \
-                                       .order_by(semalar.Fatura.fatura_no.desc()).first()
+    # MODEL TUTARLILIĞI DÜZELTME: semalar.Fatura -> modeller.Fatura (ORM)
+    last_fatura = db.query(modeller.Fatura).filter(modeller.Fatura.fatura_turu == fatura_turu_olustur, modeller.Fatura.kullanici_id == fatura_donusum.kullanici_id) \
+                                       .order_by(modeller.Fatura.fatura_no.desc()).first()
     
     prefix = "SF" if fatura_turu_olustur == semalar.FaturaTuruEnum.SATIS else "AF"
     next_sequence = 1
@@ -182,12 +184,14 @@ def convert_siparis_to_fatura(
     
     new_fatura_no = f"{prefix}{next_sequence:09d}"
 
-    db_fatura = semalar.Fatura(
+    # MODEL TUTARLILIĞI DÜZELTME: semalar.Fatura -> modeller.Fatura (ORM)
+    db_fatura = modeller.Fatura(
         fatura_no=new_fatura_no,
         fatura_turu=fatura_turu_olustur,
         tarih=datetime.now().date(),
         vade_tarihi=fatura_donusum.vade_tarihi,
         cari_id=db_siparis.cari_id,
+        cari_tip=db_siparis.cari_tip, # Siparis modelindeki cari_tip kullanıldı.
         odeme_turu=fatura_donusum.odeme_turu,
         kasa_banka_id=fatura_donusum.kasa_banka_id,
         fatura_notlari=f"Sipariş No: {db_siparis.siparis_no} üzerinden oluşturuldu.",
@@ -203,7 +207,8 @@ def convert_siparis_to_fatura(
     toplam_kdv_dahil_temp = 0.0
 
     for siparis_kalem in db_siparis.kalemler:
-        urun_info = db.query(semalar.Stok).filter(semalar.Stok.id == siparis_kalem.urun_id, semalar.Stok.kullanici_id == fatura_donusum.kullanici_id).first()
+        # MODEL TUTARLILIĞI DÜZELTME: semalar.Stok -> modeller.Stok (ORM)
+        urun_info = db.query(modeller.Stok).filter(modeller.Stok.id == siparis_kalem.urun_id, modeller.Stok.kullanici_id == fatura_donusum.kullanici_id).first()
         if not urun_info:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ürün ID {siparis_kalem.urun_id} bulunamadı.")
         
@@ -223,7 +228,8 @@ def convert_siparis_to_fatura(
         kalem_toplam_kdv_dahil = iskontolu_birim_fiyat_kdv_dahil * siparis_kalem.miktar
         kdv_tutari = kalem_toplam_kdv_dahil - kalem_toplam_kdv_haric
 
-        db_fatura_kalem = semalar.FaturaKalemi(
+        # MODEL TUTARLILIĞI DÜZELTME: semalar.FaturaKalemi -> modeller.FaturaKalemi (ORM)
+        db_fatura_kalem = modeller.FaturaKalemi(
             fatura_id=db_fatura.id,
             urun_id=siparis_kalem.urun_id,
             miktar=siparis_kalem.miktar,
@@ -253,7 +259,8 @@ def convert_siparis_to_fatura(
         if islem_tipi_stok:
             db.add(urun_info)
 
-            db_stok_hareket = semalar.StokHareket(
+            # MODEL TUTARLILIĞI DÜZELTME: semalar.StokHareket -> modeller.StokHareket (ORM)
+            db_stok_hareket = modeller.StokHareket(
                 stok_id=siparis_kalem.urun_id,
                 tarih=db_fatura.tarih,
                 islem_tipi=islem_tipi_stok,
@@ -297,9 +304,10 @@ def convert_siparis_to_fatura(
             islem_yone_cari = semalar.IslemYoneEnum.BORC
 
         if islem_yone_cari:
-            db_cari_hareket = semalar.CariHareket(
+            # MODEL TUTARLILIĞI DÜZELTME: semalar.CariHareket -> modeller.CariHareket (ORM)
+            db_cari_hareket = modeller.CariHareket(
                 cari_id=db_fatura.cari_id,
-                cari_turu=cari_turu,
+                cari_tip=cari_turu,
                 tarih=db_fatura.tarih,
                 islem_turu=db_fatura.fatura_turu.value,
                 islem_yone=islem_yone_cari,
@@ -328,7 +336,8 @@ def convert_siparis_to_fatura(
             islem_yone_kasa = semalar.IslemYoneEnum.GIRIS
 
         if islem_yone_kasa:
-            db_kasa_banka_hareket = semalar.KasaBankaHareket(
+            # MODEL TUTARLILIĞI DÜZELTME: semalar.KasaBankaHareket -> modeller.KasaBankaHareket (ORM)
+            db_kasa_banka_hareket = modeller.KasaBankaHareket(
                 kasa_banka_id=fatura_donusum.kasa_banka_id,
                 tarih=db_fatura.tarih,
                 islem_turu=fatura_turu_olustur.value,
@@ -341,7 +350,8 @@ def convert_siparis_to_fatura(
             )
             db.add(db_kasa_banka_hareket)
             
-            db_kasa_banka = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == fatura_donusum.kasa_banka_id, semalar.KasaBanka.kullanici_id == fatura_donusum.kullanici_id).first()
+            # MODEL TUTARLILIĞI DÜZELTME: semalar.KasaBanka -> modeller.KasaBankaHesap (ORM)
+            db_kasa_banka = db.query(modeller.KasaBankaHesap).filter(modeller.KasaBankaHesap.id == fatura_donusum.kasa_banka_id, modeller.KasaBankaHesap.kullanici_id == fatura_donusum.kullanici_id).first()
             if db_kasa_banka:
                 if islem_yone_kasa == semalar.IslemYoneEnum.GIRIS:
                     db_kasa_banka.bakiye += db_fatura.genel_toplam
@@ -407,61 +417,83 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
     kullanici_id = current_user.id # JWT'den gelen ID'yi kullan
     
     try:
-        # DÜZELTME: Sorgularda modeller kullanıldı ve JWT ID'si kullanıldı.
+        # Fatura No Kontrolü
         if db.query(modeller.Fatura).filter(modeller.Fatura.fatura_no == fatura_data.fatura_no, modeller.Fatura.kullanici_id == kullanici_id).first():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bu fatura numarası zaten mevcut.")
             
-        toplam_kdv_haric = 0.0
-        toplam_kdv_dahil = 0.0
+        toplam_kdv_haric_calc = 0.0
+        toplam_kdv_dahil_calc = 0.0
         
+        # 1. Hesaplama: Kalemler üzerinden toplamları hesapla
         for kalem in fatura_data.kalemler:
-            birim_fiyat_kdv_haric = kalem.birim_fiyat
-            iskontolu_birim_fiyat_kdv_haric = birim_fiyat_kdv_haric * (1 - kalem.iskonto_yuzde_1 / 100) * (1 - kalem.iskonto_yuzde_2 / 100)
+            miktar = kalem.miktar
+            birim_fiyat_kdv_haric_orig = kalem.birim_fiyat
+            kdv_orani = kalem.kdv_orani
+            iskonto_yuzde_1 = kalem.iskonto_yuzde_1
+            iskonto_yuzde_2 = kalem.iskonto_yuzde_2
+
+            bf_kdv_dahil_orig = birim_fiyat_kdv_haric_orig * (1 + kdv_orani / 100)
+            bf_iskonto_1 = bf_kdv_dahil_orig * (1 - iskonto_yuzde_1 / 100)
+            bf_iskontolu_dahil = bf_iskonto_1 * (1 - iskonto_yuzde_2 / 100)
+
+            bf_iskontolu_haric = bf_iskontolu_dahil / (1 + kdv_orani / 100) if kdv_orani != 0 else bf_iskontolu_dahil
             
-            kalem_toplam_kdv_haric_temp = iskontolu_birim_fiyat_kdv_haric * kalem.miktar
-            kalem_toplam_kdv_dahil_temp = kalem_toplam_kdv_haric_temp * (1 + kalem.kdv_orani / 100)
+            toplam_kdv_haric_calc += bf_iskontolu_haric * miktar
+            toplam_kdv_dahil_calc += bf_iskontolu_dahil * miktar
             
-            toplam_kdv_haric += kalem_toplam_kdv_haric_temp
-            toplam_kdv_dahil += kalem_toplam_kdv_dahil_temp
-            
+        # 2. Hesaplama: Genel İskontoyu Uygula
+        genel_iskonto_tutari = 0.0
         if fatura_data.genel_iskonto_tipi == "YUZDE" and fatura_data.genel_iskonto_degeri > 0:
-            genel_iskonto_tutari = toplam_kdv_haric * (fatura_data.genel_iskonto_degeri / 100)
-            toplam_kdv_haric -= genel_iskonto_tutari
-            
-            toplam_kdv_dahil = toplam_kdv_haric * (1 + (sum(k.kdv_orani for k in fatura_data.kalemler) / len(fatura_data.kalemler) if len(fatura_data.kalemler) > 0 else 0) / 100)
-        
+            genel_iskonto_tutari = toplam_kdv_dahil_calc * (fatura_data.genel_iskonto_degeri / 100)
         elif fatura_data.genel_iskonto_tipi == "TUTAR" and fatura_data.genel_iskonto_degeri > 0:
             genel_iskonto_tutari = fatura_data.genel_iskonto_degeri
-            oran = toplam_kdv_haric / toplam_kdv_dahil if toplam_kdv_dahil > 0 else 0
-            toplam_kdv_dahil -= genel_iskonto_tutari
-            toplam_kdv_haric = toplam_kdv_dahil * oran
+            
+        genel_toplam_final = toplam_kdv_dahil_calc - genel_iskonto_tutari
 
-        db_fatura = modeller.Fatura(
-            fatura_no=fatura_data.fatura_no,
-            fatura_turu=fatura_data.fatura_turu,
-            tarih=fatura_data.tarih,
-            vade_tarihi=fatura_data.vade_tarihi,
-            cari_id=fatura_data.cari_id,
-            misafir_adi=fatura_data.misafir_adi,
-            odeme_turu=fatura_data.odeme_turu,
-            kasa_banka_id=fatura_data.kasa_banka_id,
-            fatura_notlari=fatura_data.fatura_notlari,
-            genel_iskonto_tipi=fatura_data.genel_iskonto_tipi,
-            genel_iskonto_degeri=fatura_data.genel_iskonto_degeri,
-            original_fatura_id=fatura_data.original_fatura_id,
-            toplam_kdv_haric=toplam_kdv_haric,
-            toplam_kdv_dahil=toplam_kdv_dahil,
-            genel_toplam=toplam_kdv_dahil,
-            kullanici_id=kullanici_id
-        )
+        # KRİTİK DÜZELTME: Cari Tipi'ni Fatura Türüne göre belirle
+        cari_tip_final = None
+        if fatura_data.fatura_turu in [semalar.FaturaTuruEnum.SATIS, semalar.FaturaTuruEnum.SATIS_IADE]:
+            cari_tip_final = semalar.CariTipiEnum.MUSTERI
+        elif fatura_data.fatura_turu in [semalar.FaturaTuruEnum.ALIS, semalar.FaturaTuruEnum.ALIS_IADE, semalar.FaturaTuruEnum.DEVIR_GIRIS]:
+            cari_tip_final = semalar.CariTipiEnum.TEDARIKCI
+        else:
+             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Geçersiz fatura türü cari tip ataması: {fatura_data.fatura_turu}")
+
+        # 3. ORM Nesnesi Oluşturma
+        fatura_dict = fatura_data.model_dump(exclude_unset=True)
+        
+        # Pydantic'ten gelen ve ORM'de karşılığı olmayan/çakışan alanları çıkar
+        fatura_dict.pop('kullanici_id', None) 
+        fatura_dict.pop('olusturan_kullanici_id', None)
+        fatura_dict.pop('kalemler', [])
+        fatura_dict.pop('original_fatura_id', None) 
+        fatura_dict.pop('toplam_kdv_haric', None) 
+        fatura_dict.pop('toplam_kdv_dahil', None)
+
+        
+        db_fatura = modeller.Fatura(**fatura_dict,
+                                    kullanici_id=kullanici_id,
+                                    cari_tip=cari_tip_final,
+                                    genel_toplam=genel_toplam_final 
+                                    )
+        
         db.add(db_fatura)
         db.flush()
 
+        # 4. Kalem ekleme ve Stok/Cari/Kasa Hareketleri mantığı
         for kalem_data in fatura_data.kalemler:
-            db_kalem = modeller.FaturaKalemi(fatura_id=db_fatura.id, **kalem_data.model_dump(), kullanici_id=fatura_data.kullanici_id)
+            
+            # KRİTİK DÜZELTME: DB'de ve ORM'de var olmayan tüm iskonto/hesaplama kolonlarını çıkar.
+            kalem_dict = kalem_data.model_dump()
+            kalem_dict.pop('iskonto_tipi', None)    
+            kalem_dict.pop('iskonto_degeri', None)
+            kalem_dict.pop('kalem_toplam_kdv_haric', None) 
+            kalem_dict.pop('kalem_toplam_kdv_dahil', None)
+            kalem_dict.pop('kullanici_id', None) # Pydantic'ten gelen (DB'de olmayan) kullanici_id çıkarıldı
+            db_kalem = modeller.FaturaKalemi(fatura_id=db_fatura.id, **kalem_dict) 
             db.add(db_kalem)
             
-            db_stok = db.query(modeller.Stok).filter(modeller.Stok.id == kalem_data.urun_id, modeller.Stok.kullanici_id == fatura_data.kullanici_id).first()
+            db_stok = db.query(modeller.Stok).filter(modeller.Stok.id == kalem_data.urun_id, modeller.Stok.kullanici_id == kullanici_id).first()
             if not db_stok:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Ürün ID {kalem_data.urun_id} bulunamadı.")
             
@@ -480,9 +512,9 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
 
             islem_tipi_stok = None
             if db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS:
-                islem_tipi_stok = semalar.StokIslemTipiEnum.SATIŞ # Bu satırda Türkçe karakterli değer atıyoruz, üye adını düzeltmeliyiz
+                islem_tipi_stok = semalar.StokIslemTipiEnum.SATIŞ 
             elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS:
-                islem_tipi_stok = semalar.StokIslemTipiEnum.ALIS # Bu satırda Türkçe karakterli değer atıyoruz, üye adını düzeltmeliyiz
+                islem_tipi_stok = semalar.StokIslemTipiEnum.ALIŞ 
             elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS_IADE:
                 islem_tipi_stok = semalar.StokIslemTipiEnum.SATIŞ_İADE
             elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS_IADE:
@@ -493,7 +525,7 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
             if islem_tipi_stok:
                 db.add(db_stok)
                 db_stok_hareket = modeller.StokHareket(
-                    stok_id=kalem_data.urun_id,
+                    urun_id=kalem_data.urun_id,
                     tarih=db_fatura.tarih,
                     islem_tipi=islem_tipi_stok,
                     miktar=kalem_data.miktar,
@@ -503,19 +535,12 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
                     kaynak_id=db_fatura.id,
                     onceki_stok=stok_miktar_oncesi,
                     sonraki_stok=db_stok.miktar,
-                    kullanici_id=fatura_data.kullanici_id
+                    kullanici_id=kullanici_id
                 )
                 db.add(db_stok_hareket)
-        
-        cari_turu = None
-        if db_fatura.fatura_turu in [semalar.FaturaTuruEnum.SATIS, semalar.FaturaTuruEnum.SATIS_IADE]:
-            cari_turu = semalar.CariTipiEnum.MUSTERI
-        elif db_fatura.fatura_turu in [semalar.FaturaTuruEnum.ALIS, semalar.FaturaTuruEnum.ALIS_IADE, semalar.FaturaTuruEnum.DEVIR_GIRIS]:
-            cari_turu = semalar.CariTipiEnum.TEDARIKCI
 
-        if not cari_turu:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz cari türü.")
-
+        # Cari Hareket Oluşturma Mantığı
+        # cari_tip_final zaten hesaplandı: cari_tip_final
         if fatura_data.odeme_turu == semalar.OdemeTuruEnum.ACIK_HESAP:
             islem_yone_cari = None
             if db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS:
@@ -529,9 +554,9 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
 
             db_cari_hareket = modeller.CariHareket(
                 cari_id=db_fatura.cari_id,
-                cari_turu=cari_turu,
+                cari_tip=cari_tip_final,
                 tarih=db_fatura.tarih,
-                islem_turu=db_fatura.fatura_turu.value,
+                islem_turu=semalar.KaynakTipEnum.FATURA.value,
                 islem_yone=islem_yone_cari,
                 tutar=db_fatura.genel_toplam,
                 aciklama=f"{db_fatura.fatura_no} nolu fatura ({db_fatura.fatura_turu.value})",
@@ -539,10 +564,11 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
                 kaynak_id=db_fatura.id,
                 odeme_turu=db_fatura.odeme_turu,
                 vade_tarihi=db_fatura.vade_tarihi,
-                kullanici_id=fatura_data.kullanici_id
+                kullanici_id=kullanici_id
             )
             db.add(db_cari_hareket)
 
+        # Kasa/Banka Hareket Oluşturma Mantığı
         if fatura_data.odeme_turu != semalar.OdemeTuruEnum.ACIK_HESAP and fatura_data.kasa_banka_id:
             islem_yone_kasa = None
             if db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS:
@@ -566,11 +592,11 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
                     aciklama=f"{db_fatura.fatura_no} nolu fatura ({db_fatura.fatura_turu.value})",
                     kaynak=semalar.KaynakTipEnum.FATURA,
                     kaynak_id=db_fatura.id,
-                    kullanici_id=fatura_data.kullanici_id
+                    kullanici_id=kullanici_id
                 )
                 db.add(db_kasa_banka_hareket)
                 
-                db_kasa_banka = db.query(modeller.KasaBankaHesap).filter(modeller.KasaBankaHesap.id == fatura_data.kasa_banka_id, modeller.KasaBankaHesap.kullanici_id == fatura_data.kullanici_id).first()
+                db_kasa_banka = db.query(modeller.KasaBankaHesap).filter(modeller.KasaBankaHesap.id == fatura_data.kasa_banka_id, modeller.KasaBankaHesap.kullanici_id == kullanici_id).first()
                 if db_kasa_banka:
                     if islem_yone_kasa == semalar.IslemYoneEnum.GIRIS:
                         db_kasa_banka.bakiye += db_fatura.genel_toplam
@@ -585,6 +611,7 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
     except Exception as e:
         db.rollback()
         logger.error(f"Fatura oluşturulurken hata: {e}", exc_info=True)
+        # Hata detayını istemciye daha açık bir şekilde ilet
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Fatura oluşturulurken hata: {e}")
     
 @faturalar_router.get("/", response_model=modeller.FaturaListResponse) 

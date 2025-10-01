@@ -62,6 +62,7 @@ def get_varsayilan_kasa_banka_endpoint(
 
     varsayilan_kod = f"VARSAYILAN_{hesap_tipi.value}_{kullanici_id}"
     
+    # Model Tutarlılığı Kuralı (modeller.X) ihlali kontrol ediliyor:
     hesap = db.query(modeller.KasaBankaHesap).filter(modeller.KasaBankaHesap.kod == varsayilan_kod, modeller.KasaBankaHesap.kullanici_id == kullanici_id).first()
     if not hesap:
         hesap = db.query(modeller.KasaBankaHesap).filter(modeller.KasaBankaHesap.tip == hesap_tipi, modeller.KasaBankaHesap.kullanici_id == kullanici_id).first()
@@ -109,12 +110,13 @@ def update_sirket_bilgileri_endpoint(
 @router.get("/next_fatura_number/{fatura_turu}", response_model=modeller.NextFaturaNoResponse)
 def get_next_fatura_number_endpoint(
     fatura_turu: str, 
-    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), 
     db: Session = Depends(get_db)
 ):
     kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
-    last_fatura = db.query(semalar.Fatura).filter(semalar.Fatura.fatura_turu == fatura_turu.upper(), semalar.Fatura.kullanici_id == kullanici_id) \
-                                       .order_by(semalar.Fatura.fatura_no.desc()).first()
+    # GÜNCELLEME: Model Tutarlılığı Kuralı gereği semalar.Fatura yerine modeller.Fatura kullanıldı.
+    last_fatura = db.query(modeller.Fatura).filter(modeller.Fatura.fatura_turu == fatura_turu.upper(), modeller.Fatura.kullanici_id == kullanici_id) \
+                                       .order_by(modeller.Fatura.fatura_no.desc()).first()
 
     prefix = ""
     if fatura_turu.upper() == "SATIŞ":
@@ -241,37 +243,41 @@ async def veritabani_baglantilarini_kapat():
 def get_next_fatura_no_endpoint(
     fatura_turu: semalar.FaturaTuruEnum = Query(..., description="Fatura türü (SATIŞ/ALIŞ)"),
     db: Session = Depends(get_db),
-    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user)
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # JWT Kuralı Uygulandı
 ):
+    # Kullanici ID'si, JWT Kuralına uygun olarak current_user bağımlılığından alınıyor.
     kullanici_id = current_user.id
-    try:
-        # Fatura numarasını bulmak için en son kaydı çek
-        son_fatura = db.query(modeller.Fatura.fatura_no).filter(
-            modeller.Fatura.kullanici_id == kullanici_id,
-            modeller.Fatura.fatura_turu == fatura_turu
-        ).order_by(modeller.Fatura.fatura_no.desc()).first()
+    fatura_turu_str = fatura_turu.value
+    
+    # Model Tutarlılığı Kuralı (modeller.X kullanımı) gereği modeller.Fatura kullanıldı.
+    last_fatura = db.query(modeller.Fatura).filter(
+        modeller.Fatura.fatura_turu == fatura_turu_str,
+        modeller.Fatura.kullanici_id == kullanici_id
+    ).order_by(modeller.Fatura.fatura_no.desc()).first()
 
-        if son_fatura:
-            son_no = son_fatura[0]
-            try:
-                # Metin ve sayı kısmını ayır
-                import re
-                sayi_match = re.search(r'\d+$', son_no)
-                if sayi_match:
-                    sayi_kismi = sayi_match.group(0)
-                    metin_kismi = son_no[:sayi_match.start()]
-                    
-                    yeni_sayi = int(sayi_kismi) + 1
-                    yeni_fatura_no = f"{metin_kismi}{yeni_sayi:0{len(sayi_kismi)}}" # Aynı basamak sayısını koru
-                else:
-                    # Sadece metin varsa, sonuna '1' ekle
-                    yeni_fatura_no = f"{son_no}1"
-            except Exception:
-                yeni_fatura_no = f"{fatura_turu.value}-1"
-        else:
-            yeni_fatura_no = f"{fatura_turu.value}-1"
+    prefix = ""
+    if fatura_turu_str == "SATIŞ":
+        prefix = "SF"
+    elif fatura_turu_str == "ALIŞ":
+        prefix = "AF"
+    else:
+        # Hata kodu 400 ile döndürülüyor (geçersiz istek), bu da istemcinin yanlış bir tür göndermesini önler.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz fatura türü. 'SATIŞ' veya 'ALIŞ' olmalıdır.")
 
-        return {"next_code": yeni_fatura_no}
+    next_sequence = 1
+    
+    # Basit ve sağlam prefix-sayı mantığı (get_next_fatura_number_endpoint'e benzer)
+    if last_fatura and last_fatura.fatura_no and last_fatura.fatura_no.startswith(prefix):
+        try:
+            # Prefix'ten sonraki sayı kısmını al (ör: SF000000001 -> 000000001)
+            current_sequence_str = last_fatura.fatura_no[len(prefix):]
+            current_sequence = int(current_sequence_str)
+            next_sequence = current_sequence + 1
+        except ValueError:
+            # Sayısal bir değer bulunamazsa, sıfırdan başla (next_sequence=1 kalır)
+            pass
 
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Fatura numarası alınırken hata: {e}")
+    # 9 haneli sıfır dolgulu format kullanılır (Ör: SF000000001)
+    next_fatura_no = f"{prefix}{next_sequence:09d}"
+    
+    return {"next_code": next_fatura_no}

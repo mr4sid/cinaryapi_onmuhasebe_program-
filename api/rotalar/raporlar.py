@@ -424,27 +424,27 @@ def get_cari_hesap_ekstresi_endpoint(
 ):
     kullanici_id = current_user.id
     if cari_turu == semalar.CariTipiEnum.MUSTERI:
-        cari_obj = db.query(semalar.Musteri).filter(semalar.Musteri.id == cari_id, semalar.Musteri.kullanici_id == kullanici_id).first()
+        cari_obj = db.query(modeller.Musteri).filter(modeller.Musteri.id == cari_id, modeller.Musteri.kullanici_id == kullanici_id).first()
     else:
-        cari_obj = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == cari_id, semalar.Tedarikci.kullanici_id == kullanici_id).first()
+        cari_obj = db.query(modeller.Tedarikci).filter(modeller.Tedarikci.id == cari_id, modeller.Tedarikci.kullanici_id == kullanici_id).first()
 
     if not cari_obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cari bulunamadı")
 
-    devreden_bakiye_alacak = db.query(func.sum(semalar.CariHareket.tutar)).filter(
-        semalar.CariHareket.cari_id == cari_id,
-        semalar.CariHareket.cari_turu == cari_turu,
-        semalar.CariHareket.islem_yone == semalar.IslemYoneEnum.ALACAK,
-        semalar.CariHareket.tarih < baslangic_tarihi,
-        semalar.CariHareket.kullanici_id == kullanici_id
+    devreden_bakiye_alacak = db.query(func.sum(modeller.CariHareket.tutar)).filter(
+        modeller.CariHareket.cari_id == cari_id,
+        modeller.CariHareket.cari_tip == cari_turu, # DÜZELTME: ORM'deki doğru alan cari_tip
+        modeller.CariHareket.islem_yone == semalar.IslemYoneEnum.ALACAK,
+        modeller.CariHareket.tarih < baslangic_tarihi,
+        modeller.CariHareket.kullanici_id == kullanici_id
     ).scalar() or 0.0
 
-    devreden_bakiye_borc = db.query(func.sum(semalar.CariHareket.tutar)).filter(
-        semalar.CariHareket.cari_id == cari_id,
-        semalar.CariHareket.cari_turu == cari_turu,
-        semalar.CariHareket.islem_yone == semalar.IslemYoneEnum.BORC,
-        semalar.CariHareket.tarih < baslangic_tarihi,
-        semalar.CariHareket.kullanici_id == kullanici_id
+    devreden_bakiye_borc = db.query(func.sum(modeller.CariHareket.tutar)).filter(
+        modeller.CariHareket.cari_id == cari_id,
+        modeller.CariHareket.cari_tip == cari_turu, # DÜZELTME: ORM'deki doğru alan cari_tip
+        modeller.CariHareket.islem_yone == semalar.IslemYoneEnum.BORC,
+        modeller.CariHareket.tarih < baslangic_tarihi,
+        modeller.CariHareket.kullanici_id == kullanici_id
     ).scalar() or 0.0
 
     if cari_turu == semalar.CariTipiEnum.MUSTERI:
@@ -452,13 +452,13 @@ def get_cari_hesap_ekstresi_endpoint(
     else:
         devreden_bakiye = devreden_bakiye_borc - devreden_bakiye_alacak
 
-    hareketler_query = db.query(semalar.CariHareket).filter(
-        semalar.CariHareket.cari_id == cari_id,
-        semalar.CariHareket.cari_turu == cari_turu,
-        semalar.CariHareket.tarih >= baslangic_tarihi,
-        semalar.CariHareket.tarih <= bitis_tarihi,
-        semalar.CariHareket.kullanici_id == kullanici_id
-    ).order_by(semalar.CariHareket.tarih.asc(), semalar.CariHareket.id.asc())
+    hareketler_query = db.query(modeller.CariHareket).filter(
+        modeller.CariHareket.cari_id == cari_id,
+        modeller.CariHareket.cari_tip == cari_turu, # DÜZELTME: ORM'deki doğru alan cari_tip
+        modeller.CariHareket.tarih >= baslangic_tarihi,
+        modeller.CariHareket.tarih <= bitis_tarihi,
+        modeller.CariHareket.kullanici_id == kullanici_id
+    ).order_by(modeller.CariHareket.tarih.asc(), modeller.CariHareket.id.asc())
 
     hareketler = hareketler_query.all()
 
@@ -467,13 +467,13 @@ def get_cari_hesap_ekstresi_endpoint(
         hareket_model_dict = modeller.CariHareketRead.model_validate(hareket, from_attributes=True).model_dump()
 
         if hareket.kaynak == semalar.KaynakTipEnum.FATURA and hareket.kaynak_id:
-            fatura_obj = db.query(semalar.Fatura).filter(semalar.Fatura.id == hareket.kaynak_id, semalar.Fatura.kullanici_id == kullanici_id).first()
+            fatura_obj = db.query(modeller.Fatura).filter(modeller.Fatura.id == hareket.kaynak_id, modeller.Fatura.kullanici_id == kullanici_id).first()
             if fatura_obj:
                 hareket_model_dict['fatura_no'] = fatura_obj.fatura_no
                 hareket_model_dict['fatura_turu'] = fatura_obj.fatura_turu
 
         if hareket.kasa_banka_id:
-            kasa_banka_obj = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == hareket.kasa_banka_id, semalar.KasaBanka.kullanici_id == kullanici_id).first()
+            kasa_banka_obj = db.query(modeller.KasaBankaHesap).filter(modeller.KasaBankaHesap.id == hareket.kasa_banka_id, modeller.KasaBankaHesap.kullanici_id == kullanici_id).first()
             if kasa_banka_obj:
                 hareket_model_dict['kasa_banka_adi'] = kasa_banka_obj.hesap_adi
 
@@ -550,12 +550,12 @@ def get_urun_faturalari_endpoint(
     current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user)
 ):
     kullanici_id = current_user.id
-    query = db.query(semalar.Fatura).join(semalar.FaturaKalemi).filter(semalar.FaturaKalemi.urun_id == urun_id, semalar.Fatura.kullanici_id == kullanici_id)
+    query = db.query(modeller.Fatura).join(modeller.FaturaKalemi).filter(modeller.FaturaKalemi.urun_id == urun_id, modeller.Fatura.kullanici_id == kullanici_id)
 
     if fatura_turu:
-        query = query.filter(semalar.Fatura.fatura_turu == fatura_turu.upper())
+        query = query.filter(modeller.Fatura.fatura_turu == fatura_turu.upper())
 
-    faturalar = query.distinct(semalar.Fatura.id).order_by(semalar.Fatura.tarih.desc()).all()
+    faturalar = query.distinct(modeller.Fatura.id).order_by(modeller.Fatura.id, modeller.Fatura.tarih.desc()).all()
 
     if not faturalar:
         return {"items": [], "total": 0}

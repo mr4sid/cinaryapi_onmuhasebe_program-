@@ -13,10 +13,10 @@ router = APIRouter(prefix="/musteriler", tags=["Müşteriler"])
 @router.post("/", response_model=modeller.MusteriRead)
 def create_musteri(
     musteri: modeller.MusteriCreate,
-    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user),
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # Tipi modeller.KullaniciRead olarak güncellendi.
     db: Session = Depends(get_db)
 ):
-    db_musteri = semalar.Musteri(**musteri.model_dump(), kullanici_id=current_user.id)
+    db_musteri = modeller.Musteri(**musteri.model_dump(exclude={"kullanici_id"}), kullanici_id=current_user.id)
     db.add(db_musteri)
     db.commit()
     db.refresh(db_musteri)
@@ -25,27 +25,28 @@ def create_musteri(
 @router.get("/", response_model=modeller.MusteriListResponse)
 def read_musteriler(
     db: Session = Depends(get_db),
-    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user),
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # Tipi modeller.KullaniciRead olarak güncellendi.
     skip: int = 0,
     limit: int = 25,
     arama: Optional[str] = None,
     aktif_durum: Optional[bool] = None
 ):
-    query = db.query(semalar.Musteri).filter(semalar.Musteri.kullanici_id == current_user.id)
+    # KRİTİK DÜZELTME: Sorgularda semalar.Musteri yerine modeller.Musteri kullanıldı.
+    query = db.query(modeller.Musteri).filter(modeller.Musteri.kullanici_id == current_user.id)
 
     if arama:
         search_term = f"%{arama}%"
         query = query.filter(
             or_(
-                semalar.Musteri.ad.ilike(search_term),
-                semalar.Musteri.kod.ilike(search_term),
-                semalar.Musteri.telefon.ilike(search_term),
-                semalar.Musteri.vergi_no.ilike(search_term)
+                modeller.Musteri.ad.ilike(search_term),
+                modeller.Musteri.kod.ilike(search_term),
+                modeller.Musteri.telefon.ilike(search_term),
+                modeller.Musteri.vergi_no.ilike(search_term)
             )
         )
         
     if aktif_durum is not None:
-        query = query.filter(semalar.Musteri.aktif == aktif_durum)
+        query = query.filter(modeller.Musteri.aktif == aktif_durum)
 
     total_count = query.count()
     musteriler = query.offset(skip).limit(limit).all()
@@ -64,9 +65,10 @@ def read_musteriler(
 def read_musteri(
     musteri_id: int, 
     db: Session = Depends(get_db), 
-    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user)
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # Tipi modeller.KullaniciRead olarak güncellendi.
 ):
-    musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == musteri_id, semalar.Musteri.kullanici_id == current_user.id).first()
+    # KRİTİK DÜZELTME: Sorgularda semalar.Musteri yerine modeller.Musteri kullanıldı.
+    musteri = db.query(modeller.Musteri).filter(modeller.Musteri.id == musteri_id, modeller.Musteri.kullanici_id == current_user.id).first()
     if not musteri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müşteri bulunamadı")
 
@@ -81,9 +83,10 @@ def update_musteri(
     musteri_id: int, 
     musteri: modeller.MusteriUpdate, 
     db: Session = Depends(get_db),
-    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user)
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # Tipi modeller.KullaniciRead olarak güncellendi.
 ):
-    db_musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == musteri_id, semalar.Musteri.kullanici_id == current_user.id).first()
+    # KRİTİK DÜZELTME: Sorgularda semalar.Musteri yerine modeller.Musteri kullanıldı.
+    db_musteri = db.query(modeller.Musteri).filter(modeller.Musteri.id == musteri_id, modeller.Musteri.kullanici_id == current_user.id).first()
     if not db_musteri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müşteri bulunamadı")
     for key, value in musteri.model_dump(exclude_unset=True).items():
@@ -96,9 +99,10 @@ def update_musteri(
 def delete_musteri(
     musteri_id: int, 
     db: Session = Depends(get_db),
-    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user)
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # Tipi modeller.KullaniciRead olarak güncellendi.
 ):
-    db_musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == musteri_id, semalar.Musteri.kullanici_id == current_user.id).first()
+    # KRİTİK DÜZELTME: Sorgularda semalar.Musteri yerine modeller.Musteri kullanıldı.
+    db_musteri = db.query(modeller.Musteri).filter(modeller.Musteri.id == musteri_id, modeller.Musteri.kullanici_id == current_user.id).first()
     if not db_musteri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müşteri bulunamadı")
     db.delete(db_musteri)
@@ -109,9 +113,10 @@ def delete_musteri(
 def get_net_bakiye_endpoint(
     musteri_id: int, 
     db: Session = Depends(get_db),
-    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user)
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # Tipi modeller.KullaniciRead olarak güncellendi.
 ):
-    musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == musteri_id, semalar.Musteri.kullanici_id == current_user.id).first()
+    # KRİTİK DÜZELTME: Sorgularda semalar.Musteri yerine modeller.Musteri kullanıldı.
+    musteri = db.query(modeller.Musteri).filter(modeller.Musteri.id == musteri_id, modeller.Musteri.kullanici_id == current_user.id).first()
     if not musteri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müşteri bulunamadı")
 

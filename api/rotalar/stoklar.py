@@ -4,7 +4,7 @@ from sqlalchemy import func, and_, or_
 from .. import modeller, semalar, guvenlik
 from ..veritabani import get_db
 from typing import List, Optional, Any
-from datetime import datetime
+from datetime import datetime, date
 from sqlalchemy import String
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 # DEĞİŞİKLİK: Doğru içe aktarma yolu kullanıldı
@@ -509,3 +509,33 @@ def bulk_stok_upsert_endpoint(
         db.rollback()
         logger.error(f"Toplu stok ekleme/güncelleme sırasında kritik hata: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Toplu stok ekleme sırasında hata: {e}")
+    
+@router.get("/hareketler/", response_model=modeller.StokHareketListResponse)
+def list_stok_hareketleri_endpoint(
+    stok_id: Optional[int] = Query(None),
+    islem_tipi: Optional[semalar.StokIslemTipiEnum] = Query(None),
+    baslangic_tarihi: Optional[date] = Query(None),
+    bitis_tarihi: Optional[date] = Query(None),
+    skip: int = 0,
+    limit: int = 1000,
+    db: Session = Depends(get_db),
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user)
+):
+    kullanici_id = current_user.id
+    # MODEL TUTARLILIĞI DÜZELTME: semalar.StokHareket -> modeller.StokHareket
+    query = db.query(modeller.StokHareket).filter(modeller.StokHareket.kullanici_id == kullanici_id)
+
+    if stok_id:
+        # KRİTİK DÜZELTME: Yanlış kolon 'stok_id' yerine doğru kolon 'urun_id' kullanıldı.
+        query = query.filter(modeller.StokHareket.urun_id == stok_id)
+    if islem_tipi:
+        query = query.filter(modeller.StokHareket.islem_tipi == islem_tipi)
+    if baslangic_tarihi:
+        query = query.filter(modeller.StokHareket.tarih >= baslangic_tarihi)
+    if bitis_tarihi:
+        query = query.filter(modeller.StokHareket.tarih <= bitis_tarihi)
+
+    total = query.count()
+    hareketler = query.order_by(modeller.StokHareket.tarih.desc()).offset(skip).limit(limit).all()
+
+    return {"items": hareketler, "total": total}

@@ -261,8 +261,7 @@ class CariHesapEkstresiPenceresi(QDialog):
             params = {
                 'cari_id': self.cari_id
             }
-            # DÜZELTME: siparis_listesi_al metoduna kullanici_id parametresi eklendi
-            siparisler_data_response = self.db.siparis_listesi_al(kullanici_id=self.current_user_id, **params) 
+            siparisler_data_response = self.db.siparis_listesi_al(**params) 
             siparisler_data = siparisler_data_response.get("items", []) 
 
             for siparis in siparisler_data:
@@ -285,8 +284,7 @@ class CariHesapEkstresiPenceresi(QDialog):
                 fatura_no_text = "-"
                 if siparis.get('fatura_id'):
                     try:
-                        # DÜZELTME: fatura_getir_by_id metoduna kullanici_id parametresi eklendi
-                        fatura_data = self.db.fatura_getir_by_id(siparis.get('fatura_id'), self.current_user_id)
+                        fatura_data = self.db.fatura_getir_by_id(siparis.get('fatura_id'))
                         fatura_no_text = fatura_data.get('fatura_no', '-')
                     except Exception:
                         fatura_no_text = "Hata"
@@ -414,23 +412,23 @@ class CariHesapEkstresiPenceresi(QDialog):
         genel_tedarikci_id = self.db.get_genel_tedarikci_id()
         
         if (self.cari_tip == self.db.CARI_TIP_MUSTERI and self.cari_id == perakende_musteri_id) or \
-           (self.cari_tip == self.db.CARI_TIP_TEDARIKCI and self.cari_id == genel_tedarikci_id):
+        (self.cari_tip == self.db.CARI_TIP_TEDARIKCI and self.cari_id == genel_tedarikci_id):
             QMessageBox.warning(self, "Silme Engellendi", "Varsayılan cari hesaplar silinemez, sadece düzenlenebilir.")
             return
 
         reply = QMessageBox.question(self, 'Cariyi Sil Onayı',
-                                     f"'{self.cari_ad_gosterim}' adlı cariyi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                                    f"'{self.cari_ad_gosterim}' adlı cariyi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+                                    QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
         if reply == QMessageBox.Yes:
             try:
                 success, message = False, "Bilinmeyen hata."
                 if self.cari_tip == self.db.CARI_TIP_MUSTERI:
-                    # DÜZELTME: musteri_sil metoduna kullanici_id parametresi eklendi
-                    success, message = self.db.musteri_sil(self.cari_id, self.current_user_id)
+                    # KRİTİK DÜZELTME: musteri_sil metodu 1 argüman bekler. self.current_user_id kaldırıldı.
+                    success, message = self.db.musteri_sil(self.cari_id)
                 elif self.cari_tip == self.db.CARI_TIP_TEDARIKCI:
-                    # DÜZELTME: tedarikci_sil metoduna kullanici_id parametresi eklendi
-                    success, message = self.db.tedarikci_sil(self.cari_id, self.current_user_id)
+                    # KRİTİK DÜZELTME: tedarikci_sil metodu 1 argüman bekler. self.current_user_id kaldırıldı.
+                    success, message = self.db.tedarikci_sil(self.cari_id)
                 
                 if success:
                     QMessageBox.information(self, "Başarılı", message)
@@ -695,10 +693,10 @@ class CariHesapEkstresiPenceresi(QDialog):
         try:
             cari_detail = None
             if self.cari_tip == self.db.CARI_TIP_MUSTERI:
-                # DÜZELTME: musteri_getir_by_id metoduna kullanici_id eklendi
-                cari_detail = self.db.musteri_getir_by_id(self.cari_id, self.current_user_id)
+                # DÜZELTME: musteri_getir_by_id metodu 2 parametre bekler. kullanici_id kaldırıldı.
+                cari_detail = self.db.musteri_getir_by_id(self.cari_id)
             else:
-                # DÜZELTME: tedarikci_getir_by_id metoduna kullanici_id eklendi
+                # TEDARIKCI İÇİN KULLANICI ID GEREKLİ OLDUĞU VARSAYILIYOR. (veritabani.py'ye göre)
                 cari_detail = self.db.tedarikci_getir_by_id(self.cari_id, self.current_user_id)
 
             if not cari_detail:
@@ -712,23 +710,16 @@ class CariHesapEkstresiPenceresi(QDialog):
             self.lbl_cari_detay_vergi.setText(vergi_info)
 
             # API'den özet verilerini çekme
-            # DÜZELTME: get_cari_ekstre_ozet metoduna kullanici_id parametresi eklendi
+            # DÜZELTME: get_cari_ekstre_ozet metodu 5 parametre bekler, kullanici_id kaldırıldı.
             ekstre_ozet_data = self.db.get_cari_ekstre_ozet(
                 self.cari_id, self.cari_tip,
-                self.bas_tarih_entry.text(), self.bitis_tarih_entry.text(),
-                kullanici_id=self.current_user_id
+                self.bas_tarih_entry.text(), self.bitis_tarih_entry.text()
             )
             
             self.lbl_donem_basi_bakiye.setText(self.db._format_currency(ekstre_ozet_data.get("donem_basi_bakiye", 0.0)))
             self.lbl_toplam_borc_hareketi.setText(self.db._format_currency(ekstre_ozet_data.get("toplam_borc_hareketi", 0.0)))
             self.lbl_toplam_alacak_hareketi.setText(self.db._format_currency(ekstre_ozet_data.get("toplam_alacak_hareketi", 0.0)))
             
-            # DÜZELTME: Toplam tahsilat/ödeme değerini düzeltiyoruz.
-            # API'den gelen 'toplam_tahsilat_odeme' verisi yerine, sadece 'TAHSİLAT' veya 'ÖDEME' tipindeki
-            # hareketlerin toplam tutarı alınmalıdır.
-            # Bu API'de henüz ayrılmadığından, geçici olarak sadece 'toplam_alacak' hareketini kullanabiliriz.
-            # Ancak, daha kesin bir çözüm için backend tarafında bu değerin doğru hesaplanması gerekmektedir.
-            # Bu nedenle, bu değeri geçici olarak 'toplam_alacak' olarak alıyoruz.
             self.lbl_toplam_tahsilat_odeme.setText(self.db._format_currency(ekstre_ozet_data.get("toplam_alacak_hareketi", 0.0)))
             
             self.lbl_vadesi_gelmis.setText(self.db._format_currency(ekstre_ozet_data.get("vadesi_gelmis", 0.0)))
@@ -773,7 +764,7 @@ class CariHesapEkstresiPenceresi(QDialog):
                     self.app.set_status_message(f"Hata: Müşteri bilgileri yüklenemedi. ID {self.cari_id} bulunamadı.", "red")
                     return
             elif self.cari_tip == "TEDARIKCI":
-                cari_data = self.db.tedarikci_getir_by_id(self.cari_id)
+                cari_data = self.db.tedarikci_getir_by_id(self.cari_id, self.current_user_id)
                 if cari_data:
                     from pencereler import YeniTedarikciEklePenceresi
                     dialog = YeniTedarikciEklePenceresi(self, self.db, self._ozet_ve_liste_yenile, tedarikci_duzenle=cari_data, app_ref=self.app)
@@ -995,9 +986,9 @@ class CariHesapEkstresiPenceresi(QDialog):
             return
         
         # API'den gelen veriyi çek
-        # DÜZELTME: cari_hesap_ekstresi_al metoduna kullanici_id eklendi
+        # DÜZELTME: cari_hesap_ekstresi_al metodu 5 parametre bekler, self.current_user_id kaldırıldı.
         hareketler_listesi, devreden_bakiye, success_db, message_db = self.db.cari_hesap_ekstresi_al(
-            self.cari_id, self.cari_tip, bas_tarih_str, bitis_tarih_str, self.current_user_id
+            self.cari_id, self.cari_tip, bas_tarih_str, bitis_tarih_str
         )
 
         if not success_db:
@@ -1284,7 +1275,6 @@ class CariHesapEkstresiPenceresi(QDialog):
             
 # pencereler.py dosyasında FaturaGuncellemePenceresi'nin yeni içeriği
 class FaturaGuncellemePenceresi(QDialog):
-    # FaturaOlusturmaSayfasi'ndan dönen sinyalleri yakalamak için sinyaller tanımlanıyor
     saved_successfully = Signal()
 
     def __init__(self, parent, db_manager, fatura_id_duzenle, yenile_callback_liste=None):
@@ -1310,7 +1300,8 @@ class FaturaGuncellemePenceresi(QDialog):
         fatura_no = fatura_ana_bilgileri.get('fatura_no', 'Bilinmiyor')
 
         self.setWindowTitle(f"Fatura Güncelleme: {fatura_no}")
-        self.setWindowState(Qt.WindowMaximized)
+        # KRİTİK DÜZELTME: Pencereyi tam ekran aç
+        self.setWindowState(Qt.WindowMaximized) 
         self.setModal(True)
         
         dialog_layout = QVBoxLayout(self)
@@ -1381,13 +1372,13 @@ class FaturaDetayPenceresi(QDialog):
         if self.main_layout.layout():
             self.clear_layout(self.main_layout)
         try:
-            # DÜZELTME: fatura_getir_by_id metoduna kullanici_id parametresi eklendi
-            self.fatura_ana = self.db.fatura_getir_by_id(self.fatura_id, self.app.current_user[0])
+            # DÜZELTME: fatura_getir_by_id metodu 2 parametre bekler, kullanici_id kaldırıldı.
+            self.fatura_ana = self.db.fatura_getir_by_id(self.fatura_id)
             if not self.fatura_ana:
                 raise Exception("Fatura ana bilgileri API'den alınamadı.")
             
-            # DÜZELTME: fatura_kalemleri_al metoduna kullanici_id parametresi eklendi
-            self.fatura_kalemleri_db = self.db.fatura_kalemleri_al(self.fatura_id, self.app.current_user[0])
+            # DÜZELTME: fatura_kalemleri_al metodu 2 parametre bekler, kullanici_id kaldırıldı.
+            self.fatura_kalemleri_db = self.db.fatura_kalemleri_al(self.fatura_id)
             if not self.fatura_kalemleri_db:
                 logging.warning(f"Fatura ID {self.fatura_id} için fatura kalemi bulunamadı.")
         except Exception as e:
@@ -1786,12 +1777,20 @@ class YeniMusteriEklePenceresi(QDialog):
             if entry_name == "entry_adres":
                 widget = QTextEdit()
                 widget.setFixedHeight(80)
+                widget.textChanged.connect(lambda w=widget: self._limit_text_length(w, 300)) 
             else:
                 widget = QLineEdit()
             
             self.entries[entry_name] = widget
             form_layout.addWidget(widget, i, 1)
 
+        # KRİTİK GÜNCELLEME: QLineEdit'lar için karakter kısıtlamaları
+        self.entries["entry_kod"].setMaxLength(50)  # Kod
+        self.entries["entry_ad"].setMaxLength(100) # Ad Soyad
+        self.entries["entry_tel"].setMaxLength(11)  # Telefon (İstenen kısıtlama)
+        self.entries["entry_vd"].setMaxLength(100) # Vergi Dairesi
+        self.entries["entry_vn"].setMaxLength(11)  # Vergi No/TCKN
+        
         main_layout.addStretch() # Değişiklik: Butonları alta itmek için boşluk ekledik
 
         button_layout = QHBoxLayout()
@@ -1816,6 +1815,14 @@ class YeniMusteriEklePenceresi(QDialog):
             # Hata veren doğrudan çağrıyı ID parametresi ile düzelt
             yeni_kod = self.db.get_next_musteri_kodu(kullanici_id=kullanici_id)
             self._oto_kod_uret(yeni_kod) 
+
+    def _limit_text_length(self, text_edit_widget, max_length):
+        """QTextEdit için metin uzunluğunu sınırlayan yardımcı metot."""
+        if len(text_edit_widget.toPlainText()) > max_length:
+            cursor = text_edit_widget.textCursor()
+            cursor.movePosition(cursor.End)
+            text_edit_widget.setText(text_edit_widget.toPlainText()[:max_length])
+            text_edit_widget.setTextCursor(cursor)
 
     def _oto_kod_uret(self, yeni_kod):
         """Yeni cari kodu oluşturur ve forma yazar."""
@@ -4021,10 +4028,14 @@ class StokKartiPenceresi(QDialog):
         # KRİTİK DÜZELTME: API'nin zorunlu tuttuğu kullanici_id'yi request body'ye (urun_data) ekle
         urun_data["kullanici_id"] = self.app.current_user.get("id")
 
+        # KRİTİK EKSİK ARGÜMAN DÜZELTMESİ: kullanici_id'yi argüman olarak çekiyoruz
+        kullanici_id_arg = self.app.current_user.get("id")
+
         try:
             if self.duzenleme_modu and self.stok_id:
                 # Stok güncelleme işlemi
-                success, message = self.db.stok_guncelle(self.stok_id, urun_data)
+                # KRİTİK DÜZELTME: Eksik olan 'kullanici_id' argümanı eklendi.
+                success, message = self.db.stok_guncelle(self.stok_id, urun_data, kullanici_id_arg)
             else:
                 # Yeni stok ekleme işlemi
                 success, message = self.db.stok_ekle(urun_data)
@@ -4234,10 +4245,23 @@ class YeniTedarikciEklePenceresi(QDialog):
 
         for i, (label_text, entry_name) in enumerate(labels_entries.items()):
             form_layout.addWidget(QLabel(label_text), i, 0, alignment=Qt.AlignCenter)
-            widget = QTextEdit() if entry_name == "entry_adres" else QLineEdit()
-            if isinstance(widget, QTextEdit): widget.setFixedHeight(80)
+            if entry_name == "entry_adres":
+                widget = QTextEdit()
+                widget.setFixedHeight(80)
+                # QTextEdit için karakter sınırı (255)
+                widget.textChanged.connect(lambda w=widget: self._limit_text_length(w, 255))
+            else:
+                widget = QLineEdit()
+                
             self.entries[entry_name] = widget
             form_layout.addWidget(widget, i, 1)
+
+        # KRİTİK GÜNCELLEME: QLineEdit'lar için karakter kısıtlamaları
+        self.entries["entry_kod"].setMaxLength(50)  # Kod
+        self.entries["entry_ad"].setMaxLength(100) # Ad Soyad
+        self.entries["entry_tel"].setMaxLength(11)  # Telefon (İstenen kısıtlama)
+        self.entries["entry_vd"].setMaxLength(100) # Vergi Dairesi
+        self.entries["entry_vn"].setMaxLength(20)  # Vergi No/TCKN
 
         button_layout = QHBoxLayout()
         main_layout.addLayout(button_layout)
@@ -4250,6 +4274,14 @@ class YeniTedarikciEklePenceresi(QDialog):
         button_layout.addWidget(self.iptal_button)
         
         self._verileri_yukle()
+
+    def _limit_text_length(self, text_edit_widget, max_length):
+        """QTextEdit için metin uzunluğunu sınırlayan yardımcı metot."""
+        if len(text_edit_widget.toPlainText()) > max_length:
+            cursor = text_edit_widget.textCursor()
+            cursor.movePosition(cursor.End)
+            text_edit_widget.setText(text_edit_widget.toPlainText()[:max_length])
+            text_edit_widget.setTextCursor(cursor)
 
     def _verileri_yukle(self):
         """Mevcut tedarikçi verilerini düzenleme modunda forma yükler ve yeni kod üretir."""

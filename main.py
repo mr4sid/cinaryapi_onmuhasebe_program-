@@ -854,7 +854,7 @@ if __name__ == "__main__":
         main_window = App(login_data["user_data"])
         db_manager_login.app = main_window 
         
-        # KRİTİK DÜZELTME: UI hemen açılıyor (main_window.show)
+        main_window.setWindowState(Qt.WindowMaximized)
         main_window.show()
         
         # UI açıldıktan hemen sonra, yerel verileri yüklüyor ve senkronizasyonu arka planda başlatıyor.
