@@ -13,28 +13,29 @@ from .veritabani import Base
 
 # Enum tanımları
 class FaturaTuruEnum(str, enum.Enum):
-    SATIS = "SATIŞ"
-    ALIS = "ALIŞ"
-    SATIS_IADE = "SATIŞ İADE"
-    ALIS_IADE = "ALIŞ İADE"
-    DEVIR_GIRIS = "DEVİR GİRİŞ"
+    SATIS = "SATIS" 
+    ALIS = "ALIS"
+    SATIS_IADE = "SATIS_IADE"
+    ALIS_IADE = "ALIS_IADE"
+    DEVIR_GIRIS = "DEVIR_GIRIS"
 
 class OdemeTuruEnum(str, enum.Enum):
-    NAKIT = "NAKİT"
+    # KRİTİK: NAKİT, EFT/HAVALE gibi sorunlu değerleri temizliyoruz.
+    NAKIT = "NAKIT"           
     KART = "KART"
-    EFT_HAVALE = "EFT/HAVALE"
-    CEK = "ÇEK"
+    EFT_HAVALE = "EFT_HAVALE"
+    CEK = "CEK"
     SENET = "SENET"
-    ACIK_HESAP = "AÇIK_HESAP"
-    ETKISIZ_FATURA = "ETKİSİZ_FATURA"
+    ACIK_HESAP = "ACIK_HESAP"
+    ETKISIZ_FATURA = "ETKISIZ_FATURA"
 
 class CariTipiEnum(str, enum.Enum):
     MUSTERI = "MUSTERI"
     TEDARIKCI = "TEDARIKCI"
 
-class IslemYoneEnum(str, enum.Enum): # İşlem yönü için kullanılan enum (ALACAK/BORC)
-    GIRIS = "GİRİŞ"
-    CIKIS = "ÇIKIŞ"
+class IslemYoneEnum(str, enum.Enum):
+    GIRIS = "GIRIS" # GIRIS yerine
+    CIKIS = "CIKIS" # CIKIS yerine
     BORC = "BORC"
     ALACAK = "ALACAK"
 
@@ -43,16 +44,16 @@ class KasaBankaTipiEnum(str, enum.Enum):
     BANKA = "BANKA"
 
 class StokIslemTipiEnum(str, enum.Enum):
-    GİRİŞ = "GİRİŞ"
-    ÇIKIŞ = "ÇIKIŞ"
+    GIRIS = "GIRIS"
+    CIKIS = "CIKIS"
     SAYIM_FAZLASI = "SAYIM_FAZLASI"
     SAYIM_EKSİĞİ = "SAYIM_EKSİĞİ"
     SATIŞ = "SATIŞ"
     ALIŞ = "ALIŞ"
     SATIŞ_İADE = "SATIŞ_İADE"
     ALIŞ_İADE = "ALIŞ_İADE"
-    KONSİNYE_GİRİŞ = "KONSİNYE_GİRİŞ"
-    KONSİNYE_ÇIKIŞ = "KONSİNYE_ÇIKIŞ"
+    KONSİNYE_GIRIS = "KONSİNYE_GIRIS"
+    KONSİNYE_CIKIS = "KONSİNYE_CIKIS"
 
 class SiparisTuruEnum(str, enum.Enum):
     SATIS_SIPARIS = "SATIŞ_SIPARIS"
@@ -219,7 +220,7 @@ class Tedarikci(Base):
     faturalar = relationship(
         "Fatura",
         foreign_keys="[Fatura.cari_id]",
-        primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ_IADE', 'DEVİR GİRİŞ'])",
+        primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ_IADE', 'DEVİR GIRIS'])",
         back_populates="ilgili_tedarikci",
         cascade="all, delete-orphan",
         overlaps="ilgili_tedarikci"
@@ -343,7 +344,7 @@ class Fatura(Base):
     son_guncelleyen_kullanici = relationship("Kullanici", foreign_keys=[son_guncelleyen_kullanici_id])
 
     ilgili_musteri = relationship("Musteri", foreign_keys=[cari_id], primaryjoin="Musteri.id == Fatura.cari_id and Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ_IADE'])", back_populates="faturalar", viewonly=True, overlaps="faturalar")
-    ilgili_tedarikci = relationship("Tedarikci", foreign_keys=[cari_id], primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ_IADE', 'DEVİR GİRİŞ'])", back_populates="faturalar", viewonly=True, overlaps="faturalar")
+    ilgili_tedarikci = relationship("Tedarikci", foreign_keys=[cari_id], primaryjoin="Tedarikci.id == Fatura.cari_id and Fatura.fatura_turu.in_(['ALIŞ', 'ALIŞ_IADE', 'DEVİR GIRIS'])", back_populates="faturalar", viewonly=True, overlaps="faturalar")
 
     kalemler = relationship("FaturaKalemi", back_populates="fatura", cascade="all, delete-orphan")
 

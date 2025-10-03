@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import datetime
 from sqlalchemy import text
-
+from ..api_servisler import create_initial_data
 from .. import semalar
 from ..veritabani import get_db, Base
 
@@ -212,3 +212,26 @@ def clear_all_data(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Veri temizleme sırasında hata oluştu: {e}")
+    
+@router.post("/ilk_veri_olustur", status_code=status.HTTP_200_OK)
+def initial_data_setup_endpoint(
+    kullanici_id: int = Query(..., description="Kullanıcı ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Kullanıcı oluşturma sonrası varsayılan nitelikleri, carileri ve kasayı ekler.
+    Bu rota, create_user.py scripti tarafından çağrılır.
+    """
+    try:
+        # Varsayılan veri oluşturma servisini çağır
+        create_initial_data(db=db, kullanici_id=kullanici_id)
+        
+        return {"message": f"Varsayılan veriler kullanıcı {kullanici_id} için başarıyla oluşturuldu."}
+        
+    except Exception as e:
+        db.rollback()
+        # Bu hata, verilerin zaten var olmasından kaynaklanıyorsa, işlemi yoksayabiliriz.
+        if "already exists" in str(e):
+            return {"message": f"Varsayılan veriler zaten mevcut."}
+
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Varsayılan veri oluşturma hatası: {e}")    

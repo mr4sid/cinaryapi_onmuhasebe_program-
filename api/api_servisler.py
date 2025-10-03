@@ -6,7 +6,7 @@ from . import semalar
 from sqlalchemy.orm import Session
 from .semalar import KasaBanka, Tedarikci, Musteri
 from datetime import date
-
+from .modeller import KasaBankaHesap, Tedarikci, Musteri 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -70,9 +70,9 @@ def create_initial_data(db: Session, kullanici_id: int):
             logger.info("Varsayılan 'Genel Tedarikçi' zaten mevcut.")
 
         # Varsayılan NAKİT hesabını kontrol et ve ekle
-        nakit_kasa = db.query(KasaBanka).filter(KasaBanka.kod == "NAKİT_KASA", KasaBanka.kullanici_id == kullanici_id).first()
+        nakit_kasa = db.query(KasaBankaHesap).filter(KasaBankaHesap.kod == "NAKİT_KASA", KasaBankaHesap.kullanici_id == kullanici_id).first()
         if not nakit_kasa:
-            yeni_kasa = KasaBanka(
+            yeni_kasa = KasaBankaHesap(
                 hesap_adi="Nakit Kasa",
                 kod="NAKİT_KASA",
                 tip="KASA",

@@ -298,8 +298,15 @@ def get_nakit_akisi_raporu_endpoint(
 ):
     kullanici_id = current_user.id
     
-    # 1.1. CARİ HAREKETLER (Tahsilat/Ödeme) - Sadece nakit hareketler
-    # islem_turu zaten VARCHAR'dır.
+    # KRİTİK ÇÖZÜM: Hardcoded NAKİT/KART/EFT filtresini ENUM değerleri ile değiştirme.
+    # Bu, NAKİT (Türkçe İ) yerine NAKIT (safe) ve EFT/HAVALE yerine EFT_HAVALE gönderilmesini sağlar.
+    safe_odeme_turleri = [
+        semalar.OdemeTuruEnum.NAKIT.value,
+        semalar.OdemeTuruEnum.KART.value,
+        semalar.OdemeTuruEnum.EFT_HAVALE.value
+    ]
+    
+    # 1.1. CARİ HAREKETLER (Tahsilat/Ödeme)
     cari_nakit_select = db.query(
         modeller.CariHareket.islem_turu.label('tip'),
         modeller.CariHareket.tutar,
@@ -313,7 +320,7 @@ def get_nakit_akisi_raporu_endpoint(
         modeller.CariHareket.kullanici_id == kullanici_id,
         modeller.CariHareket.tarih >= baslangic_tarihi if baslangic_tarihi else True,
         modeller.CariHareket.tarih <= bitis_tarihi if bitis_tarihi else True,
-        modeller.CariHareket.odeme_turu.in_(['NAKİT', 'KART', 'EFT/HAVALE'])
+        modeller.CariHareket.odeme_turu.in_(safe_odeme_turleri) # DÜZELTİLDİ
     ).subquery().select()
 
     # 1.2. GELİR/GİDER HAREKETLERİ (Manuel Girişler) - Sadece nakit hareketler

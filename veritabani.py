@@ -902,6 +902,21 @@ class OnMuhasebe:
         }
         cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
 
+        # KRİTİK ÇÖZÜM: Türkçe Fatura Türü Değerini, API'nin beklediği İngilizce Üye Adına Çevirme
+        if 'fatura_turu' in cleaned_params:
+            fatura_turu_degeri = cleaned_params['fatura_turu']
+            
+            # Bu, API'deki ENUM'ların üye adlarıyla (SATIS, ALIS, vb.) eşleşmelidir.
+            mapping = {
+                "SATIŞ": "SATIS",
+                "ALIŞ": "ALIS",
+                "SATIŞ İADE": "SATIS_IADE",
+                "ALIŞ İADE": "ALIS_IADE",
+                "DEVİR GİRİŞ": "DEVIR_GIRIS"
+            }
+            # Eğer değer map'te varsa, üye adıyla günceller. Yoksa, gelen değeri korur.
+            cleaned_params['fatura_turu'] = mapping.get(fatura_turu_degeri, fatura_turu_degeri)
+
         if self.is_online:
             try:
                 response = self._make_api_request("GET", "/faturalar/", params=cleaned_params)
@@ -959,11 +974,21 @@ class OnMuhasebe:
             logger.warning(f"Çevrimdışı mod: Manuel fatura numarası oluşturuldu: {yeni_fatura_no}")
             return yeni_fatura_no
         
+        # KRİTİK ÇÖZÜM: Türkçe Fatura Türü Değerini, API'nin beklediği İngilizce Üye Adına Çevirme
+        mapping = {
+            self.FATURA_TIP_SATIS: "SATIS",
+            self.FATURA_TIP_ALIS: "ALIS",
+            self.FATURA_TIP_SATIS_IADE: "SATIS_IADE",
+            self.FATURA_TIP_ALIS_IADE: "ALIS_IADE",
+            self.FATURA_TIP_DEVIR_GIRIS: "DEVIR_GIRIS",
+        }
+        api_fatura_turu = mapping.get(fatura_tipi, fatura_tipi) 
+
         try:
-            params = {"fatura_turu": fatura_tipi}
+            params = {"fatura_turu": api_fatura_turu} # Burası, API'ye gidecek parametre
             
-            # KRİTİK DÜZELTME: Hatalı '/raporlar/son_fatura_no_getir' rotası, 
-            # API'deki doğru rota olan '/sistem/next_fatura_no' ile değiştirildi.
+            # NOT: Bu kısımda kullanici_id parametresini göndermemize gerek yoktur, çünkü _make_api_request JWT'yi kullanır.
+            # Ancak API rotası hala Query parametresi bekliyor olabilir. API'nin bu parametreyi beklediğini varsayarak bırakıyorum.
             response_data = self._make_api_request(
                 "GET", "/sistem/next_fatura_no", params=params
             )
@@ -971,13 +996,13 @@ class OnMuhasebe:
             if response_data and "next_code" in response_data:
                 return response_data["next_code"]
             else:
+                # API 200 dönse bile fatura numarası döndürmezse (nadiren)
                 return "FATURA_NO_HATA"
                 
         except (ValueError, ConnectionError, Timeout, RequestException) as e:
             logger.error(f"API'den son fatura numarası çekilirken hata: {e}")
-            self.is_online = False # Hata alınınca çevrimdışı moda geçiyoruz
+            self.is_online = False
             
-            # Çevrimdışı mod mantığına geri dönüyoruz
             yeni_fatura_no = f"MANUEL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
             return yeni_fatura_no
                 

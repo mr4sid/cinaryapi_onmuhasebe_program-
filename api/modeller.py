@@ -1,5 +1,5 @@
+# modeller.py dosyasının tamamı (güncel ve düzeltilmiş hali)
 from __future__ import annotations # Model referans sorunlarını çözmek için
-
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from datetime import date, datetime
 from typing import List, Optional, Union, Literal # Literal eklendi
@@ -15,8 +15,8 @@ from sqlalchemy.orm import relationship, backref, declarative_base # DEĞİŞTİ
 from .semalar import (
     FaturaTuruEnum, OdemeTuruEnum, CariTipiEnum, IslemYoneEnum,
     KasaBankaTipiEnum, StokIslemTipiEnum, SiparisTuruEnum, SiparisDurumEnum,
-    KaynakTipEnum, GelirGiderTipEnum # GelirGiderTipEnum eklendi
-)
+    KaynakTipEnum, GelirGiderTipEnum
+) 
 
 Base = declarative_base()
 
@@ -83,7 +83,13 @@ class Ayarlar(Base):
 class KullaniciBase(BaseOrmModel):
     kullanici_adi: str
     aktif: Optional[bool] = True
-    yetki: Optional[str] = "kullanici"
+    
+    # KRİTİK DÜZELTME: Rota tarafından beklenen ve eksik olan tüm alanlar eklendi
+    ad: Optional[str] = None
+    soyad: Optional[str] = None
+    email: Optional[EmailStr] = None
+    telefon: Optional[str] = None
+    rol: Optional[str] = "admin" 
 
 class KullaniciCreate(KullaniciBase):
     sifre: str
@@ -859,72 +865,6 @@ class SiparisKalemiRead(BaseModel):
     # Bu sınıfa da yeni yapılandırmayı ekliyoruz.
     model_config = ConfigDict(from_attributes=True)
 
-class FaturaTuruEnum(str, enum.Enum):
-    SATIŞ = "SATIŞ"
-    ALIŞ = "ALIŞ"
-    SATIŞ_İADE = "SATIŞ İADE"
-    ALIŞ_İADE = "ALIŞ İADE"
-    DEVİR_GİRİŞ = "DEVİR GİRİŞ"
-
-class OdemeTuruEnum(str, enum.Enum):
-    NAKİT = "NAKİT"
-    KART = "KART"
-    EFT_HAVALE = "EFT/HAVALE"
-    ÇEK = "ÇEK"
-    SENET = "SENET"
-    AÇIK_HESAP = "AÇIK_HESAP"
-    ETKİSİZ_FATURA = "ETKİSİZ_FATURA"
-
-class CariTipiEnum(str, enum.Enum):
-    MUSTERI = "MUSTERI"
-    TEDARIKCI = "TEDARIKCI"
-
-class IslemYoneEnum(str, enum.Enum):
-    GİRİŞ = "GİRİŞ"
-    ÇIKIŞ = "ÇIKIŞ"
-    BORC = "BORC"
-    ALACAK = "ALACAK"
-
-class KasaBankaTipiEnum(str, enum.Enum):
-    KASA = "KASA"
-    BANKA = "BANKA"
-
-class StokIslemTipiEnum(str, enum.Enum):
-    GİRİŞ = "GİRİŞ"
-    ÇIKIŞ = "ÇIKIŞ"
-    SAYIM_FAZLASI = "SAYIM_FAZLASI"
-    SAYIM_EKSİĞİ = "SAYIM_EKSİĞİ"
-    SATIŞ = "SATIŞ"
-    ALIŞ = "ALIŞ"
-    SATIŞ_İADE = "SATIŞ_İADE"
-    ALIŞ_İADE = "ALIŞ_İADE"
-    KONSİNYE_GİRİŞ = "KONSİNYE_GİRİŞ"
-    KONSİNYE_ÇIKIŞ = "KONSİNYE_ÇIKIŞ"
-
-class SiparisTuruEnum(str, enum.Enum):
-    SATIŞ_SIPARIS = "SATIŞ_SIPARIS"
-    ALIŞ_SIPARIS = "ALIŞ_SIPARIS"
-
-class SiparisDurumEnum(str, enum.Enum):
-    BEKLEMEDE = "BEKLEMEDE"
-    TAMAMLANDI = "TAMAMLANDI"
-    KISMİ_TESLIMAT = "KISMİ_TESLİMAT"
-    İPTAL_EDİLDİ = "İPTAL_EDİLDİ"
-    FATURALAŞTIRILDI = "FATURALAŞTIRILDI"
-
-class KaynakTipEnum(str, enum.Enum):
-    FATURA = "FATURA"
-    SIPARIS = "SIPARIS"
-    GELIR_GIDER = "GELIR_GIDER"
-    MANUEL = "MANUEL"
-    TAHSILAT = "TAHSİLAT"
-    ODEME = "ÖDEME"
-    VERESIYE_BORC_MANUEL = "VERESİYE_BORÇ_MANUEL"
-
-class GelirGiderTipEnum(str, enum.Enum):
-    GELİR = "GELİR"
-    GİDER = "GİDER"
-
 # Tablo Modelleri
 class Sirket(Base):
     __tablename__ = 'sirketler'
@@ -964,6 +904,33 @@ class Kullanici(Base):
     siparisler = relationship("Siparis", back_populates="kullanici")
     urun_nitelikleri = relationship("UrunNitelik", back_populates="kullanici")
     stok_hareketleri = relationship("StokHareket", back_populates="kullanici")
+
+    # 1. Fatura/Sipariş Yazan Kullanıcı (Genel Multi-User Takibi)
+    cari_hareketler = relationship(
+        "CariHareket", 
+        back_populates="kullanici", 
+        overlaps="cari_hareketler_olusturan" # Çakışmayı önlemek için overlaps eklendi
+    )
+    
+    cari_hareketler_olusturan = relationship(
+        "CariHareket", 
+        back_populates="olusturan_kullanici",
+        overlaps="cari_hareketler"
+    )
+
+    cari_hareketler = relationship(
+        "CariHareket", 
+        # Bu ilişki, kullanıcının kaydettiği hareketleri (ana multi-user takibi) izler:
+        foreign_keys="[CariHareket.kullanici_id]", 
+        back_populates="kullanici"
+    )
+    
+    cari_hareketler_olusturan = relationship(
+        "CariHareket", 
+        # Bu ilişki, hareketi oluşturan kişiyi (ikincil, denetim amaçlı) izler:
+        foreign_keys="[CariHareket.olusturan_kullanici_id]", 
+        back_populates="olusturan_kullanici"
+    )
 
 class Musteri(Base):
     __tablename__ = 'musteriler'
@@ -1155,32 +1122,48 @@ class Siparis(Base):
                              primaryjoin="and_(foreign(Siparis.cari_id) == Tedarikci.id, Siparis.cari_tip == 'TEDARIKCI')",
                              overlaps="siparisler, kalemler, musteri") 
  
+# api/modeller.py dosyasındaki CariHareket sınıfının KESİN SON HALİ
 class CariHareket(Base):
     __tablename__ = 'cari_hareketler'
     id = Column(Integer, primary_key=True, index=True)
     tarih = Column(Date, nullable=False)
-    islem_turu = Column(String(50), nullable=False)  # 'TAHSILAT', 'ODEME', 'FATURA'
-    islem_yone = Column(Enum(IslemYoneEnum), nullable=False)  # 'GIRIS' veya 'CIKIS'
-    cari_id = Column(Integer, nullable=False) # Hangi cari ile ilgili olduğu
+    islem_turu = Column(String(50), nullable=False)
+    islem_yone = Column(Enum(IslemYoneEnum), nullable=False)
+    cari_id = Column(Integer, nullable=False)
     cari_tip = Column(String, nullable=False)
     tutar = Column(Float, nullable=False)
     odeme_turu = Column(Enum(OdemeTuruEnum), nullable=True)
     aciklama = Column(Text, nullable=True)
-    kaynak = Column(String(50), nullable=False) # 'FATURA', 'TAHSILAT', 'ODEME'
-    kaynak_id = Column(Integer, nullable=True) # İlgili Fatura/Tahsilat/Ödeme ID'si
+    kaynak = Column(String(50), nullable=False) 
+    kaynak_id = Column(Integer, nullable=True)
     kasa_banka_id = Column(Integer, ForeignKey('kasalar_bankalar.id'), nullable=True)
-    olusturma_tarihi = Column(DateTime, server_default=func.now())
-    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
+    
+    # EKSİK VE KRİTİK ALANLAR
+    vade_tarihi = Column(Date, nullable=True)
+    olusturma_tarihi_saat = Column(DateTime, server_default=func.now()) 
+    olusturan_kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=True) # <-- Yabancı Anahtar Olarak Tanımlandı
 
-    kullanici = relationship("Kullanici", back_populates="cari_hareketler")
+    kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False) # Temel multi-user takibi
+    
+    # Relationships (AmbiguousForeignKeysError'ı çözmek için foreign_keys netleştirildi)
+    kullanici = relationship(
+        "Kullanici", 
+        foreign_keys=[kullanici_id], # <-- Netleştirildi: Temel takip kolonu
+        back_populates="cari_hareketler"
+    )
+    
+    olusturan_kullanici = relationship(
+        "Kullanici", 
+        foreign_keys=[olusturan_kullanici_id], # <-- Netleştirildi: Denetim kolonu
+        back_populates="cari_hareketler_olusturan"
+    )
+    
     kasa_banka = relationship("KasaBankaHesap", back_populates="cari_hareketler")
     
-    # DÜZELTİLDİ: primaryjoin ve foreign() anotasyonu eklendi
     musteri = relationship("Musteri",
                           primaryjoin="and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_tip == 'MUSTERI')",
                           overlaps="cari_hareketler") 
                           
-    # GÜNCELLEME: overlaps="cari_hareketler, musteri" eklendi
     tedarikci = relationship("Tedarikci",
                              primaryjoin="and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_tip == 'TEDARIKCI')",
                              overlaps="cari_hareketler, musteri")
@@ -1279,15 +1262,18 @@ class KasaBankaHesap(Base):
     bakiye = Column(Float, default=0.0)
     para_birimi = Column(String(10), default="TL")
     banka_adi = Column(String(100), nullable=True)
+    sube_adi = Column(String(100), nullable=True)
     hesap_no = Column(String(50), nullable=True, unique=True, index=True)
     iban = Column(String(50), nullable=True, unique=True, index=True)
     swift_kodu = Column(String(20), nullable=True)
+
+    varsayilan_odeme_turu = Column(String(50), nullable=True) # <-- EKSİK OLAN SON PYTHON ATTRIBUTE'Ü EKLENDİ
+
     olusturma_tarihi = Column(DateTime, server_default=func.now())
     kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
 
     kullanici = relationship("Kullanici", back_populates="kasalar_bankalar") 
     hareketler = relationship("KasaBankaHareket", back_populates="kasa_banka_hesabi", cascade="all, delete-orphan")
-  
     faturalar = relationship("Fatura", back_populates="kasa_banka")
     cari_hareketler = relationship("CariHareket", back_populates="kasa_banka")
 

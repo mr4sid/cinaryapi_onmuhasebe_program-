@@ -42,7 +42,7 @@ if not logger.handlers:
                 print("Başlangıç admin kullanıcısı başarıyla oluşturuldu: admin/admin")
                 
                 # Ekleme: Başlangıç verilerini de oluşturalım
-                response = requests.post(f"{API_BASE_URL}/yonetici/ilk_veri_olustur?kullanici_id={response_data['id']}")
+                response = requests.post(f"{API_BASE_URL}/admin/ilk_veri_olustur?kullanici_id={response_data['id']}")
                 response.raise_for_status()
                 logger.info("Başlangıç verileri başarıyla oluşturuldu.")
                 print("Başlangıç verileri başarıyla oluşturuldu.")
