@@ -964,9 +964,9 @@ class OnMuhasebe:
             logger.error(f"Fatura ID {fatura_id} kalemleri çekilirken hata: {e}")
             return []
         
-    def son_fatura_no_getir(self, fatura_tipi: str, kullanici_id: int) -> str:
+    def son_fatura_no_getir(self, fatura_tipi: str) -> str:
         """
-        API'den son fatura numarasını alır ve yeni bir fatura numarası üretir.
+        API'den bir sonraki fatura numarasını alır.
         Çevrimdışı modda ise manuel bir fatura numarası oluşturur.
         """
         if not self.is_online:
@@ -974,7 +974,6 @@ class OnMuhasebe:
             logger.warning(f"Çevrimdışı mod: Manuel fatura numarası oluşturuldu: {yeni_fatura_no}")
             return yeni_fatura_no
         
-        # KRİTİK ÇÖZÜM: Türkçe Fatura Türü Değerini, API'nin beklediği İngilizce Üye Adına Çevirme
         mapping = {
             self.FATURA_TIP_SATIS: "SATIS",
             self.FATURA_TIP_ALIS: "ALIS",
@@ -982,27 +981,30 @@ class OnMuhasebe:
             self.FATURA_TIP_ALIS_IADE: "ALIS_IADE",
             self.FATURA_TIP_DEVIR_GIRIS: "DEVIR_GIRIS",
         }
-        api_fatura_turu = mapping.get(fatura_tipi, fatura_tipi) 
+        api_fatura_turu = mapping.get(fatura_tipi) 
+
+        if not api_fatura_turu:
+            logger.error(f"Geçersiz veya tanınmayan fatura türü: {fatura_tipi}")
+            return "FATURA_TURU_HATA"
 
         try:
-            params = {"fatura_turu": api_fatura_turu} # Burası, API'ye gidecek parametre
+            params = {"fatura_turu": api_fatura_turu}
             
-            # NOT: Bu kısımda kullanici_id parametresini göndermemize gerek yoktur, çünkü _make_api_request JWT'yi kullanır.
-            # Ancak API rotası hala Query parametresi bekliyor olabilir. API'nin bu parametreyi beklediğini varsayarak bırakıyorum.
+            # DOĞRU ADRES: Rota /sistem altına taşındığı için adres güncellendi.
             response_data = self._make_api_request(
                 "GET", "/sistem/next_fatura_no", params=params
             )
 
+            # DOĞRU YANIT ANAHTARI: Pydantic modeli NextCodeResponse olduğu için 'next_code' kullanılıyor.
             if response_data and "next_code" in response_data:
                 return response_data["next_code"]
             else:
-                # API 200 dönse bile fatura numarası döndürmezse (nadiren)
+                logger.warning(f"API'den beklenen fatura numarası alınamadı. Yanıt: {response_data}")
                 return "FATURA_NO_HATA"
                 
         except (ValueError, ConnectionError, Timeout, RequestException) as e:
             logger.error(f"API'den son fatura numarası çekilirken hata: {e}")
             self.is_online = False
-            
             yeni_fatura_no = f"MANUEL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
             return yeni_fatura_no
                 

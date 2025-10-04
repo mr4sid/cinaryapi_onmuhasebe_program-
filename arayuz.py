@@ -3560,9 +3560,13 @@ class BaseIslemSayfasi(QWidget):
 
     def _on_cari_secildi_callback(self, selected_cari_id, selected_cari_display_text):
         """
-        Cari Seçim penceresi kapatıldığında çağrılır. (Fatura/Sipariş Formları için ComboBox'ı kullanmayan formlar)
+        Cari Seçim penceresi kapatıldığında çağrılır ve seçilen cariye göre formu günceller.
         """
         self._guncelle_cari_bilgileri_ve_bakiye_ui(selected_cari_id, selected_cari_display_text)
+        
+        # YENİ EKLENEN KOD: Cari değiştiğinde, ödeme türü listesini yeniden değerlendir.
+        # Bu, "Açık Hesap" mantığının doğru çalışmasını sağlar.
+        self._odeme_turu_ve_misafir_adi_kontrol()
 
     def _on_cari_selected(self):
         selected_cari_id = self.cari_combo.currentData()
@@ -4483,8 +4487,8 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         
         if self.iade_modu_aktif:
             if hasattr(self, 'f_no_e'):
-                # Fatura numarası atama mantığı burada olmalı
-                self.f_no_e.setText(self.db.son_fatura_no_getir(self.islem_tipi, kullanici_id=self.app.current_user_id))
+                # GÜNCELLEME: Çağrıdan 'kullanici_id' parametresi kaldırıldı.
+                self.f_no_e.setText(self.db.son_fatura_no_getir(self.islem_tipi))
             if hasattr(self, 'cari_sec_button'):
                 self.cari_sec_button.setEnabled(False)
             
@@ -4508,12 +4512,11 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
                 self.misafir_adi_container_frame.setVisible(False)
         else:
             if hasattr(self, 'f_no_e'):
-                # KRİTİK DÜZELTME: Eksik kullanici_id parametresi eklendi (Eğer iade modu aktif değilse fatura numarasını tekrar ayarla)
-                self.f_no_e.setText(self.db.son_fatura_no_getir(self.islem_tipi, kullanici_id=self.app.current_user_id))
+                # GÜNCELLEME: Çağrıdan 'kullanici_id' parametresi kaldırıldı.
+                self.f_no_e.setText(self.db.son_fatura_no_getir(self.islem_tipi))
             if hasattr(self, 'cari_sec_button'):
                 self.cari_sec_button.setEnabled(True)
             if not self.duzenleme_id and hasattr(self, 'f_no_e'):
-                # Bu kısım artık yukarıdaki ilk if bloğunda çağrıldığı için burada tekrara gerek yok.
                 pass
             
             if hasattr(self, '_odeme_turu_ve_misafir_adi_kontrol'):
@@ -4684,15 +4687,13 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         fatura_no = self.f_no_e.text().strip()
         fatura_tarihi = self.fatura_tarihi_entry.text().strip()
         odeme_turu = self.odeme_turu_cb.currentText()
-        vade_tarihi = self.entry_vade_tarihi.text().strip() if self.entry_vade_tarihi.isVisible() else None
+        vade_tarihi = self.entry_vade_tarihi.text().strip() if self.entry_vade_tarihi.isVisible() and self.entry_vade_tarihi.text().strip() else None
         fatura_notlari = self.fatura_notlari_text.toPlainText().strip()
         genel_iskonto_tipi = self.genel_iskonto_tipi_cb.currentText()
         genel_iskonto_degeri = float(self.genel_iskonto_degeri_e.text().replace(',', '.')) if self.genel_iskonto_degeri_e.isEnabled() else 0.0
         misafir_adi = self.entry_misafir_adi.text().strip() if self.misafir_adi_container_frame.isVisible() else None
 
-        kasa_banka_id = None
-        if self.islem_hesap_cb.isEnabled() and self.islem_hesap_cb.currentData():
-            kasa_banka_id = self.islem_hesap_cb.currentData()
+        kasa_banka_id = self.islem_hesap_cb.currentData() if self.islem_hesap_cb.isEnabled() else None
 
         if not fatura_no: QMessageBox.critical(self.app, "Eksik Bilgi", "Fatura Numarası boş olamaz."); return
         try: datetime.strptime(fatura_tarihi, '%Y-%m-%d')
@@ -4720,43 +4721,37 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         if self.iade_modu_aktif:
             if self.islem_tipi == self.db.FATURA_TIP_SATIS: fatura_tip_to_save = self.db.FATURA_TIP_SATIS_IADE
             elif self.islem_tipi == self.db.FATURA_TIP_ALIS: fatura_tip_to_save = self.db.FATURA_TIP_ALIS_IADE
-
+            
+        # HATA DÜZELTİLDİ: 'cari_tip' bilgisi burada belirlenip API'ye gönderiliyor.
+        cari_tip_to_save = self.db.CARI_TIP_MUSTERI if fatura_tip_to_save in [self.db.FATURA_TIP_SATIS, self.db.FATURA_TIP_SATIS_IADE] else self.db.CARI_TIP_TEDARIKCI
+        
         try:
-            # KRİTİK DÜZELTME: Kullanıcı ID'sini list/tuple [0] yerine .get("id") ile al
             olusturan_kullanici_id = self.app.current_user.get("id") if self.app and hasattr(self.app, 'current_user') and self.app.current_user else 1
 
+            # Fatura servisine gönderilecek tüm veriler
+            fatura_data = {
+                "fatura_no": fatura_no,
+                "tarih": fatura_tarihi,
+                "fatura_turu": fatura_tip_to_save,
+                "cari_id": self.secili_cari_id,
+                "cari_tip": cari_tip_to_save, # <-- YENİ EKLENEN ALAN
+                "kalemler": kalemler_to_send_to_api,
+                "odeme_turu": odeme_turu,
+                "olusturan_kullanici_id": olusturan_kullanici_id,
+                "kasa_banka_id": kasa_banka_id,
+                "misafir_adi": misafir_adi,
+                "fatura_notlari": fatura_notlari,
+                "vade_tarihi": vade_tarihi,
+                "genel_iskonto_tipi": genel_iskonto_tipi,
+                "genel_iskonto_degeri": genel_iskonto_degeri,
+                "original_fatura_id": self.original_fatura_id_for_iade if self.iade_modu_aktif else None
+            }
+
             if self.duzenleme_id:
-                success, message = self.fatura_service.fatura_guncelle(
-                    self.duzenleme_id,
-                    fatura_no,
-                    fatura_tarihi,
-                    self.secili_cari_id,
-                    odeme_turu,
-                    kalemler_to_send_to_api,
-                    kasa_banka_id,
-                    misafir_adi,
-                    fatura_notlari,
-                    vade_tarihi,
-                    genel_iskonto_tipi,
-                    genel_iskonto_degeri
-                )
+                # Güncelleme fonksiyonu da tüm veriyi almalı
+                success, message = self.fatura_service.fatura_guncelle(self.duzenleme_id, fatura_data)
             else:
-                success, message = self.fatura_service.fatura_olustur(
-                    fatura_no=fatura_no,
-                    tarih=fatura_tarihi,
-                    fatura_tipi=fatura_tip_to_save,
-                    cari_id=self.secili_cari_id,
-                    kalemler_data=kalemler_to_send_to_api,
-                    odeme_turu=odeme_turu,
-                    olusturan_kullanici_id=olusturan_kullanici_id,
-                    kasa_banka_id=kasa_banka_id,
-                    misafir_adi=misafir_adi,
-                    fatura_notlari=fatura_notlari,
-                    vade_tarihi=vade_tarihi,
-                    genel_iskonto_tipi=genel_iskonto_tipi,
-                    genel_iskonto_degeri=genel_iskonto_degeri,
-                    original_fatura_id=self.original_fatura_id_for_iade if self.iade_modu_aktif else None
-                )
+                success, message = self.fatura_service.fatura_olustur(**fatura_data)
 
             if success:
                 kayit_mesaji = "Fatura başarıyla güncellendi." if self.duzenleme_id else f"'{fatura_no}' numaralı fatura başarıyla kaydedildi."
@@ -4777,7 +4772,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         except Exception as e:
             logging.error(f"Fatura kaydedilirken beklenmeyen bir hata oluştu: {e}\nDetaylar:\n{traceback.format_exc()}")
             QMessageBox.critical(self.app, "Kritik Hata", f"Fatura kaydedilirken beklenmeyen bir hata oluştu:\n{e}")
-            self.app.set_status_message(f"Hata: Fatura kaydedilemedi - {e}")
+            self.app.set_status_message(f"Hata: Fatura kaydedilemedi - {e}", "red")
 
     def _mevcut_faturayi_yukle(self):
         """Mevcut bir faturayı API'den çeker ve formdaki alanları doldurur."""
@@ -4862,10 +4857,9 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         self.sepeti_guncelle_ui()
         self.toplamlari_hesapla_ui()
 
-        # DÜZELTİLDİ: Fatura numarası alma ve kontrol etme
         try:
-            fatura_no = self.db.son_fatura_no_getir(self.islem_tipi, kullanici_id=self.app.current_user_id)
-            if fatura_no == "FATURA_NO_HATA":
+            fatura_no = self.db.son_fatura_no_getir(self.islem_tipi)
+            if "HATA" in fatura_no or "MANUEL" in fatura_no:
                 raise Exception("API'den otomatik fatura numarası alınamadı.")
             self.f_no_e.setText(fatura_no)
         except Exception as e:
@@ -4875,24 +4869,34 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
 
         self.fatura_tarihi_entry.setText(datetime.now().strftime('%Y-%m-%d'))
         self.odeme_turu_cb.setCurrentText(self.db.ODEME_TURU_NAKIT)
-        self._odeme_turu_degisince_event_handler()
         self.fatura_notlari_text.clear()
         self.genel_iskonto_tipi_cb.setCurrentText("YOK")
         self.genel_iskonto_degeri_e.setText("0,00")
         self._on_genel_iskonto_tipi_changed()
-
         self._temizle_cari_secimi()
         
-        if self.islem_tipi == self.db.FATURA_TIP_SATIS and self.db.get_perakende_musteri_id() is not None:
-            perakende_data = self.db.musteri_getir_by_id(self.db.get_perakende_musteri_id())
-            if perakende_data:
-                self._on_cari_secildi_callback(perakende_data['id'], perakende_data['ad'])
-        elif self.islem_tipi == self.db.FATURA_TIP_ALIS and self.db.get_genel_tedarikci_id() is not None:
-            genel_tedarikci_data = self.db.tedarikci_getir_by_id(self.db.get_genel_tedarikci_id())
-            if genel_tedarikci_data:
-                self._on_cari_secildi_callback(genel_tedarikci_data['id'], genel_tedarikci_data['ad'])
-        else:
-            self._temizle_cari_secimi()
+        if not skip_default_cari_selection:
+            try:
+                if self.islem_tipi == self.db.FATURA_TIP_SATIS:
+                    perakende_id = self.db.get_perakende_musteri_id()
+                    if perakende_id:
+                        perakende_data = self.db.musteri_getir_by_id(musteri_id=perakende_id)
+                        if perakende_data:
+                            self._on_cari_secildi_callback(perakende_data.get('id'), perakende_data.get('ad'))
+                
+                elif self.islem_tipi == self.db.FATURA_TIP_ALIS:
+                    genel_tedarikci_id = self.db.get_genel_tedarikci_id()
+                    if genel_tedarikci_id:
+                        # HATA DÜZELTİLDİ: Eksik olan 'kullanici_id' parametresi eklendi.
+                        genel_tedarikci_data = self.db.tedarikci_getir_by_id(
+                            tedarikci_id=genel_tedarikci_id, 
+                            kullanici_id=self.app.current_user_id
+                        )
+                        if genel_tedarikci_data:
+                            self._on_cari_secildi_callback(genel_tedarikci_data.get('id'), genel_tedarikci_data.get('ad'))
+            except Exception as e:
+                logging.warning(f"Varsayılan cari yüklenirken hata: {e}")
+                self.app.set_status_message(f"Uyarı: Varsayılan cari bilgisi yüklenemedi. {e}", "orange")
 
         self.urun_arama_entry.clear()
         self.mik_e.setText("1")
@@ -4901,7 +4905,10 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         self.stk_l.setStyleSheet("color: black;")
         self.iskonto_yuzde_1_e.setText("0,00")
         self.iskonto_yuzde_2_e.setText("0,00")
-
+        
+        # Bu satır, döngüyü önlemek için _reset_form_for_new_invoice'den sonra çağrılmalı
+        self._odeme_turu_degisince_event_handler()
+        
         self.app.set_status_message(f"Yeni {self.islem_tipi.lower()} faturası oluşturmak için sayfa sıfırlandı.")
         QTimer.singleShot(0, self._urunleri_yukle_ve_cachele_ve_goster)
         self.urun_arama_entry.setFocus()
@@ -4932,57 +4939,42 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
 
     def _odeme_turu_ve_misafir_adi_kontrol(self):
         """
-        Cari seçimine göre Misafir Adı alanının görünürlüğünü/aktifliğini ve ödeme türü seçeneklerini yönetir.
+        Cari seçimine göre Misafir Adı alanının görünürlüğünü/aktifliğini ve 
+        ödeme türü seçeneklerini dinamik olarak yönetir.
         """
         secili_cari_id_str = str(self.secili_cari_id) if self.secili_cari_id is not None else None
 
-        # Yeni kontrol: Seçili cari varsayılan bir cari mi?
+        perakende_musteri_id_str = "-1"
+        genel_tedarikci_id_str = "-1"
+        try:
+            perakende_musteri_id_str = str(self.db.get_perakende_musteri_id())
+        except Exception: pass
+        try:
+            genel_tedarikci_id_str = str(self.db.get_genel_tedarikci_id())
+        except Exception: pass
+
         is_default_cari = (
-            (self.islem_tipi == self.db.FATURA_TIP_SATIS and secili_cari_id_str is not None and str(self.secili_cari_id) == str(self.db.get_perakende_musteri_id())) or
-            (self.islem_tipi == self.db.FATURA_TIP_ALIS and secili_cari_id_str is not None and str(self.secili_cari_id) == str(self.db.get_genel_tedarikci_id()))
+            (self.islem_tipi == self.db.FATURA_TIP_SATIS and secili_cari_id_str == perakende_musteri_id_str) or
+            (self.islem_tipi == self.db.FATURA_TIP_ALIS and secili_cari_id_str == genel_tedarikci_id_str)
         )
 
-        # "Vade Tarihi" alanının görünürlüğünü ve etkinliğini ayarlama
-        is_acik_hesap = (self.odeme_turu_cb.currentText() == self.db.ODEME_TURU_ACIK_HESAP)
-        if hasattr(self, 'lbl_vade_tarihi'): self.lbl_vade_tarihi.setVisible(is_acik_hesap)
-        if hasattr(self, 'entry_vade_tarihi'): 
-            self.entry_vade_tarihi.setVisible(is_acik_hesap)
-            self.entry_vade_tarihi.setEnabled(is_acik_hesap)
-        if hasattr(self, 'btn_vade_tarihi'): 
-            self.btn_vade_tarihi.setVisible(is_acik_hesap)
-            self.btn_vade_tarihi.setEnabled(is_acik_hesap)
-
-        if is_acik_hesap and hasattr(self, 'entry_vade_tarihi') and not self.entry_vade_tarihi.text():
-            self.entry_vade_tarihi.setText((datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'))
-        elif not is_acik_hesap and hasattr(self, 'entry_vade_tarihi'):
-            self.entry_vade_tarihi.clear()
-
-        # Misafir Adı alanını kontrol et
+        is_perakende_satis = (self.islem_tipi == self.db.FATURA_TIP_SATIS and secili_cari_id_str == perakende_musteri_id_str)
         if hasattr(self, 'misafir_adi_container_frame'):
-            is_perakende_satis = (self.islem_tipi == self.db.FATURA_TIP_SATIS and
-                                  secili_cari_id_str is not None and
-                                  secili_cari_id_str == str(self.db.get_perakende_musteri_id()))
-            if is_perakende_satis and (not self.iade_modu_aktif):
-                self.misafir_adi_container_frame.setVisible(True)
-                if hasattr(self, 'entry_misafir_adi'):
-                    self.entry_misafir_adi.setEnabled(True)
-            else:
-                self.misafir_adi_container_frame.setVisible(False)
-                if hasattr(self, 'entry_misafir_adi'):
+            self.misafir_adi_container_frame.setVisible(is_perakende_satis and not self.iade_modu_aktif)
+            if hasattr(self, 'entry_misafir_adi'):
+                self.entry_misafir_adi.setEnabled(is_perakende_satis and not self.iade_modu_aktif)
+                if not is_perakende_satis:
                     self.entry_misafir_adi.clear()
-                    self.entry_misafir_adi.setEnabled(False)
 
-        all_payment_values = [self.db.ODEME_TURU_NAKIT, self.db.ODEME_TURU_KART, 
-                              self.db.ODEME_TURU_EFT_HAVALE, self.db.ODEME_TURU_CEK, 
-                              self.db.ODEME_TURU_SENET, self.db.ODEME_TURU_ACIK_HESAP]
+        all_payment_values = [
+            self.db.ODEME_TURU_NAKIT, self.db.ODEME_TURU_KART, 
+            self.db.ODEME_TURU_EFT_HAVALE, self.db.ODEME_TURU_CEK, 
+            self.db.ODEME_TURU_SENET, self.db.ODEME_TURU_ACIK_HESAP
+        ]
+        
+        target_payment_values = [p for p in all_payment_values if p != self.db.ODEME_TURU_ACIK_HESAP] if is_default_cari else all_payment_values[:]
         current_selected_odeme_turu = self.odeme_turu_cb.currentText()
-
-        target_payment_values = []
-        if is_default_cari:
-            target_payment_values = [p for p in all_payment_values if p != self.db.ODEME_TURU_ACIK_HESAP]
-        else:
-            target_payment_values = all_payment_values[:]
-
+        
         self.odeme_turu_cb.blockSignals(True)
         try:
             self.odeme_turu_cb.clear()
@@ -4996,7 +4988,11 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
                 self.odeme_turu_cb.setCurrentText(self.db.ODEME_TURU_ACIK_HESAP)
         finally:
             self.odeme_turu_cb.blockSignals(False)
-
+        
+        # HATA DÜZELTİLDİ: Sonsuz döngüye neden olan bu çağrı kaldırıldı.
+        # self._odeme_turu_degisince_event_handler()  
+        
+        # Sadece bu metodun sorumluluğunda olan diğer fonksiyonları çağırıyoruz.
         self._odeme_turu_degisince_hesap_combobox_ayarla()
 
     def _odeme_turu_degisince_hesap_combobox_ayarla(self):

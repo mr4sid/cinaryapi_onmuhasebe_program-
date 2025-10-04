@@ -36,32 +36,32 @@ class FaturaService:
              
         logger.info("FaturaService başlatıldı.")
 
-    def fatura_olustur(self, fatura_no: str, tarih: str, fatura_tipi: str, cari_id: int, kalemler_data: List[dict], odeme_turu: str, olusturan_kullanici_id: int, kasa_banka_id: Optional[int] = None, misafir_adi: Optional[str] = None, fatura_notlari: Optional[str] = None, vade_tarihi: Optional[str] = None, genel_iskonto_tipi: Optional[str] = "YOK", genel_iskonto_degeri: Optional[float] = 0.0, original_fatura_id: Optional[int] = None):
-        
+    def fatura_olustur(self, fatura_no: str, tarih: str, fatura_turu: str, cari_id: int, cari_tip: str, kalemler: List[dict], odeme_turu: str, olusturan_kullanici_id: int, kasa_banka_id: Optional[int] = None, misafir_adi: Optional[str] = None, fatura_notlari: Optional[str] = None, vade_tarihi: Optional[str] = None, genel_iskonto_tipi: Optional[str] = "YOK", genel_iskonto_degeri: Optional[float] = 0.0, original_fatura_id: Optional[int] = None):
+        """
+        Yeni bir fatura oluşturur ve ilgili tüm hareketleri (stok, cari, kasa) yönetir.
+        GÜNCELLEME: 'kalemler_data' -> 'kalemler' olarak düzeltildi ve 'cari_tip' eklendi.
+        """
         # 1. Kalem hesaplamalarını yap
         toplam_kdv_haric = 0.0
         toplam_kdv_dahil = 0.0
         
-        for kalem in kalemler_data:
+        # HATA DÜZELTİLDİ: 'kalemler_data' -> 'kalemler'
+        for kalem in kalemler:
             miktar = self.db.safe_float(kalem.get('miktar'))
             birim_fiyat_kdv_haric_orig = self.db.safe_float(kalem.get('birim_fiyat'))
             kdv_orani = self.db.safe_float(kalem.get('kdv_orani'))
             iskonto_yuzde_1 = self.db.safe_float(kalem.get('iskonto_yuzde_1'))
             iskonto_yuzde_2 = self.db.safe_float(kalem.get('iskonto_yuzde_2'))
 
-            # İskontolu KDV Dahil Fiyat Hesaplama
             bf_kdv_dahil_orig = birim_fiyat_kdv_haric_orig * (1 + kdv_orani / 100)
             bf_iskonto_1 = bf_kdv_dahil_orig * (1 - iskonto_yuzde_1 / 100)
             bf_iskontolu_dahil = bf_iskonto_1 * (1 - iskonto_yuzde_2 / 100)
 
-            # İskontolu KDV Hariç Fiyat Hesaplama
             bf_iskontolu_haric = bf_iskontolu_dahil / (1 + kdv_orani / 100) if kdv_orani != 0 else bf_iskontolu_dahil
 
-            # Kalem Toplamları
             kalem_toplam_haric = bf_iskontolu_haric * miktar
             kalem_toplam_dahil = bf_iskontolu_dahil * miktar
             
-            # Kalem datasına hesaplanan toplamları ekle
             kalem['kalem_toplam_kdv_haric'] = kalem_toplam_haric
             kalem['kalem_toplam_kdv_dahil'] = kalem_toplam_dahil
             kalem['kdv_tutari'] = kalem_toplam_dahil - kalem_toplam_haric
@@ -81,9 +81,10 @@ class FaturaService:
         # 3. API'ye gönderilecek ana veri paketini oluştur
         fatura_data = {
             "fatura_no": fatura_no,
-            "fatura_turu": fatura_tipi,
+            "fatura_turu": fatura_turu,
             "tarih": tarih,
             "cari_id": cari_id,
+            "cari_tip": cari_tip,
             "odeme_turu": odeme_turu,
             "kasa_banka_id": kasa_banka_id,
             "fatura_notlari": fatura_notlari,
@@ -91,27 +92,17 @@ class FaturaService:
             "genel_iskonto_tipi": genel_iskonto_tipi,
             "genel_iskonto_degeri": genel_iskonto_degeri,
             "misafir_adi": misafir_adi,
-            
-            # KRİTİK DÜZELTME: original_fatura_id sadece var ise ve iade modu aktif ise gönderiliyor.
-            # Ancak, bu metot sadece yeni fatura oluşturduğu için, eğer iade_modu_aktif DEĞİLSE
-            # bu parametreyi GÖNDERMEMEK en güvenlisidir (Çünkü API modeli bu parametreyi beklemeyebilir).
-            # original_fatura_id parametresi metot imzasına eklendiği için, fatura_data'ya koşulsuz olarak None ile de eklenebilir.
-            "original_fatura_id": original_fatura_id, # None veya ID gönderiliyor.
-            
-            "kalemler": kalemler_data,
-            
-            # Hesaplanan alanlar
+            "original_fatura_id": original_fatura_id,
+            "kalemler": kalemler, # HATA DÜZELTİLDİ
             "genel_toplam": genel_toplam,
             "toplam_kdv_haric": toplam_kdv_haric,
             "toplam_kdv_dahil": toplam_kdv_dahil,
-            
             "olusturan_kullanici_id": olusturan_kullanici_id 
         }
         
-        # Yeni bir kontrol: Eğer IADE işlemi değilse ve original_fatura_id None ise, bu anahtarı sil.
         if original_fatura_id is None:
-            del fatura_data["original_fatura_id"]
-
+            if "original_fatura_id" in fatura_data:
+                del fatura_data["original_fatura_id"]
 
         # 4. API'ye gönder
         try:
@@ -119,7 +110,8 @@ class FaturaService:
             if response and response.get("id"):
                 return True, f"Fatura {fatura_no} başarıyla oluşturuldu. ID: {response['id']}"
             else:
-                return False, "Fatura oluşturulurken API'den beklenmeyen yanıt alındı."
+                error_detail = response.get('detail', "Bilinmeyen bir API hatası oluştu.") if isinstance(response, dict) else str(response)
+                return False, f"Fatura oluşturulamadı: {error_detail}"
 
         except Exception as e:
             self.logger.error(f"Fatura API'ye gönderilirken hata: {e}")

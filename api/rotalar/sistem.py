@@ -12,33 +12,31 @@ router = APIRouter(prefix="/sistem", tags=["Sistem"])
 
 @router.get("/varsayilan_cariler/perakende_musteri_id", response_model=modeller.DefaultIdResponse)
 def get_perakende_musteri_id_endpoint(
-    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user),
     db: Session = Depends(get_db)
 ):
-    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
-    musteri = db.query(semalar.Musteri).filter(semalar.Musteri.kod == "PERAKENDE_MUSTERI", semalar.Musteri.kullanici_id == kullanici_id).first()
-    if not musteri:
-        musteri = db.query(semalar.Musteri).filter(semalar.Musteri.id == 1, semalar.Musteri.kullanici_id == kullanici_id).first()
+    kullanici_id = current_user.id
+    # KURAL UYGULANDI: Sorgular 'modeller' kullanmalı
+    musteri = db.query(modeller.Musteri).filter(modeller.Musteri.kod == "PERAKENDE_MUSTERI", modeller.Musteri.kullanici_id == kullanici_id).first()
     if not musteri:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Varsayılan perakende müşteri bulunamadı. Lütfen bir perakende müşteri tanımlayın."
+            detail="Varsayılan perakende müşteri bulunamadı."
         )
     return {"id": musteri.id}
 
 @router.get("/varsayilan_cariler/genel_tedarikci_id", response_model=modeller.DefaultIdResponse)
 def get_genel_tedarikci_id_endpoint(
-    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user),
     db: Session = Depends(get_db)
 ):
-    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
-    tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.kod == "GENEL_TEDARIKCI", semalar.Tedarikci.kullanici_id == kullanici_id).first()
-    if not tedarikci:
-        tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.id == 1, semalar.Tedarikci.kullanici_id == kullanici_id).first()
+    kullanici_id = current_user.id
+    # KURAL UYGULANDI: Sorgular 'modeller' kullanmalı
+    tedarikci = db.query(modeller.Tedarikci).filter(modeller.Tedarikci.kod == "GENEL_TEDARIKCI", modeller.Tedarikci.kullanici_id == kullanici_id).first()
     if not tedarikci:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Varsayılan genel tedarikçi bulunamadı. Lütfen bir genel tedarikçi tanımlayın."
+            detail="Varsayılan genel tedarikçi bulunamadı."
         )
     return {"id": tedarikci.id}
 
@@ -241,43 +239,31 @@ async def veritabani_baglantilarini_kapat():
 
 @router.get("/next_fatura_no", response_model=modeller.NextCodeResponse)
 def get_next_fatura_no_endpoint(
-    fatura_turu: semalar.FaturaTuruEnum = Query(..., description="Fatura türü (SATIŞ/ALIŞ)"),
+    fatura_turu: semalar.FaturaTuruEnum = Query(..., description="Fatura türü (SATIS/ALIŞ)"),
     db: Session = Depends(get_db),
-    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # JWT Kuralı Uygulandı
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user)
 ):
-    # Kullanici ID'si, JWT Kuralına uygun olarak current_user bağımlılığından alınıyor.
     kullanici_id = current_user.id
-    fatura_turu_str = fatura_turu.value
     
-    # Model Tutarlılığı Kuralı (modeller.X kullanımı) gereği modeller.Fatura kullanıldı.
     last_fatura = db.query(modeller.Fatura).filter(
-        modeller.Fatura.fatura_turu == fatura_turu_str,
+        modeller.Fatura.fatura_turu == fatura_turu,
         modeller.Fatura.kullanici_id == kullanici_id
     ).order_by(modeller.Fatura.fatura_no.desc()).first()
 
     prefix = ""
-    if fatura_turu_str == "SATIŞ":
-        prefix = "SF"
-    elif fatura_turu_str == "ALIŞ":
-        prefix = "AF"
-    else:
-        # Hata kodu 400 ile döndürülüyor (geçersiz istek), bu da istemcinin yanlış bir tür göndermesini önler.
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz fatura türü. 'SATIŞ' veya 'ALIŞ' olmalıdır.")
+    if fatura_turu == semalar.FaturaTuruEnum.SATIS: prefix = "SF"
+    elif fatura_turu == semalar.FaturaTuruEnum.ALIS: prefix = "AF"
+    elif fatura_turu == semalar.FaturaTuruEnum.SATIS_IADE: prefix = "SI"
+    elif fatura_turu == semalar.FaturaTuruEnum.ALIS_IADE: prefix = "AI"
+    else: prefix = "DG"
 
     next_sequence = 1
-    
-    # Basit ve sağlam prefix-sayı mantığı (get_next_fatura_number_endpoint'e benzer)
     if last_fatura and last_fatura.fatura_no and last_fatura.fatura_no.startswith(prefix):
         try:
-            # Prefix'ten sonraki sayı kısmını al (ör: SF000000001 -> 000000001)
-            current_sequence_str = last_fatura.fatura_no[len(prefix):]
-            current_sequence = int(current_sequence_str)
+            current_sequence = int(last_fatura.fatura_no[len(prefix):])
             next_sequence = current_sequence + 1
-        except ValueError:
-            # Sayısal bir değer bulunamazsa, sıfırdan başla (next_sequence=1 kalır)
+        except (ValueError, IndexError):
             pass
 
-    # 9 haneli sıfır dolgulu format kullanılır (Ör: SF000000001)
     next_fatura_no = f"{prefix}{next_sequence:09d}"
-    
     return {"next_code": next_fatura_no}

@@ -367,15 +367,16 @@ class FaturaKalemiRead(FaturaKalemiBase):
 # Fatura Modelleri
 class FaturaBase(BaseOrmModel):
     fatura_no: str
-    fatura_turu: FaturaTuruEnum # Enum olarak kullanılacak
+    fatura_turu: FaturaTuruEnum
     tarih: date
     vade_tarihi: Optional[date] = None
     cari_id: int
-    misafir_adi: Optional[str] = None # Sadece perakende satışlar için
-    odeme_turu: OdemeTuruEnum # Enum olarak kullanılacak
+    cari_tip: CariTipiEnum
+    misafir_adi: Optional[str] = None
+    odeme_turu: OdemeTuruEnum
     kasa_banka_id: Optional[int] = None
     fatura_notlari: Optional[str] = None
-    genel_iskonto_tipi: str = "YOK" # "YOK", "YUZDE", "TUTAR"
+    genel_iskonto_tipi: str = "YOK"
     genel_iskonto_degeri: float = Field(default=0.0)
 
 class FaturaCreate(FaturaBase):
@@ -899,37 +900,27 @@ class Kullanici(Base):
     tedarikciler = relationship("Tedarikci", back_populates="kullanici")
     faturalar = relationship("Fatura", back_populates="kullanici")
     kasalar_bankalar = relationship("KasaBankaHesap", back_populates="kullanici")
-    cari_hareketler = relationship("CariHareket", back_populates="kullanici")
+    
     gelir_giderler = relationship("GelirGider", back_populates="kullanici")
     siparisler = relationship("Siparis", back_populates="kullanici")
+    
+    # YAZIM HATASI DÜZELTİLDİ: "UrunNDitelik" -> "UrunNitelik"
     urun_nitelikleri = relationship("UrunNitelik", back_populates="kullanici")
     stok_hareketleri = relationship("StokHareket", back_populates="kullanici")
 
-    # 1. Fatura/Sipariş Yazan Kullanıcı (Genel Multi-User Takibi)
+    # İlişki çakışmalarını çözmek için foreign_keys ve overlaps kullanımı
     cari_hareketler = relationship(
-        "CariHareket", 
-        back_populates="kullanici", 
-        overlaps="cari_hareketler_olusturan" # Çakışmayı önlemek için overlaps eklendi
+        "CariHareket",
+        foreign_keys="[CariHareket.kullanici_id]",
+        back_populates="kullanici",
+        overlaps="cari_hareketler_olusturan" 
     )
     
     cari_hareketler_olusturan = relationship(
-        "CariHareket", 
+        "CariHareket",
+        foreign_keys="[CariHareket.olusturan_kullanici_id]",
         back_populates="olusturan_kullanici",
         overlaps="cari_hareketler"
-    )
-
-    cari_hareketler = relationship(
-        "CariHareket", 
-        # Bu ilişki, kullanıcının kaydettiği hareketleri (ana multi-user takibi) izler:
-        foreign_keys="[CariHareket.kullanici_id]", 
-        back_populates="kullanici"
-    )
-    
-    cari_hareketler_olusturan = relationship(
-        "CariHareket", 
-        # Bu ilişki, hareketi oluşturan kişiyi (ikincil, denetim amaçlı) izler:
-        foreign_keys="[CariHareket.olusturan_kullanici_id]", 
-        back_populates="olusturan_kullanici"
     )
 
 class Musteri(Base):
@@ -979,7 +970,7 @@ class Tedarikci(Base):
 
     kullanici = relationship("Kullanici", back_populates="tedarikciler")
     
-    # KRİTİK DÜZELTME: Tüm çakışmaların listesi eklendi.
+    # KRİTİK DÜZELTME: Tüm SAWarning uyarılarını gidermek için overlaps parametreleri eklendi.
     faturalar = relationship("Fatura",
                              primaryjoin="and_(foreign(Fatura.cari_id) == Tedarikci.id, Fatura.cari_tip == 'TEDARIKCI')", 
                              back_populates="tedarikci",
@@ -1066,9 +1057,13 @@ class FaturaKalemi(Base):
     miktar = Column(Float, nullable=False)
     birim_fiyat = Column(Float, nullable=False)
     kdv_orani = Column(Float, default=0.0)
-    alis_fiyati_fatura_aninda = Column(Float, default=0.0) 
+    alis_fiyati_fatura_aninda = Column(Float, nullable=True) 
     
-    # İskonto ve toplam kolonları DB'de yoktu (Bu kısım yorumda kalmalıydı)
+    # EKSİK ALANLAR EKLENDİ
+    iskonto_yuzde_1 = Column(Float, default=0.0)
+    iskonto_yuzde_2 = Column(Float, default=0.0)
+    iskonto_tipi = Column(String(20), nullable=True)
+    iskonto_degeri = Column(Float, default=0.0)
 
     olusturma_tarihi = Column(DateTime, server_default=func.now())
 
