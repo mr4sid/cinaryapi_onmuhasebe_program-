@@ -1018,12 +1018,16 @@ class Fatura(Base):
     fatura_no = Column(String(50), unique=True, index=True, nullable=False)
     tarih = Column(Date, nullable=False)
     fatura_turu = Column(Enum(FaturaTuruEnum), nullable=False)
-    cari_id = Column(Integer, nullable=False) # Hangi cari ile ilgili olduğu
-    cari_tip = Column(String(20), nullable=False) # Cari tipi: Musteri veya Tedarikci
+    cari_id = Column(Integer, nullable=False)
+    cari_tip = Column(String(20), nullable=False)
     odeme_turu = Column(Enum(OdemeTuruEnum), nullable=False)
     odeme_durumu = Column(String(20), default="ÖDENMEDİ")
-    toplam_tutar = Column(Float, default=0.0)
-    toplam_kdv = Column(Float, default=0.0)
+    
+    # EKSİK ALANLAR EKLENDİ
+    toplam_kdv_haric = Column(Float, default=0.0)
+    toplam_kdv_dahil = Column(Float, default=0.0)
+    toplam_kdv = Column(Float, default=0.0) # toplam_tutar yerine bu kullanılabilir
+    
     genel_toplam = Column(Float, default=0.0)
     kasa_banka_id = Column(Integer, ForeignKey('kasalar_bankalar.id'), nullable=True)
     fatura_notlari = Column(Text, nullable=True)
@@ -1031,7 +1035,10 @@ class Fatura(Base):
     genel_iskonto_tipi = Column(String(20), default="YOK")
     genel_iskonto_degeri = Column(Float, default=0.0)
     misafir_adi = Column(String(100), nullable=True)
-    olusturma_tarihi = Column(DateTime, server_default=func.now())
+    
+    # EKSİK ALAN EKLENDİ: FaturaRead modeli bu alanı bekliyor.
+    olusturma_tarihi_saat = Column(DateTime, server_default=func.now())
+    
     kullanici_id = Column(Integer, ForeignKey('kullanicilar.id'), nullable=False)
     
     # Relationships
@@ -1039,12 +1046,10 @@ class Fatura(Base):
     kalemler = relationship("FaturaKalemi", back_populates="fatura", cascade="all, delete-orphan")
     kasa_banka = relationship("KasaBankaHesap", back_populates="faturalar")
     
-    # DÜZELTİLDİ: primaryjoin ve foreign() anotasyonu eklendi
     musteri = relationship("Musteri",
                           primaryjoin="and_(Fatura.cari_id == foreign(Musteri.id), Fatura.cari_tip == 'MUSTERI')",
                           overlaps="faturalar")
                           
-    # DÜZELTİLDİ: primaryjoin ve foreign() anotasyonu eklendi
     tedarikci = relationship("Tedarikci",
                              primaryjoin="and_(Fatura.cari_id == foreign(Tedarikci.id), Fatura.cari_tip == 'TEDARIKCI')",
                              overlaps="faturalar")

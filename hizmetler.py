@@ -38,14 +38,12 @@ class FaturaService:
 
     def fatura_olustur(self, fatura_no: str, tarih: str, fatura_turu: str, cari_id: int, cari_tip: str, kalemler: List[dict], odeme_turu: str, olusturan_kullanici_id: int, kasa_banka_id: Optional[int] = None, misafir_adi: Optional[str] = None, fatura_notlari: Optional[str] = None, vade_tarihi: Optional[str] = None, genel_iskonto_tipi: Optional[str] = "YOK", genel_iskonto_degeri: Optional[float] = 0.0, original_fatura_id: Optional[int] = None):
         """
-        Yeni bir fatura oluşturur ve ilgili tüm hareketleri (stok, cari, kasa) yönetir.
-        GÜNCELLEME: 'kalemler_data' -> 'kalemler' olarak düzeltildi ve 'cari_tip' eklendi.
+        Yeni bir fatura oluşturur ve API'ye göndermeden önce Enum değerlerini dönüştürür.
         """
-        # 1. Kalem hesaplamalarını yap
+        # 1. Kalem hesaplamaları (Mevcut kodunuzdaki gibi)
         toplam_kdv_haric = 0.0
         toplam_kdv_dahil = 0.0
         
-        # HATA DÜZELTİLDİ: 'kalemler_data' -> 'kalemler'
         for kalem in kalemler:
             miktar = self.db.safe_float(kalem.get('miktar'))
             birim_fiyat_kdv_haric_orig = self.db.safe_float(kalem.get('birim_fiyat'))
@@ -69,7 +67,7 @@ class FaturaService:
             toplam_kdv_haric += kalem_toplam_haric
             toplam_kdv_dahil += kalem_toplam_dahil
 
-        # 2. Genel İskontoyu Uygula
+        # 2. Genel İskontoyu Uygula (Mevcut kodunuzdaki gibi)
         uygulanan_genel_iskonto = 0.0
         if genel_iskonto_tipi == 'YUZDE' and genel_iskonto_degeri > 0:
             uygulanan_genel_iskonto = toplam_kdv_dahil * (genel_iskonto_degeri / 100)
@@ -77,15 +75,19 @@ class FaturaService:
             uygulanan_genel_iskonto = genel_iskonto_degeri
             
         genel_toplam = toplam_kdv_dahil - uygulanan_genel_iskonto
-        
+
+        # API'nin beklediği İngilizce karakterli Enum değerlerine dönüştür
+        fatura_turu_api = fatura_turu.replace('Ş', 'S').replace('İ', 'I')
+        odeme_turu_api = odeme_turu.replace('İ', 'I').replace('Ç', 'C')
+
         # 3. API'ye gönderilecek ana veri paketini oluştur
         fatura_data = {
             "fatura_no": fatura_no,
-            "fatura_turu": fatura_turu,
+            "fatura_turu": fatura_turu_api, # <-- DÖNÜŞTÜRÜLMÜŞ DEĞER
             "tarih": tarih,
             "cari_id": cari_id,
             "cari_tip": cari_tip,
-            "odeme_turu": odeme_turu,
+            "odeme_turu": odeme_turu_api, # <-- DÖNÜŞTÜRÜLMÜŞ DEĞER
             "kasa_banka_id": kasa_banka_id,
             "fatura_notlari": fatura_notlari,
             "vade_tarihi": vade_tarihi,
@@ -93,7 +95,7 @@ class FaturaService:
             "genel_iskonto_degeri": genel_iskonto_degeri,
             "misafir_adi": misafir_adi,
             "original_fatura_id": original_fatura_id,
-            "kalemler": kalemler, # HATA DÜZELTİLDİ
+            "kalemler": kalemler,
             "genel_toplam": genel_toplam,
             "toplam_kdv_haric": toplam_kdv_haric,
             "toplam_kdv_dahil": toplam_kdv_dahil,

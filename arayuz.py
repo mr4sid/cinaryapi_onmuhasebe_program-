@@ -4315,6 +4315,8 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         self._load_initial_data()
         QTimer.singleShot(0, self._on_iade_modu_changed)
 
+        self.btn_sayfa_yenile.clicked.connect(self._reset_form_for_new_invoice)
+        
     def _setup_sol_panel(self, parent_frame):
         """Faturaya özel UI bileşenlerini sol panele yerleştirir."""
         parent_layout = parent_frame.layout()
@@ -4852,6 +4854,15 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
             QMessageBox.critical(self.app, "Hata", f"Mevcut fatura verileri yüklenirken bir hata oluştu: {e}")
             
     def _reset_form_for_new_invoice(self, ask_confirmation=True, skip_default_cari_selection=False):
+        # YENİ EKLENEN KOD: Onay mekanizması
+        if ask_confirmation:
+            reply = QMessageBox.question(self.app, "Sayfayı Yenile",
+                                         "Formdaki tüm kaydedilmemiş veriler silinecek ve sayfa sıfırlanacaktır. Emin misiniz?",
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                         QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.No:
+                return False # Kullanıcı iptal ettiyse işlem yapma
+
         self.duzenleme_id = None
         self.fatura_kalemleri_ui = []
         self.sepeti_guncelle_ui()
@@ -4872,7 +4883,7 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         self.fatura_notlari_text.clear()
         self.genel_iskonto_tipi_cb.setCurrentText("YOK")
         self.genel_iskonto_degeri_e.setText("0,00")
-        self._on_genel_iskonto_tipi_changed()
+        
         self._temizle_cari_secimi()
         
         if not skip_default_cari_selection:
@@ -4887,7 +4898,6 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
                 elif self.islem_tipi == self.db.FATURA_TIP_ALIS:
                     genel_tedarikci_id = self.db.get_genel_tedarikci_id()
                     if genel_tedarikci_id:
-                        # HATA DÜZELTİLDİ: Eksik olan 'kullanici_id' parametresi eklendi.
                         genel_tedarikci_data = self.db.tedarikci_getir_by_id(
                             tedarikci_id=genel_tedarikci_id, 
                             kullanici_id=self.app.current_user_id
@@ -4906,12 +4916,14 @@ class FaturaOlusturmaSayfasi(BaseIslemSayfasi):
         self.iskonto_yuzde_1_e.setText("0,00")
         self.iskonto_yuzde_2_e.setText("0,00")
         
-        # Bu satır, döngüyü önlemek için _reset_form_for_new_invoice'den sonra çağrılmalı
+        # Bu çağrılar formun durumunu son haline getirir
+        self._on_genel_iskonto_tipi_changed()
         self._odeme_turu_degisince_event_handler()
         
-        self.app.set_status_message(f"Yeni {self.islem_tipi.lower()} faturası oluşturmak için sayfa sıfırlandı.")
+        self.app.set_status_message(f"Yeni {self.islem_tipi.lower()} faturası için sayfa sıfırlandı.", "blue")
         QTimer.singleShot(0, self._urunleri_yukle_ve_cachele_ve_goster)
         self.urun_arama_entry.setFocus()
+        return True
 
     def _odeme_turu_degisince_event_handler(self):
         selected_odeme_turu = self.odeme_turu_cb.currentText()

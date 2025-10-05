@@ -450,10 +450,15 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
         fatura_dict.pop('kullanici_id', None)
         fatura_dict.pop('original_fatura_id', None) 
         
-        db_fatura = modeller.Fatura(**fatura_dict,
-                                      kullanici_id=kullanici_id,
-                                      genel_toplam=genel_toplam_final 
-                                      )
+        db_fatura = modeller.Fatura(
+            **fatura_dict,
+            kullanici_id=kullanici_id,
+            genel_toplam=genel_toplam_final,
+            # YENİ EKLENEN ALANLARA DEĞER ATAMASI
+            toplam_kdv_haric=toplam_kdv_haric_calc,
+            toplam_kdv_dahil=genel_toplam_final, # KDV Dahil toplam, genel toplama eşittir
+            toplam_kdv=genel_toplam_final - toplam_kdv_haric_calc
+        )
         
         db.add(db_fatura)
         db.flush()
