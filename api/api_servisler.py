@@ -17,14 +17,17 @@ class CariHesaplamaService:
     def calculate_cari_net_bakiye(self, cari_id: int, cari_turu: str) -> float:
         """
         Belirli bir cari (Müşteri veya Tedarikçi) için net bakiyeyi tek bir sorguda hesaplar.
+        KRİTİK DÜZELTME: Sorgularda semalar.CariHareket yerine modeller.CariHareket kullanıldı.
         """
+        from .modeller import CariHareket # Scope'u daraltmak için burada import edildi
+
         # Sorgu sonucunda None gelmesi durumunda 0 değerini kullanmak için func.coalesce eklendi.
         result = self.db.query(
-            func.coalesce(func.sum(case((semalar.CariHareket.islem_yone == "ALACAK", semalar.CariHareket.tutar), else_=0)), 0).label('alacak_toplami'),
-            func.coalesce(func.sum(case((semalar.CariHareket.islem_yone == "BORC", semalar.CariHareket.tutar), else_=0)), 0).label('borc_toplami')
+            func.coalesce(func.sum(case((CariHareket.islem_yone == "ALACAK", CariHareket.tutar), else_=0)), 0).label('alacak_toplami'),
+            func.coalesce(func.sum(case((CariHareket.islem_yone == "BORC", CariHareket.tutar), else_=0)), 0).label('borc_toplami')
         ).filter(
-            semalar.CariHareket.cari_id == cari_id,
-            semalar.CariHareket.cari_tip == cari_turu  # Bu satırın 'cari_tip' kullandığından emin olun.
+            CariHareket.cari_id == cari_id,
+            CariHareket.cari_tip == cari_turu
         ).one()
 
         net_bakiye = result.alacak_toplami - result.borc_toplami

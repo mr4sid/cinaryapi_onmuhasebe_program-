@@ -435,11 +435,23 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
             
         genel_iskonto_tutari = 0.0
         if fatura_data.genel_iskonto_tipi == "YUZDE" and fatura_data.genel_iskonto_degeri > 0:
-            genel_iskonto_tutari = toplam_kdv_dahil_calc * (fatura_data.genel_iskonto_degeri / 100)
+            # Not: Bu hesaplama KDV DAHİL üzerinden yapılıyor, harice çevirmemiz gerekebilir. 
+            # Şu anki mantığı koruyorum, ancak maliyet analizinde buna dikkat edilmelidir.
+            genel_iskonto_tutari = toplam_kdv_dahil_calc * (fatura_data.genel_iskonto_degeri / 100) 
         elif fatura_data.genel_iskonto_tipi == "TUTAR" and fatura_data.genel_iskonto_degeri > 0:
             genel_iskonto_tutari = fatura_data.genel_iskonto_degeri
             
         genel_toplam_final = toplam_kdv_dahil_calc - genel_iskonto_tutari
+        
+        # Genel iskonto sonrası KDV hariç toplamı yeniden hesaplayalım (Daha doğru bir yaklaşım)
+        if genel_iskonto_tutari > 0:
+            # Oran bazında indirim yapıldıysa KDV hariç toplamı bulmak için, KDV dahil genel toplamdan 
+            # genel iskonto tutarını düşüp, ardından KDV dahil/hariç oranını kullanmak gerekir.
+            # Basitçe, KDV hariç toplamı da aynı oranla düşürelim.
+            genel_iskonto_oran_dahil = genel_iskonto_tutari / toplam_kdv_dahil_calc if toplam_kdv_dahil_calc > 0 else 0
+            toplam_kdv_haric_iskontolu = toplam_kdv_haric_calc * (1 - genel_iskonto_oran_dahil)
+        else:
+            toplam_kdv_haric_iskontolu = toplam_kdv_haric_calc
 
         cari_tip_final = fatura_data.cari_tip # Arayüzden gelen cari_tip'e güveniyoruz.
 
@@ -454,18 +466,15 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
             **fatura_dict,
             kullanici_id=kullanici_id,
             genel_toplam=genel_toplam_final,
-            # YENİ EKLENEN ALANLARA DEĞER ATAMASI
-            toplam_kdv_haric=toplam_kdv_haric_calc,
+            toplam_kdv_haric=toplam_kdv_haric_iskontolu,
             toplam_kdv_dahil=genel_toplam_final, # KDV Dahil toplam, genel toplama eşittir
-            toplam_kdv=genel_toplam_final - toplam_kdv_haric_calc
+            toplam_kdv=genel_toplam_final - toplam_kdv_haric_iskontolu
         )
         
         db.add(db_fatura)
         db.flush()
 
         for kalem_data in fatura_data.kalemler:
-            # HATA DÜZELTİLDİ: Artık veritabanı modeli iskonto alanlarını kabul ettiği için
-            # bu .pop() komutlarına gerek kalmadı ve kaldırıldı.
             kalem_dict = kalem_data.model_dump()
             db_kalem = modeller.FaturaKalemi(fatura_id=db_fatura.id, **kalem_dict) 
             db.add(db_kalem)
@@ -506,27 +515,66 @@ def create_fatura(fatura_data: modeller.FaturaCreate, current_user: modeller.Kul
                 )
                 db.add(db_stok_hareket)
 
-        if fatura_data.odeme_turu == semalar.OdemeTuruEnum.ACIK_HESAP:
-            islem_yone_cari = None
-            if db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS: islem_yone_cari = semalar.IslemYoneEnum.ALACAK
-            elif db_fatura.fatura_turu in [semalar.FaturaTuruEnum.ALIS, semalar.FaturaTuruEnum.SATIS_IADE, semalar.FaturaTuruEnum.DEVIR_GIRIS]: islem_yone_cari = semalar.IslemYoneEnum.BORC
-            elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS_IADE: islem_yone_cari = semalar.IslemYoneEnum.ALACAK
-
-            if islem_yone_cari:
-                db_cari_hareket = modeller.CariHareket(
-                    cari_id=db_fatura.cari_id, cari_tip=cari_tip_final.value, tarih=db_fatura.tarih,
-                    islem_turu=semalar.KaynakTipEnum.FATURA.value, islem_yone=islem_yone_cari,
-                    tutar=db_fatura.genel_toplam, aciklama=f"{db_fatura.fatura_no} nolu fatura ({db_fatura.fatura_turu.value})",
+        # 1. CARI HAREKET - FATURA KAYDI (Borç/Alacak Oluşturma)
+        # Ödeme türü ne olursa olsun, ekstrede faturanın kendisinin görünmesi için bu hareket oluşturulur.
+        # AÇIK HESAP ise bakiye bu hareketle değişir, değilse 2. hareketle hemen dengelenir.
+        if db_fatura.cari_id:
+            islem_yone_fatura = None
+            if db_fatura.fatura_turu == semalar.FaturaTuruEnum.SATIS: 
+                islem_yone_fatura = semalar.IslemYoneEnum.ALACAK # Müşteriden Alacak
+            elif db_fatura.fatura_turu in [semalar.FaturaTuruEnum.ALIS, semalar.FaturaTuruEnum.SATIS_IADE, semalar.FaturaTuruEnum.DEVIR_GIRIS]: 
+                islem_yone_fatura = semalar.IslemYoneEnum.BORC # Tedarikçiye Borç / Müşteriye Borç (İade)
+            elif db_fatura.fatura_turu == semalar.FaturaTuruEnum.ALIS_IADE: 
+                islem_yone_fatura = semalar.IslemYoneEnum.ALACAK # Tedarikçiden Alacak (İade)
+                
+            if islem_yone_fatura:
+                # Cari tipini belirleyelim (Fatura modelindeki cari_tip kullanıldı)
+                cari_tip_fatura_kaydi = cari_tip_final.value if cari_tip_final else db_fatura.cari_tip # Fatura modelindeki Enum değeri
+                
+                fatura_cari_hareket = modeller.CariHareket(
+                    cari_id=db_fatura.cari_id, cari_tip=cari_tip_fatura_kaydi, tarih=db_fatura.tarih,
+                    islem_turu=semalar.KaynakTipEnum.FATURA.value, islem_yone=islem_yone_fatura,
+                    tutar=db_fatura.genel_toplam, aciklama=f"{db_fatura.fatura_no} nolu Fatura Kaydı ({db_fatura.fatura_turu.value})",
                     kaynak=semalar.KaynakTipEnum.FATURA, kaynak_id=db_fatura.id,
                     odeme_turu=db_fatura.odeme_turu, vade_tarihi=db_fatura.vade_tarihi,
                     kullanici_id=kullanici_id
                 )
-                db.add(db_cari_hareket)
+                db.add(fatura_cari_hareket)
 
+        # 2. CARI HAREKET ve KASA/BANKA HAREKETİ - Ödeme/Tahsilat (Sadece ACIK_HESAP olmayanlar için)
         if fatura_data.odeme_turu != semalar.OdemeTuruEnum.ACIK_HESAP and fatura_data.kasa_banka_id:
+            
+            # 2a. CARI HAREKET - Ödeme/Tahsilat Kaydı (Fatura Kaydını Kapatır)
+            if db_fatura.cari_id and islem_yone_fatura:
+                islem_yone_odeme = None
+                if islem_yone_fatura == semalar.IslemYoneEnum.ALACAK: 
+                    islem_yone_odeme = semalar.IslemYoneEnum.BORC # Alacağı kapattık (tahsilat)
+                elif islem_yone_fatura == semalar.IslemYoneEnum.BORC: 
+                    islem_yone_odeme = semalar.IslemYoneEnum.ALACAK # Borcu kapattık (ödeme)
+
+                if islem_yone_odeme:
+                    # Cari tipini belirleyelim (Fatura modelindeki cari_tip kullanıldı)
+                    cari_tip_odeme_kaydi = cari_tip_final.value if cari_tip_final else db_fatura.cari_tip
+                    
+                    odeme_cari_hareket = modeller.CariHareket(
+                        cari_id=db_fatura.cari_id, cari_tip=cari_tip_odeme_kaydi, tarih=db_fatura.tarih,
+                        islem_turu=db_fatura.odeme_turu.value, # İşlem Türü: NAKIT, KREDI_KARTI vb.
+                        islem_yone=islem_yone_odeme,
+                        tutar=db_fatura.genel_toplam, aciklama=f"{db_fatura.fatura_no} nolu fatura ({db_fatura.odeme_turu.value}) ile ödendi/tahsil edildi",
+                        kaynak=semalar.KaynakTipEnum.FATURA,
+                        kaynak_id=db_fatura.id,
+                        odeme_turu=db_fatura.odeme_turu,
+                        kasa_banka_id=db_fatura.kasa_banka_id,
+                        kullanici_id=kullanici_id
+                    )
+                    db.add(odeme_cari_hareket)
+
+            # 2b. KASA/BANKA HAREKETİ ve Bakiye Güncelleme
             islem_yone_kasa = None
-            if db_fatura.fatura_turu in [semalar.FaturaTuruEnum.SATIS, semalar.FaturaTuruEnum.ALIS_IADE, semalar.FaturaTuruEnum.DEVIR_GIRIS]: islem_yone_kasa = semalar.IslemYoneEnum.GIRIS
-            elif db_fatura.fatura_turu in [semalar.FaturaTuruEnum.ALIS, semalar.FaturaTuruEnum.SATIS_IADE]: islem_yone_kasa = semalar.IslemYoneEnum.CIKIS
+            if db_fatura.fatura_turu in [semalar.FaturaTuruEnum.SATIS, semalar.FaturaTuruEnum.ALIS_IADE, semalar.FaturaTuruEnum.DEVIR_GIRIS]: 
+                islem_yone_kasa = semalar.IslemYoneEnum.GIRIS
+            elif db_fatura.fatura_turu in [semalar.FaturaTuruEnum.ALIS, semalar.FaturaTuruEnum.SATIS_IADE]: 
+                islem_yone_kasa = semalar.IslemYoneEnum.CIKIS
 
             if islem_yone_kasa:
                 db_kasa_banka_hareket = modeller.KasaBankaHareket(
@@ -866,7 +914,7 @@ def update_fatura(fatura_id: int, fatura: modeller.FaturaUpdate, current_user: m
 
 @faturalar_router.delete("/{fatura_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_fatura(fatura_id: int, current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), db: Session = Depends(get_db)):
-    # KRİTİK DÜZELTME: kullanici_id Query parametresi kaldırıldı.
+    # GÜVENLİK KURALI UYGULANDI: kullanici_id parametresi kaldırıldı, JWT'den alınıyor.
     kullanici_id = current_user.id
     db_fatura = db.query(modeller.Fatura).filter(modeller.Fatura.id == fatura_id, modeller.Fatura.kullanici_id == kullanici_id).first()
     if not db_fatura:
@@ -875,9 +923,10 @@ def delete_fatura(fatura_id: int, current_user: modeller.KullaniciRead = Depends
     try:
         db.begin_nested()
         
-        db.query(modeller.FaturaKalemi).filter(modeller.FaturaKalemi.fatura_id == fatura_id, modeller.FaturaKalemi.kullanici_id == kullanici_id).delete(synchronize_session=False)
+        # 1. FATURA KALEMLERİNİ SİL (FaturaKalemi.kullanici_id filtresi kaldırıldı)
+        db.query(modeller.FaturaKalemi).filter(modeller.FaturaKalemi.fatura_id == fatura_id).delete(synchronize_session=False)
 
-        # DÜZELTME: Stok Hareketleri geri alma mantığında modeller kullanıldı ve Enumlar düzeltildi
+        # 2. STOK HAREKETLERİNİ GERİ AL ve STOK MİKTARINI DÜZELT
         stok_hareketleri = db.query(modeller.StokHareket).filter(
             and_(
                 modeller.StokHareket.kaynak == semalar.KaynakTipEnum.FATURA,
@@ -886,25 +935,27 @@ def delete_fatura(fatura_id: int, current_user: modeller.KullaniciRead = Depends
             )
         ).all()
         for hareket in stok_hareketleri:
-            stok = db.query(modeller.Stok).filter(modeller.Stok.id == hareket.stok_id, modeller.Stok.kullanici_id == kullanici_id).first()
+            # KRİTİK DÜZELTME: hareket.stok_id yerine hareket.urun_id kullanıldı
+            stok = db.query(modeller.Stok).filter(modeller.Stok.id == hareket.urun_id, modeller.Stok.kullanici_id == kullanici_id).first()
             if stok:
-                # KRİTİK DÜZELTME: Enum üye adları düzeltildi
-                if db_fatura.fatura_turu.value == semalar.FaturaTuruEnum.SATIS.value:
+                # Stok geri alma mantığı (İşlem tipini tersine çeviriyoruz)
+                if hareket.islem_tipi == semalar.StokIslemTipiEnum.SATIŞ:
                     stok.miktar += hareket.miktar
-                elif db_fatura.fatura_turu.value == semalar.FaturaTuruEnum.ALIS.value:
+                elif hareket.islem_tipi == semalar.StokIslemTipiEnum.ALIŞ:
                     stok.miktar -= hareket.miktar
-                elif db_fatura.fatura_turu.value == semalar.FaturaTuruEnum.SATIS_IADE.value:
+                elif hareket.islem_tipi == semalar.StokIslemTipiEnum.SATIŞ_İADE:
                     stok.miktar -= hareket.miktar
-                elif db_fatura.fatura_turu.value == semalar.FaturaTuruEnum.ALIS_IADE.value:
+                elif hareket.islem_tipi == semalar.StokIslemTipiEnum.ALIŞ_İADE:
                     stok.miktar += hareket.miktar
-                elif db_fatura.fatura_turu.value == semalar.FaturaTuruEnum.DEVIR_GIRIS.value:
+                elif hareket.islem_tipi == semalar.StokIslemTipiEnum.GİRİŞ: # DEVIR_GIRIS
                     stok.miktar -= hareket.miktar
                 db.add(stok)
             db.delete(hareket)
 
+        # 3. CARİ HAREKETLERİ SİL
         cari_hareketleri = db.query(modeller.CariHareket).filter(
             and_(
-                modeller.CariHareket.kaynak == modeller.KaynakTipEnum.FATURA,
+                modeller.CariHareket.kaynak == semalar.KaynakTipEnum.FATURA,
                 modeller.CariHareket.kaynak_id == fatura_id,
                 modeller.CariHareket.kullanici_id == kullanici_id
             )
@@ -912,30 +963,34 @@ def delete_fatura(fatura_id: int, current_user: modeller.KullaniciRead = Depends
         for hareket in cari_hareketleri:
             db.delete(hareket)
         
-        kasa_banka_hareketleri = db.query(semalar.KasaBankaHareket).filter(
+        # 4. KASA/BANKA HAREKETLERİNİ GERİ AL ve BAKİYEYİ DÜZELT
+        kasa_banka_hareketleri = db.query(modeller.KasaBankaHareket).filter(
             and_(
-                semalar.KasaBankaHareket.kaynak == semalar.KaynakTipEnum.FATURA,
-                semalar.KasaBankaHareket.kaynak_id == fatura_id,
-                semalar.KasaBankaHareket.kullanici_id == kullanici_id
+                modeller.KasaBankaHareket.kaynak == semalar.KaynakTipEnum.FATURA,
+                modeller.KasaBankaHareket.kaynak_id == fatura_id,
+                modeller.KasaBankaHareket.kullanici_id == kullanici_id
             )
         ).all()
         for hareket in kasa_banka_hareketleri:
-            kasa_banka = db.query(semalar.KasaBanka).filter(semalar.KasaBanka.id == hareket.kasa_banka_id, semalar.KasaBanka.kullanici_id == kullanici_id).first()
+            kasa_banka = db.query(modeller.KasaBankaHesap).filter(modeller.KasaBankaHesap.id == hareket.kasa_banka_id, modeller.KasaBankaHesap.kullanici_id == kullanici_id).first()
             if kasa_banka:
-                if hareket.islem_yone.value == semalar.IslemYoneEnum.GIRIS.value:
-                    kasa_banka.bakiye -= hareket.tutar
-                elif hareket.islem_yone.value == semalar.IslemYoneEnum.CIKIS.value:
-                    kasa_banka.bakiye += hareket.tutar
+                # Kasa bakiye düzeltme mantığı
+                if hareket.islem_yone == semalar.IslemYoneEnum.GIRIS:
+                    kasa_banka.bakiye -= hareket.tutar # Girişi geri al
+                elif hareket.islem_yone == semalar.IslemYoneEnum.CIKIS:
+                    kasa_banka.bakiye += hareket.tutar # Çıkışı geri al
                 db.add(kasa_banka)
             db.delete(hareket)
 
+        # 5. ANA FATURAYI SİL
         db.delete(db_fatura)
         db.commit()
         return
 
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Fatura silinirken bir hata oluştu: {e}")
+        logger.error(f"Fatura silinirken kritik hata: {e}", exc_info=True) 
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Fatura silinirken bir hata oluştu: {str(e)}")
 
 @faturalar_router.get("/get_next_fatura_number", response_model=modeller.NextFaturaNoResponse)
 def get_next_fatura_number_endpoint(

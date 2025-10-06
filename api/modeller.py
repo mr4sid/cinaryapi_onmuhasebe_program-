@@ -939,20 +939,26 @@ class Musteri(Base):
     
     kullanici = relationship("Kullanici", back_populates="musteriler")
     
+    # KRİTİK DÜZELTME: viewonly=True eklendi.
     faturalar = relationship("Fatura", 
                              primaryjoin="and_(foreign(Fatura.cari_id) == Musteri.id, Fatura.fatura_turu.in_(['SATIŞ', 'SATIŞ_İADE']))",
                              back_populates="musteri",
-                             overlaps="faturalar")
+                             overlaps="faturalar, tedarikci",
+                             viewonly=True)
                              
+    # KRİTİK DÜZELTME: viewonly=True eklendi.
     cari_hareketler = relationship("CariHareket",
                                   primaryjoin="and_(foreign(CariHareket.cari_id) == Musteri.id, CariHareket.cari_tip=='MUSTERI')",
                                   back_populates="musteri",
-                                  overlaps="cari_hareketler")
+                                  overlaps="cari_hareketler, tedarikci",
+                                  viewonly=True)
                                   
+    # KRİTİK DÜZELTME: viewonly=True eklendi.
     siparisler = relationship("Siparis",
                               primaryjoin="and_(foreign(Siparis.cari_id) == Musteri.id, Siparis.siparis_turu=='SATIŞ_SIPARIS')", 
                               back_populates="musteri",
-                              overlaps="siparisler")
+                              overlaps="siparisler, tedarikci",
+                              viewonly=True)
 
 class Tedarikci(Base):
     __tablename__ = 'tedarikciler'
@@ -970,21 +976,26 @@ class Tedarikci(Base):
 
     kullanici = relationship("Kullanici", back_populates="tedarikciler")
     
-    # KRİTİK DÜZELTME: Tüm SAWarning uyarılarını gidermek için overlaps parametreleri eklendi.
+    # KRİTİK DÜZELTME: viewonly=True eklendi.
     faturalar = relationship("Fatura",
                              primaryjoin="and_(foreign(Fatura.cari_id) == Tedarikci.id, Fatura.cari_tip == 'TEDARIKCI')", 
                              back_populates="tedarikci",
-                             overlaps="faturalar, musteri") 
+                             overlaps="faturalar, musteri",
+                             viewonly=True) 
                              
+    # KRİTİK DÜZELTME: viewonly=True eklendi.
     cari_hareketler = relationship("CariHareket",
                                   primaryjoin="and_(foreign(CariHareket.cari_id) == Tedarikci.id, CariHareket.cari_tip=='TEDARIKCI')",
                                   back_populates="tedarikci",
-                                  overlaps="cari_hareketler, musteri") 
+                                  overlaps="cari_hareketler, musteri",
+                                  viewonly=True) 
                                   
+    # KRİTİK DÜZELTME: viewonly=True eklendi.
     siparisler = relationship("Siparis",
                               primaryjoin="and_(foreign(Siparis.cari_id) == Tedarikci.id, Siparis.cari_tip=='TEDARIKCI')",
                               back_populates="tedarikci",
-                              overlaps="siparisler, musteri")
+                              overlaps="siparisler, musteri",
+                              viewonly=True)
 
 class Stok(Base):
     __tablename__ = 'stoklar'
@@ -1048,11 +1059,13 @@ class Fatura(Base):
     
     musteri = relationship("Musteri",
                           primaryjoin="and_(Fatura.cari_id == foreign(Musteri.id), Fatura.cari_tip == 'MUSTERI')",
-                          overlaps="faturalar")
+                          overlaps="faturalar",
+                          viewonly=True)
                           
     tedarikci = relationship("Tedarikci",
                              primaryjoin="and_(Fatura.cari_id == foreign(Tedarikci.id), Fatura.cari_tip == 'TEDARIKCI')",
-                             overlaps="faturalar")
+                             overlaps="faturalar",
+                             viewonly=True)
 
 class FaturaKalemi(Base):
     __tablename__ = 'fatura_kalemleri'
