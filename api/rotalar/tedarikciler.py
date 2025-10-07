@@ -1,3 +1,4 @@
+# tedarikci.py dosyasının tam ve şuanki hali
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
@@ -63,20 +64,24 @@ def read_tedarikciler(
 def read_tedarikci(
     tedarikci_id: int,
     db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(guvenlik.get_current_user)
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak ayarlandı.
 ):
-    tedarikci = db.query(semalar.Tedarikci).filter(
-        semalar.Tedarikci.id == tedarikci_id,
-        semalar.Tedarikci.kullanici_id == current_user.id
+    # KRİTİK DÜZELTME: Sorgularda semalar.Tedarikci yerine modeller.Tedarikci kullanıldı.
+    tedarikci = db.query(modeller.Tedarikci).filter(
+        modeller.Tedarikci.id == tedarikci_id,
+        modeller.Tedarikci.kullanici_id == current_user.id
     ).first()
     if not tedarikci:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tedarikçi bulunamadı")
 
     cari_hizmeti = CariHesaplamaService(db)
     net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(tedarikci_id, "TEDARIKCI")
-    tedarikci_dict = modeller.TedarikciRead.model_validate(tedarikci).model_dump()
-    tedarikci_dict["net_bakiye"] = net_bakiye
-    return tedarikci_dict
+    
+    # ORM objesini Pydantic Read modeline dönüştürürken bakiye bilgisini ekliyoruz.
+    tedarikci_read = modeller.TedarikciRead.model_validate(tedarikci, from_attributes=True)
+    tedarikci_read.net_bakiye = net_bakiye
+    
+    return tedarikci_read
 
 @router.put("/{tedarikci_id}", response_model=modeller.TedarikciRead)
 def update_tedarikci(

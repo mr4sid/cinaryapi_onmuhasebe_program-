@@ -1,3 +1,4 @@
+# musteriler.py dosyasının tam ve şuanki hali
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
@@ -65,18 +66,22 @@ def read_musteriler(
 def read_musteri(
     musteri_id: int, 
     db: Session = Depends(get_db), 
-    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # Tipi modeller.KullaniciRead olarak güncellendi.
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user)
 ):
-    # KRİTİK DÜZELTME: Sorgularda semalar.Musteri yerine modeller.Musteri kullanıldı.
+    # KRİTİK KURAL KONTROLÜ: JWT ile gelen kullanıcı ID'sine göre filtreleniyor.
     musteri = db.query(modeller.Musteri).filter(modeller.Musteri.id == musteri_id, modeller.Musteri.kullanici_id == current_user.id).first()
     if not musteri:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Müşteri bulunamadı")
 
+    # Müşterinin cari net bakiyesini CariHesaplamaService üzerinden çekiyoruz.
     cari_hizmeti = CariHesaplamaService(db)
     net_bakiye = cari_hizmeti.calculate_cari_net_bakiye(musteri_id, "MUSTERI")
-    musteri_dict = modeller.MusteriRead.model_validate(musteri).model_dump()
-    musteri_dict["net_bakiye"] = net_bakiye
-    return musteri_dict
+    
+    # ORM objesini Pydantic Read modeline dönüştürürken bakiye bilgisini ekliyoruz.
+    musteri_read = modeller.MusteriRead.model_validate(musteri, from_attributes=True)
+    musteri_read.net_bakiye = net_bakiye
+    
+    return musteri_read
 
 @router.put("/{musteri_id}", response_model=modeller.MusteriRead)
 def update_musteri(

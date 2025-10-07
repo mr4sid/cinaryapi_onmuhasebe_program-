@@ -1,3 +1,4 @@
+# api/rotalar/yedekleme.py dosyasının tam içeriği
 import os
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
@@ -6,6 +7,7 @@ from datetime import datetime
 import subprocess
 from sqlalchemy import text 
 from typing import Optional
+from .. import guvenlik, modeller # KRİTİK DÜZELTME: Güvenlik ve modeller eklendi
 
 router = APIRouter(prefix="/yedekleme", tags=["Veritabanı Yedekleme"])
 
@@ -18,8 +20,19 @@ DB_NAME = os.getenv("POSTGRES_DB", "onmuhasebe_db")
 BACKUP_DIR = os.path.join(os.getcwd(), "backups")
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
+# Yönetici Rol Kontrolü (Hassas işlemler için)
+def _check_admin(current_user: modeller.KullaniciRead):
+    if current_user.rol != "admin": 
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yönetici yetkisi gereklidir.")
+
+
 @router.post("/backup", summary="Veritabanını Yedekle", status_code=status.HTTP_200_OK)
-def create_db_backup(db: Session = Depends(get_db)):
+def create_db_backup(
+    db: Session = Depends(get_db),
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # KRİTİK GÜVENLİK DÜZELTMESİ
+):
+    _check_admin(current_user) # YETKİ KONTROLÜ
+    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_filename = f"{DB_NAME}_backup_{timestamp}.sql"
     backup_filepath = os.path.join(BACKUP_DIR, backup_filename)
@@ -36,9 +49,10 @@ def create_db_backup(db: Session = Depends(get_db)):
             "-f", backup_filepath
         ]
         
+        # subprocess.run senkron (blocking) bir işlemdir. FastAPI bunu threadpool'da çalıştırır.
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         
-        if result.stderr:
+        if result.stderr and "warning" not in result.stderr.lower(): # Hata olmayan uyarıları yoksay
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Yedekleme sırasında hata oluştu: {result.stderr}")
 
         return {"message": f"Veritabanı başarıyla yedeklendi: {backup_filename}", "filepath": backup_filepath}
@@ -53,16 +67,23 @@ def create_db_backup(db: Session = Depends(get_db)):
             del os.environ['PGPASSWORD']
 
 @router.post("/restore", summary="Veritabanını Geri Yükle", status_code=status.HTTP_200_OK)
-def restore_db_backup(backup_file: UploadFile = File(...)):
+def restore_db_backup(
+    backup_file: UploadFile = File(...),
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # KRİTİK GÜVENLİK DÜZELTMESİ
+):
+    _check_admin(current_user) # YETKİ KONTROLÜ
+
     if not backup_file.filename.endswith(".sql"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sadece .sql uzantılı dosyalar kabul edilir.")
 
     temp_filepath = os.path.join(BACKUP_DIR, f"restore_temp_{backup_file.filename}")
     try:
+        # Geri yükleme dosyasını geçici olarak kaydet
         with open(temp_filepath, "wb") as buffer:
             buffer.write(backup_file.file.read())
 
         os.environ['PGPASSWORD'] = DB_PASSWORD
+        # Geri yükleme komutu (psql)
         command = [
             "psql",
             "-h", DB_HOST,
@@ -74,11 +95,13 @@ def restore_db_backup(backup_file: UploadFile = File(...)):
 
         result = subprocess.run(command, capture_output=True, text=True, check=True)
         
-        if result.stderr and "SET" not in result.stderr:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Geri yükleme sırasında hata oluştu: {result.stderr}")
+        # result.stderr kontrolü
+        if result.stderr and not any(s in result.stderr for s in ["SET", "NOTICE"]):
+             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Geri yükleme sırasında hata oluştu: {result.stderr}")
         
         reset_db_connection()
 
+        # Veritabanı bağlantısını test etme (tekrar kurmayı dener)
         try:
             db_test = next(get_db())
             db_test.execute(text("SELECT 1"))

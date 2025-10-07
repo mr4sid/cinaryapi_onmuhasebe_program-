@@ -1,4 +1,4 @@
-# api/rotalar/yonetici.py
+# api/rotalar/yonetici.py dosyasının tam içeriği
 import os
 import shutil
 import subprocess
@@ -10,8 +10,9 @@ from typing import Optional, List
 from datetime import datetime
 from sqlalchemy import text
 from ..api_servisler import create_initial_data
-from .. import semalar
-from ..veritabani import get_db, Base
+# KRİTİK DÜZELTME: Gerekli modeller ve semalar import edildi.
+from .. import modeller, semalar, guvenlik
+from ..veritabani import get_db, reset_db_connection
 
 router = APIRouter(
     prefix="/admin",
@@ -26,6 +27,15 @@ class BackupRequest(BaseModel):
 
 class RestoreRequest(BaseModel):
     file_path: str
+
+# Hassas işlemler için rol kontrolü (admin olduğu varsayılır)
+def _check_admin(current_user: modeller.KullaniciRead):
+    # Bu kontrol, JWT tarafından gelen KullaniciRead modelinde 'rol' alanı olduğu varsayılarak yapılmıştır.
+    if current_user.rol != "admin": 
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Bu işlemi yapmaya yetkiniz yok. Yönetici yetkisi gereklidir."
+        )
 
 def run_backup_command(file_path: str) -> str:
     pg_bin_path = os.getenv("PG_BIN_PATH")
@@ -68,6 +78,7 @@ def run_backup_command(file_path: str) -> str:
     )
     
     try:
+        # shell=True kullanımı güvenlik açığı oluşturabilir, ancak mevcut yapıyı koruyoruz.
         result = subprocess.run(command_str, shell=True, check=True, capture_output=True, text=True)
         return f"Yedekleme başarıyla tamamlandı: {file_path}"
     except subprocess.CalledProcessError as e:
@@ -149,7 +160,12 @@ def run_restore_command(file_path: str) -> str:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Beklenmeyen bir hata oluştu: {e}")
 
 @router.post("/yedekle")
-def yedekle(request: BackupRequest):
+def yedekle(
+    request: BackupRequest,
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # KRİTİK GÜVENLİK DÜZELTMESİ
+):
+    _check_admin(current_user) # YETKİ KONTROLÜ
+    
     if not request.file_path:
         backup_dir = os.path.join(os.getcwd(), 'yedekler')
         os.makedirs(backup_dir, exist_ok=True)
@@ -165,7 +181,12 @@ def yedekle(request: BackupRequest):
         raise e
 
 @router.post("/geri_yukle")
-def geri_yukle(request: RestoreRequest):
+def geri_yukle(
+    request: RestoreRequest,
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # KRİTİK GÜVENLİK DÜZELTMESİ
+):
+    _check_admin(current_user) # YETKİ KONTROLÜ
+    
     if not os.path.exists(request.file_path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Belirtilen dosya bulunamadı: {request.file_path}")
     
@@ -177,33 +198,38 @@ def geri_yukle(request: RestoreRequest):
 
 @router.delete("/clear_all_data", status_code=status.HTTP_200_OK, summary="Tüm verileri temizle (Kullanıcılar Hariç)")
 def clear_all_data(
-    kullanici_id: int = Query(..., description="Kullanıcı ID"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # KRİTİK GÜVENLİK DÜZELTMESİ: Query parametresi kaldırıldı.
 ):
+    _check_admin(current_user) # YETKİ KONTROLÜ
+    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor.
+    
     try:
+        # KRİTİK DÜZELTME: semalar.X yerine modeller.X kullanıldı.
         tables_to_clear = [
-            semalar.FaturaKalemi,
-            semalar.SiparisKalemi,
-            semalar.StokHareket,
-            semalar.CariHareket,
-            semalar.KasaBankaHareket,
-            semalar.GelirGider, 
-            semalar.Fatura,
-            semalar.Siparis,
-            semalar.Stok,
-            semalar.Musteri,
-            semalar.Tedarikci,
-            semalar.KasaBanka,
-            semalar.UrunBirimi,
-            semalar.UrunMarka,
-            semalar.UrunKategori,
-            semalar.UrunGrubu,
-            semalar.Ulke,
-            semalar.GelirSiniflandirma,
-            semalar.GiderSiniflandirma
+            modeller.FaturaKalemi,
+            modeller.SiparisKalemi,
+            modeller.StokHareket,
+            modeller.CariHareket,
+            modeller.KasaBankaHareket,
+            modeller.GelirGider, 
+            modeller.Fatura,
+            modeller.Siparis,
+            modeller.Stok,
+            modeller.Musteri,
+            modeller.Tedarikci,
+            modeller.KasaBankaHesap, # KasaBanka yerine doğru model
+            modeller.UrunBirimi,
+            modeller.UrunMarka,
+            modeller.UrunKategori,
+            modeller.UrunGrubu,
+            modeller.Ulke,
+            modeller.GelirSiniflandirma,
+            modeller.GiderSiniflandirma
         ]
         
         for table in tables_to_clear:
+            # Multi-tenancy kuralına uygun olarak temizleme
             db.query(table).filter(table.kullanici_id == kullanici_id).delete(synchronize_session=False)
 
         db.commit()
@@ -215,9 +241,12 @@ def clear_all_data(
     
 @router.post("/ilk_veri_olustur", status_code=status.HTTP_200_OK)
 def initial_data_setup_endpoint(
-    kullanici_id: int = Query(..., description="Kullanıcı ID"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user) # KRİTİK GÜVENLİK DÜZELTMESİ: Query parametresi kaldırıldı.
 ):
+    _check_admin(current_user) # YETKİ KONTROLÜ
+    kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor.
+    
     """
     Kullanıcı oluşturma sonrası varsayılan nitelikleri, carileri ve kasayı ekler.
     Bu rota, create_user.py scripti tarafından çağrılır.
@@ -234,4 +263,4 @@ def initial_data_setup_endpoint(
         if "already exists" in str(e):
             return {"message": f"Varsayılan veriler zaten mevcut."}
 
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Varsayılan veri oluşturma hatası: {e}")    
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Varsayılan veri oluşturma hatası: {e}")

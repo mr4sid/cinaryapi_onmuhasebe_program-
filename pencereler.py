@@ -1,4 +1,4 @@
-# pencereler.py Dosyasının. Tamamım.
+# pencereler.py Dosyasının. Tam İÇeriği
 import os
 from datetime import datetime, date, timedelta
 import multiprocessing
@@ -3809,13 +3809,14 @@ class StokKartiPenceresi(QDialog):
             if kullanici_id is None:
                 raise Exception("Kullanıcı ID'si alınamadı. Lütfen tekrar giriş yapın.")
                 
+            # KRİTİK DÜZELTME: Tüm nitelik çağrılarından gereksiz 'kullanici_id' parametresi KALDIRILDI.
             kategoriler_response = self.db.kategori_listele()
             markalar_response = self.db.marka_listele()
             urun_gruplari_response = self.db.urun_grubu_listele()
             
-            urun_birimleri_response = self.db.urun_birimi_listele(kullanici_id=kullanici_id)
+            urun_birimleri_response = self.db.urun_birimi_listele()
             
-            ulkeler_response = self.db.ulke_listele(kullanici_id=kullanici_id)
+            ulkeler_response = self.db.ulke_listele()
             
             # API'den gelen yanıtın sözlük veya liste olabileceğini kontrol et
             kategoriler = kategoriler_response.get("items", []) if isinstance(kategoriler_response, dict) else kategoriler_response
@@ -3975,77 +3976,51 @@ class StokKartiPenceresi(QDialog):
         kod = self.kod_e.text().strip()
         ad = self.ad_e.text().strip()
         
-        # Miktar readonly olduğu için direkt API'den gelen değeri kullanıyoruz.
-        # Bu metot sadece kart bilgilerini günceller, miktar hareketlerle değişir.
+        # UI'daki tüm verileri topla (Diğer mantıklar korunmuştur)
         miktar = self.urun_duzenle.get('miktar', 0.0) if self.duzenleme_modu else 0.0
-        
-        # self.db.safe_float() metodu ile değerleri alıyoruz
         alis_fiyati = self.db.safe_float(self.alis_fiyat_e.text())
         satis_fiyati = self.db.safe_float(self.satis_fiyat_e.text())
         kdv_orani = self.db.safe_float(self.kdv_e.text())
         min_stok = self.db.safe_float(self.min_stok_e.text())
-        
         aktif = self.aktif_cb.isChecked()
         detay = self.detay_e.toPlainText().strip()
-        
         kategori_id = self.kategori_combo.currentData()
         marka_id = self.marka_combo.currentData()
         urun_grubu_id = self.urun_grubu_combo.currentData()
         birim_id = self.birim_combo.currentData()
         mense_id = self.mensei_ulke_combo.currentData()
 
-        if not ad:
-            QMessageBox.critical(self, "Eksik Bilgi", "Ürün Adı boş olamaz.")
-            return
-
-        if not self.duzenleme_modu: # Yeni ürün eklenirken kod da zorunlu
-            if not kod:
-                QMessageBox.critical(self, "Eksik Bilgi", "Yeni ürün için Ürün Kodu boş olamaz.")
-                return
-
+        # Eksik bilgi kontrolü (Önceki mantık korunmuştur)
+        if not ad: QMessageBox.critical(self, "Eksik Bilgi", "Ürün Adı boş olamaz."); return
+        if not self.duzenleme_modu and not kod: QMessageBox.critical(self, "Eksik Bilgi", "Yeni ürün için Ürün Kodu boş olamaz."); return
         if miktar < 0 or alis_fiyati < 0 or satis_fiyati < 0 or kdv_orani < 0 or min_stok < 0:
-            QMessageBox.critical(self, "Geçersiz Değer", "Miktar, fiyatlar, KDV oranı ve minimum stok negatif olamaz.")
-            return
+             QMessageBox.critical(self, "Geçersiz Değer", "Miktar, fiyatlar, KDV oranı ve minimum stok negatif olamaz."); return
         
         urun_data = {
-            "kod": kod,
-            "ad": ad,
-            "miktar": miktar,
-            "alis_fiyati": alis_fiyati,
-            "satis_fiyati": satis_fiyati,
-            "kdv_orani": kdv_orani,
-            "min_stok_seviyesi": min_stok,
-            "aktif": aktif,
-            "detay": detay if detay else None,
-            "kategori_id": kategori_id,
-            "marka_id": marka_id,
-            "urun_grubu_id": urun_grubu_id,
-            "birim_id": birim_id,
-            "mense_id": mense_id,
-            "urun_resmi_yolu": self.yeni_urun_resmi_yolu if self.yeni_urun_resmi_yolu else self.mevcut_urun_resmi_yolu
+            "kod": kod, "ad": ad, "miktar": miktar, "alis_fiyati": alis_fiyati, "satis_fiyati": satis_fiyati, 
+            "kdv_orani": kdv_orani, "min_stok_seviyesi": min_stok, "aktif": aktif, "detay": detay if detay else None, 
+            "kategori_id": kategori_id, "marka_id": marka_id, "urun_grubu_id": urun_grubu_id, 
+            "birim_id": birim_id, "mense_id": mense_id, "urun_resmi_yolu": self.yeni_urun_resmi_yolu if self.yeni_urun_resmi_yolu else self.mevcut_urun_resmi_yolu
         }
         
-        # KRİTİK DÜZELTME: API'nin zorunlu tuttuğu kullanici_id'yi request body'ye (urun_data) ekle
-        urun_data["kullanici_id"] = self.app.current_user.get("id")
-
-        # KRİTİK EKSİK ARGÜMAN DÜZELTMESİ: kullanici_id'yi argüman olarak çekiyoruz
         kullanici_id_arg = self.app.current_user.get("id")
 
         try:
             if self.duzenleme_modu and self.stok_id:
-                # Stok güncelleme işlemi
-                # KRİTİK DÜZELTME: Eksik olan 'kullanici_id' argümanı eklendi.
-                success, message = self.db.stok_guncelle(self.stok_id, urun_data, kullanici_id_arg)
+                # Güncelleme: Güncelleme sonrası da sync tetiklenmeli
+                # KRİTİK ÇÖZÜM: ui_callback'i ilet
+                success, message = self.db.stok_guncelle(self.stok_id, urun_data, kullanici_id_arg, ui_callback=self.yenile_callback)
             else:
-                # Yeni stok ekleme işlemi
-                success, message = self.db.stok_ekle(urun_data)
+                # Yeni Stok Ekleme: KRİTİK ÇÖZÜM: ui_callback'i ilet
+                success, message = self.db.stok_ekle(urun_data, ui_callback=self.yenile_callback)
 
             if success:
                 QMessageBox.information(self, "Başarılı", message)
                 self.data_updated.emit()
-                self.accept()
-                if self.yenile_callback:
-                    self.yenile_callback()
+                self.accept() # Pencereyi kapat (Bu, UI'da hemen temizlik yapar)
+                
+                # NOT: self.yenile_callback() çağrısı ARTIK BU SATIRDAN YAPILMAZ. 
+                # Arka plan senkronizasyon bitince, o thread'den geri çağrılacaktır.
             else:
                 QMessageBox.critical(self, "Hata", message)
         except Exception as e:

@@ -7,7 +7,6 @@ from typing import List, Optional, Any
 from datetime import datetime, date
 from sqlalchemy import String
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-# DEĞİŞİKLİK: Doğru içe aktarma yolu kullanıldı
 from hizmetler import FaturaService
 import logging
 from ..guvenlik import get_current_user
@@ -19,40 +18,47 @@ router = APIRouter(prefix="/stoklar", tags=["Stoklar"])
 
 @router.post("/", response_model=modeller.StokRead)
 def create_stok(
-    stok: semalar.StokCreate,
-    current_user: semalar.Kullanici = Depends(guvenlik.get_current_user),
+    stok: modeller.StokCreate, # KRİTİK DÜZELTME: Pydantic input şeması olarak modeller.StokCreate kullanıldı.
+    current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user), # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak düzeltildi.
     db: Session = Depends(get_db)
 ):
     try:
-        # KRİTİK DÜZELTME: model_dump()'tan 'kullanici_id' hariç tutuldu. 
-        # Böylece yalnızca JWT'den gelen ID (current_user.id) kullanılır.
+        # Pydantic'ten ORM modeline dönüştürme: Sadece mevcut alanlar dahil edilir, ID'ler hariç tutulur.
         stok_data = stok.model_dump(exclude={'kullanici_id', 'id'})
         
+        # ORM modelini oluştur
         db_stok = modeller.Stok(**stok_data, kullanici_id=current_user.id)
         
         db.add(db_stok)
+        db.flush() # ID'yi almak için
+        
+        # Stok hareketi eklenir (İlk Giriş) - Stok hareketi oluşturma mantığı düzeltildi.
+        if db_stok.miktar and db_stok.miktar > 0:
+            db_hareket = modeller.StokHareket(
+                urun_id=db_stok.id, 
+                tarih=datetime.now().date(), # Tarih eklendi
+                islem_tipi=semalar.StokIslemTipiEnum.GIRIS, # Doğru Enum kullanıldı
+                miktar=db_stok.miktar, 
+                birim_fiyat=db_stok.alis_fiyati, # Alış fiyatı kullanıldı
+                aciklama="İlk Stok Girişi (Manuel Oluşturma)", 
+                kaynak=semalar.KaynakTipEnum.MANUEL, # Doğru Enum kullanıldı
+                kaynak_id=None,
+                onceki_stok=0.0, # İlk girişte 0.0
+                sonraki_stok=db_stok.miktar,
+                kullanici_id=current_user.id
+            )
+            db.add(db_hareket)
+        
         db.commit()
         db.refresh(db_stok)
         
-        # Stok hareketi eklenir (İlk Giriş)
-        # Sadece yeni ürün ekleniyorsa ilk stok miktarını ekle
-        if stok.miktar and stok.miktar > 0:
-             modeller.StokHareket.create_stok_hareket(
-                db, 
-                urun_id=db_stok.id, 
-                islem_tipi=modeller.OnMuhasebe.STOK_ISLEM_TIP_GIRIS_MANUEL, 
-                miktar=stok.miktar, 
-                aciklama="İlk Stok Girişi", 
-                kaynak="MANUEL", 
-                kullanici_id=current_user.id
-             )
-        
+        # Pydantic modeline dönüştürerek döndür
         return modeller.StokRead.model_validate(db_stok, from_attributes=True)
     
     except IntegrityError as e:
         db.rollback()
         if "unique_kod" in str(e):
-             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ürün kodu zaten mevcut.")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ürün kodu zaten mevcut.")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Stok kaydı oluşturulurken veritabanı hatası: {str(e)}")
     except Exception as e:
         db.rollback()
@@ -70,37 +76,38 @@ def read_stoklar(
     urun_grubu_id: Optional[int] = None,
     stokta_var: Optional[bool] = None,
     db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(get_current_user)
+    current_user: modeller.KullaniciRead = Depends(get_current_user) # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak düzeltildi.
 ):
-    query = db.query(semalar.Stok).filter(semalar.Stok.kullanici_id == current_user.id)
+    # KRİTİK DÜZELTME: Sorgularda modeller.Stok kullanıldı.
+    query = db.query(modeller.Stok).filter(modeller.Stok.kullanici_id == current_user.id)
     
     if arama:
         search_filter = or_(
-            semalar.Stok.kod.ilike(f"%{arama}%"),
-            semalar.Stok.ad.ilike(f"%{arama}%")
+            modeller.Stok.kod.ilike(f"%{arama}%"),
+            modeller.Stok.ad.ilike(f"%{arama}%")
         )
         query = query.filter(search_filter)
 
     if aktif_durum is not None:
-        query = query.filter(semalar.Stok.aktif == aktif_durum)
+        query = query.filter(modeller.Stok.aktif == aktif_durum)
 
     if kritik_stok_altinda:
-        query = query.filter(semalar.Stok.miktar <= semalar.Stok.min_stok_seviyesi)
+        query = query.filter(modeller.Stok.miktar <= modeller.Stok.min_stok_seviyesi)
 
     if kategori_id:
-        query = query.filter(semalar.Stok.kategori_id == kategori_id)
+        query = query.filter(modeller.Stok.kategori_id == kategori_id)
 
     if marka_id:
-        query = query.filter(semalar.Stok.marka_id == marka_id)
+        query = query.filter(modeller.Stok.marka_id == marka_id)
 
     if urun_grubu_id:
-        query = query.filter(semalar.Stok.urun_grubu_id == urun_grubu_id)
+        query = query.filter(modeller.Stok.urun_grubu_id == urun_grubu_id)
 
     if stokta_var is not None:
         if stokta_var:
-            query = query.filter(semalar.Stok.miktar > 0)
+            query = query.filter(modeller.Stok.miktar > 0)
         else:
-            query = query.filter(semalar.Stok.miktar <= 0)
+            query = query.filter(modeller.Stok.miktar <= 0)
 
     total_count = query.count()
     
@@ -114,15 +121,16 @@ def read_stoklar(
 @router.get("/ozet", response_model=modeller.StokOzetResponse)
 def get_stok_ozet(
     db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(get_current_user)
+    current_user: modeller.KullaniciRead = Depends(get_current_user) # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak düzeltildi.
 ):
-    query = db.query(semalar.Stok).filter(semalar.Stok.kullanici_id == current_user.id)
+    # KRİTİK DÜZELTME: Sorgularda modeller.Stok kullanıldı.
+    query = db.query(modeller.Stok).filter(modeller.Stok.kullanici_id == current_user.id)
     
-    toplam_miktar = query.with_entities(func.sum(semalar.Stok.miktar)).scalar() or 0
-    toplam_alis_fiyati = query.with_entities(func.sum(semalar.Stok.alis_fiyati * semalar.Stok.miktar)).scalar() or 0
-    toplam_satis_fiyati = query.with_entities(func.sum(semalar.Stok.satis_fiyati * semalar.Stok.miktar)).scalar() or 0
+    toplam_miktar = query.with_entities(func.sum(modeller.Stok.miktar)).scalar() or 0
+    toplam_alis_fiyati = query.with_entities(func.sum(modeller.Stok.alis_fiyati * modeller.Stok.miktar)).scalar() or 0
+    toplam_satis_fiyati = query.with_entities(func.sum(modeller.Stok.satis_fiyati * modeller.Stok.miktar)).scalar() or 0
     
-    toplam_urun_sayisi = query.filter(semalar.Stok.aktif == True).count()
+    toplam_urun_sayisi = query.filter(modeller.Stok.aktif == True).count()
     
     return {
         "toplam_urun_sayisi": toplam_urun_sayisi,
@@ -135,27 +143,29 @@ def get_stok_ozet(
 def read_stok(
     stok_id: int,
     db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(get_current_user)
+    current_user: modeller.KullaniciRead = Depends(get_current_user) # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak düzeltildi.
 ):
-    stok = db.query(semalar.Stok).filter(
-        semalar.Stok.id == stok_id,
-        semalar.Stok.kullanici_id == current_user.id
+    # KRİTİK DÜZELTME: Sorgularda modeller.Stok kullanıldı.
+    stok = db.query(modeller.Stok).filter(
+        modeller.Stok.id == stok_id,
+        modeller.Stok.kullanici_id == current_user.id
     ).first()
     if not stok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı")
     
-    stok_read_data = modeller.StokRead.model_validate(stok).model_dump()
+    stok_read_data = modeller.StokRead.model_validate(stok, from_attributes=True).model_dump() # from_attributes eklendi
     
+    # İlişki kontrolü (Lazy loading ile çalışması beklenir, eğer ilişkiler kurulduysa)
     if stok.kategori:
-        stok_read_data['kategori'] = modeller.UrunKategoriRead.model_validate(stok.kategori).model_dump()
+        stok_read_data['kategori'] = modeller.UrunKategoriRead.model_validate(stok.kategori, from_attributes=True).model_dump()
     if stok.marka:
-        stok_read_data['marka'] = modeller.UrunMarkaRead.model_validate(stok.marka).model_dump()
+        stok_read_data['marka'] = modeller.UrunMarkaRead.model_validate(stok.marka, from_attributes=True).model_dump()
     if stok.urun_grubu:
-        stok_read_data['urun_grubu'] = modeller.UrunGrubuRead.model_validate(stok.urun_grubu).model_dump()
+        stok_read_data['urun_grubu'] = modeller.UrunGrubuRead.model_validate(stok.urun_grubu, from_attributes=True).model_dump()
     if stok.birim:
-        stok_read_data['birim'] = modeller.UrunBirimiRead.model_validate(stok.birim).model_dump()
+        stok_read_data['birim'] = modeller.UrunBirimiRead.model_validate(stok.birim, from_attributes=True).model_dump()
     if stok.mense_ulke:
-        stok_read_data['mense_ulke'] = modeller.UlkeRead.model_validate(stok.mense_ulke).model_dump()
+        stok_read_data['mense_ulke'] = modeller.UlkeRead.model_validate(stok.mense_ulke, from_attributes=True).model_dump()
         
     return stok_read_data
 
@@ -164,11 +174,12 @@ def update_stok(
     stok_id: int,
     stok: modeller.StokUpdate,
     db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(get_current_user)
+    current_user: modeller.KullaniciRead = Depends(get_current_user) # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak düzeltildi.
 ):
-    db_stok = db.query(semalar.Stok).filter(
-        semalar.Stok.id == stok_id,
-        semalar.Stok.kullanici_id == current_user.id
+    # KRİTİK DÜZELTME: Sorgularda modeller.Stok kullanıldı.
+    db_stok = db.query(modeller.Stok).filter(
+        modeller.Stok.id == stok_id,
+        modeller.Stok.kullanici_id == current_user.id
     ).first()
     if not db_stok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı")
@@ -182,11 +193,12 @@ def update_stok(
 def delete_stok(
     stok_id: int,
     db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(get_current_user)
+    current_user: modeller.KullaniciRead = Depends(get_current_user) # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak düzeltildi.
 ):
-    db_stok = db.query(semalar.Stok).filter(
-        semalar.Stok.id == stok_id,
-        semalar.Stok.kullanici_id == current_user.id
+    # KRİTİK DÜZELTME: Sorgularda modeller.Stok kullanıldı.
+    db_stok = db.query(modeller.Stok).filter(
+        modeller.Stok.id == stok_id,
+        modeller.Stok.kullanici_id == current_user.id
     ).first()
     if not db_stok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı")
@@ -198,11 +210,12 @@ def delete_stok(
 def get_anlik_stok_miktari_endpoint(
     stok_id: int,
     db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(get_current_user)
+    current_user: modeller.KullaniciRead = Depends(get_current_user) # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak düzeltildi.
 ):
-    stok = db.query(semalar.Stok).filter(
-        semalar.Stok.id == stok_id,
-        semalar.Stok.kullanici_id == current_user.id
+    # KRİTİK DÜZELTME: Sorgularda modeller.Stok kullanıldı.
+    stok = db.query(modeller.Stok).filter(
+        modeller.Stok.id == stok_id,
+        modeller.Stok.kullanici_id == current_user.id
     ).first()
     if not stok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı")
@@ -214,11 +227,12 @@ def create_stok_hareket(
     stok_id: int,
     hareket: modeller.StokHareketCreate,
     db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(get_current_user)
+    current_user: modeller.KullaniciRead = Depends(get_current_user) # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak düzeltildi.
 ):
-    db_stok = db.query(semalar.Stok).filter(
-        semalar.Stok.id == stok_id,
-        semalar.Stok.kullanici_id == current_user.id
+    # KRİTİK DÜZELTME: Sorgularda modeller.Stok kullanıldı.
+    db_stok = db.query(modeller.Stok).filter(
+        modeller.Stok.id == stok_id,
+        modeller.Stok.kullanici_id == current_user.id
     ).first()
     if not db_stok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stok bulunamadı.")
@@ -230,17 +244,18 @@ def create_stok_hareket(
 
     try:
         stok_degisim_net = 0.0
+        # Enum'lar doğru olduğu için semalar.StokIslemTipiEnum kullanılabilir.
         if hareket.islem_tipi in [
-            semalar.StokIslemTipiEnum.GİRİŞ,
+            semalar.StokIslemTipiEnum.GIRIS,
             semalar.StokIslemTipiEnum.SAYIM_FAZLASI,
             semalar.StokIslemTipiEnum.SATIŞ_İADE,
             semalar.StokIslemTipiEnum.ALIŞ
         ]:
             stok_degisim_net = hareket.miktar
         elif hareket.islem_tipi in [
-            semalar.StokIslemTipiEnum.ÇIKIŞ,
+            semalar.StokIslemTipiEnum.CIKIS,
             semalar.StokIslemTipiEnum.SAYIM_EKSİĞİ,
-            semalar.StokIslemTipiEnum.ZAYIAT,
+            # semalar.StokIslemTipiEnum.ZAYIAT, # ZAYIAT Enum'da yok, bu yüzden kaldırıldı.
             semalar.StokIslemTipiEnum.SATIŞ,
             semalar.StokIslemTipiEnum.ALIŞ_İADE
         ]:
@@ -253,8 +268,8 @@ def create_stok_hareket(
         db_stok.miktar += stok_degisim_net
         db.add(db_stok)
 
-        db_hareket = semalar.StokHareket(
-            stok_id=stok_id,
+        db_hareket = modeller.StokHareket(
+            urun_id=stok_id,
             tarih=hareket.tarih,
             islem_tipi=hareket.islem_tipi,
             miktar=hareket.miktar,
@@ -285,24 +300,24 @@ def get_stok_hareketleri_endpoint(
     baslangic_tarih: str = Query(None),
     bitis_tarihi: str = Query(None),
     db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(get_current_user)
+    current_user: modeller.KullaniciRead = Depends(get_current_user) # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak düzeltildi.
 ):
-    query = db.query(semalar.StokHareket).filter(
-        semalar.StokHareket.stok_id == stok_id,
-        semalar.StokHareket.kullanici_id == current_user.id
+    query = db.query(modeller.StokHareket).filter(
+        modeller.StokHareket.urun_id == stok_id, # stok_id yerine urun_id kullanıldı (modeller.StokHareket'teki kolon adı)
+        modeller.StokHareket.kullanici_id == current_user.id
     )
 
     if islem_tipi:
-        query = query.filter(semalar.StokHareket.islem_tipi.cast(String) == islem_tipi)
+        query = query.filter(modeller.StokHareket.islem_tipi.cast(String) == islem_tipi)
     
     if baslangic_tarih:
-        query = query.filter(semalar.StokHareket.tarih >= baslangic_tarih)
+        query = query.filter(modeller.StokHareket.tarih >= baslangic_tarih)
     
     if bitis_tarihi:
-        query = query.filter(semalar.StokHareket.tarih <= bitis_tarihi)
+        query = query.filter(modeller.StokHareket.tarih <= bitis_tarihi)
 
     total_count = query.count()
-    hareketler = query.order_by(semalar.StokHareket.tarih.desc(), semalar.StokHareket.id.desc()).offset(skip).limit(limit).all()
+    hareketler = query.order_by(modeller.StokHareket.tarih.desc(), modeller.StokHareket.id.desc()).offset(skip).limit(limit).all()
 
     return {"items": [
         modeller.StokHareketRead.model_validate(hareket, from_attributes=True)
@@ -313,13 +328,14 @@ def get_stok_hareketleri_endpoint(
 def delete_stok_hareket(
     hareket_id: int,
     db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(get_current_user)
+    current_user: modeller.KullaniciRead = Depends(get_current_user) # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak düzeltildi.
 ):
-    db_hareket = db.query(semalar.StokHareket).filter(
+    # KRİTİK DÜZELTME: Sorgularda modeller.StokHareket kullanıldı.
+    db_hareket = db.query(modeller.StokHareket).filter(
         and_(
-            semalar.StokHareket.id == hareket_id,
-            semalar.StokHareket.kaynak == semalar.KaynakTipEnum.MANUEL,
-            semalar.StokHareket.kullanici_id == current_user.id
+            modeller.StokHareket.id == hareket_id,
+            modeller.StokHareket.kaynak == semalar.KaynakTipEnum.MANUEL,
+            modeller.StokHareket.kullanici_id == current_user.id
         )
     ).first()
 
@@ -329,14 +345,15 @@ def delete_stok_hareket(
             detail="Stok hareketi bulunamadı veya manuel olarak silinemez (otomatik oluşturulmuştur)."
         )
     
-    stok = db.query(semalar.Stok).filter(
-        semalar.Stok.id == db_hareket.stok_id,
-        semalar.Stok.kullanici_id == current_user.id
+    stok = db.query(modeller.Stok).filter(
+        modeller.Stok.id == db_hareket.urun_id, # stok_id yerine urun_id kullanıldı
+        modeller.Stok.kullanici_id == current_user.id
     ).first()
     if stok:
-        if db_hareket.islem_tipi == semalar.StokIslemTipiEnum.GİRİŞ:
+        # Geri alma mantığı düzeltildi (GİRİŞ tersi ÇIKIŞ, ÇIKIŞ tersi GİRİŞ)
+        if db_hareket.islem_tipi == semalar.StokIslemTipiEnum.GIRIS or db_hareket.islem_tipi == semalar.StokIslemTipiEnum.SAYIM_FAZLASI:
             stok.miktar -= db_hareket.miktar
-        elif db_hareket.islem_tipi == semalar.StokIslemTipiEnum.ÇIKIŞ:
+        elif db_hareket.islem_tipi == semalar.StokIslemTipiEnum.CIKIS or db_hareket.islem_tipi == semalar.StokIslemTipiEnum.SAYIM_EKSİĞİ:
             stok.miktar += db_hareket.miktar
         db.add(stok)
     
@@ -348,8 +365,9 @@ def delete_stok_hareket(
 def bulk_stok_upsert_endpoint(
     stok_listesi: List[modeller.StokCreate],
     db: Session = Depends(get_db),
-    current_user: modeller.Kullanici = Depends(get_current_user)
+    current_user: modeller.KullaniciRead = Depends(get_current_user) # KRİTİK DÜZELTME: Tipi modeller.KullaniciRead olarak düzeltildi.
 ):
+    # Atomik işlem için nested transaksiyon başlatıldı.
     db.begin_nested()
     try:
         yeni_eklenen = 0
@@ -362,27 +380,27 @@ def bulk_stok_upsert_endpoint(
         
         for stok_data in stok_listesi:
             try:
-                db_stok = db.query(semalar.Stok).filter(
-                    semalar.Stok.kod == stok_data.kod,
-                    semalar.Stok.kullanici_id == current_user.id
+                db_stok = db.query(modeller.Stok).filter(
+                    modeller.Stok.kod == stok_data.kod,
+                    modeller.Stok.kullanici_id == current_user.id
                 ).first()
                 
                 if db_stok:
-                    if db_stok.kullanici_id != current_user.id:
-                         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu stok kaydını güncelleme yetkiniz yok.")
+                    # Güvenlik kontrolü zaten filtrede yapılıyor, ek kontrol kaldırıldı.
                     for key, value in stok_data.model_dump(exclude_unset=True).items():
                         setattr(db_stok, key, value)
                     db.add(db_stok)
                     guncellenen += 1
                 else:
-                    yeni_stok = semalar.Stok(**stok_data.model_dump(), kullanici_id=current_user.id)
+                    # KRİTİK DÜZELTME: Yeni stok oluşturmada modeller.Stok kullanıldı.
+                    yeni_stok = modeller.Stok(**stok_data.model_dump(), kullanici_id=current_user.id)
                     db.add(yeni_stok)
-                    db.flush()
+                    db.flush() # ID'yi almak için
                     yeni_eklenen += 1
                     
                     if yeni_stok.miktar != 0:
-                        alis_fiyati_kdv_haric = yeni_stok.alis_fiyati / (1 + yeni_stok.kdv_orani / 100)
-                        
+                        alis_fiyati_kdv_haric = yeni_stok.alis_fiyati
+
                         kalem_bilgisi = {
                             "urun_id": yeni_stok.id,
                             "miktar": yeni_stok.miktar,
@@ -400,27 +418,34 @@ def bulk_stok_upsert_endpoint(
                 hata_veren += 1
                 hatalar.append(f"Stok kodu '{stok_data.kod}' işlenirken hata: {e}")
 
+        # POZİTİF MİKTARLAR İÇİN TOPLU ALIŞ FATURASI VE HAREKETLERİ OLUŞTURMA
         if pozitif_kalemler:
             fatura_no=f"TOPLU-ALIS-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            tarih=datetime.now().strftime('%Y-%m-%d')
+            tarih=datetime.now().date() # datetime.date objesi kullanıldı.
             
-            db_fatura = semalar.Fatura(
+            toplam_kdv_haric = sum(k['birim_fiyat'] * k['miktar'] for k in pozitif_kalemler)
+            toplam_kdv_dahil = sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * k['miktar'] for k in pozitif_kalemler)
+            
+            # KRİTİK DÜZELTME: Fatura oluşturmada modeller.Fatura kullanıldı.
+            db_fatura = modeller.Fatura(
                 fatura_no=fatura_no,
                 fatura_turu=semalar.FaturaTuruEnum.ALIS,
                 tarih=tarih,
-                cari_id=1,
+                cari_id=1, # Varsayılan Cari ID
+                cari_tip=semalar.CariTipiEnum.TEDARIKCI.value, # Cari Tipi eklendi
                 odeme_turu=semalar.OdemeTuruEnum.ETKISIZ_FATURA,
                 fatura_notlari="Toplu stok ekleme işlemiyle otomatik oluşturulan alış faturası.",
-                toplam_kdv_haric=sum(k['birim_fiyat'] * k['miktar'] for k in pozitif_kalemler),
-                toplam_kdv_dahil=sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * k['miktar'] for k in pozitif_kalemler),
-                genel_toplam=sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * k['miktar'] for k in pozitif_kalemler),
+                toplam_kdv_haric=toplam_kdv_haric,
+                toplam_kdv_dahil=toplam_kdv_dahil,
+                genel_toplam=toplam_kdv_dahil,
                 kullanici_id=current_user.id
             )
             db.add(db_fatura)
             db.flush()
 
             for kalem_bilgisi in pozitif_kalemler:
-                db_kalem = semalar.FaturaKalemi(
+                # KRİTİK DÜZELTME: Fatura kalemi oluşturmada modeller.FaturaKalemi kullanıldı.
+                db_kalem = modeller.FaturaKalemi(
                     fatura_id=db_fatura.id,
                     urun_id=kalem_bilgisi['urun_id'],
                     miktar=kalem_bilgisi['miktar'],
@@ -430,10 +455,12 @@ def bulk_stok_upsert_endpoint(
                 )
                 db.add(db_kalem)
                 
-                db_stok = db.query(semalar.Stok).filter(semalar.Stok.id == kalem_bilgisi['urun_id']).first()
+                # Stok Hareketi oluşturma
+                db_stok = db.query(modeller.Stok).filter(modeller.Stok.id == kalem_bilgisi['urun_id']).first()
                 if db_stok:
-                    db_stok_hareket = semalar.StokHareket(
-                        stok_id=kalem_bilgisi['urun_id'],
+                    # KRİTİK DÜZELTME: Stok hareketi oluşturmada modeller.StokHareket kullanıldı.
+                    db_stok_hareket = modeller.StokHareket(
+                        urun_id=kalem_bilgisi['urun_id'],
                         tarih=db_fatura.tarih,
                         islem_tipi=semalar.StokIslemTipiEnum.ALIŞ,
                         miktar=kalem_bilgisi['miktar'],
@@ -441,33 +468,40 @@ def bulk_stok_upsert_endpoint(
                         aciklama=f"{db_fatura.fatura_no} nolu fatura ({db_fatura.fatura_turu.value})",
                         kaynak=semalar.KaynakTipEnum.FATURA,
                         kaynak_id=db_fatura.id,
-                        onceki_stok=db_stok.miktar - kalem_bilgisi['miktar'],
+                        onceki_stok=db_stok.miktar - kalem_bilgisi['miktar'], # Stok güncellendiği için doğru önceki miktar.
                         sonraki_stok=db_stok.miktar,
                         kullanici_id=current_user.id
                     )
                     db.add(db_stok_hareket)
 
+        # NEGATİF MİKTARLAR İÇİN TOPLU ALIŞ İADE FATURASI VE HAREKETLERİ OLUŞTURMA
         if negatif_kalemler:
             fatura_no=f"TOPLU-ALIS-IADE-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            tarih=datetime.now().strftime('%Y-%m-%d')
+            tarih=datetime.now().date()
             
-            db_fatura_iade = semalar.Fatura(
+            toplam_kdv_haric_iade = sum(k['birim_fiyat'] * abs(k['miktar']) for k in negatif_kalemler)
+            toplam_kdv_dahil_iade = sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * abs(k['miktar']) for k in negatif_kalemler)
+            
+            # KRİTİK DÜZELTME: Fatura oluşturmada modeller.Fatura kullanıldı.
+            db_fatura_iade = modeller.Fatura(
                 fatura_no=fatura_no,
                 fatura_turu=semalar.FaturaTuruEnum.ALIS_IADE,
                 tarih=tarih,
                 cari_id=1,
+                cari_tip=semalar.CariTipiEnum.TEDARIKCI.value, # Cari Tipi eklendi
                 odeme_turu=semalar.OdemeTuruEnum.ETKISIZ_FATURA,
                 fatura_notlari="Toplu stok ekleme işlemiyle otomatik oluşturulan alış iade faturası.",
-                toplam_kdv_haric=sum(k['birim_fiyat'] * abs(k['miktar']) for k in negatif_kalemler),
-                toplam_kdv_dahil=sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * abs(k['miktar']) for k in negatif_kalemler),
-                genel_toplam=sum(k['birim_fiyat'] * (1 + k['kdv_orani'] / 100) * abs(k['miktar']) for k in negatif_kalemler),
+                toplam_kdv_haric=toplam_kdv_haric_iade,
+                toplam_kdv_dahil=toplam_kdv_dahil_iade,
+                genel_toplam=toplam_kdv_dahil_iade,
                 kullanici_id=current_user.id
             )
             db.add(db_fatura_iade)
             db.flush()
 
             for kalem_bilgisi in negatif_kalemler:
-                db_kalem = semalar.FaturaKalemi(
+                # KRİTİK DÜZELTME: Fatura kalemi oluşturmada modeller.FaturaKalemi kullanıldı.
+                db_kalem = modeller.FaturaKalemi(
                     fatura_id=db_fatura_iade.id,
                     urun_id=kalem_bilgisi['urun_id'],
                     miktar=abs(kalem_bilgisi['miktar']),
@@ -477,10 +511,12 @@ def bulk_stok_upsert_endpoint(
                 )
                 db.add(db_kalem)
                 
-                db_stok = db.query(semalar.Stok).filter(semalar.Stok.id == kalem_bilgisi['urun_id']).first()
+                # Stok Hareketi oluşturma
+                db_stok = db.query(modeller.Stok).filter(modeller.Stok.id == kalem_bilgisi['urun_id']).first()
                 if db_stok:
-                    db_stok_hareket = semalar.StokHareket(
-                        stok_id=kalem_bilgisi['urun_id'],
+                    # KRİTİK DÜZELTME: Stok hareketi oluşturmada modeller.StokHareket kullanıldı.
+                    db_stok_hareket = modeller.StokHareket(
+                        urun_id=kalem_bilgisi['urun_id'],
                         tarih=db_fatura_iade.tarih,
                         islem_tipi=semalar.StokIslemTipiEnum.ALIŞ_İADE,
                         miktar=abs(kalem_bilgisi['miktar']),
@@ -522,11 +558,9 @@ def list_stok_hareketleri_endpoint(
     current_user: modeller.KullaniciRead = Depends(guvenlik.get_current_user)
 ):
     kullanici_id = current_user.id
-    # MODEL TUTARLILIĞI DÜZELTME: semalar.StokHareket -> modeller.StokHareket
     query = db.query(modeller.StokHareket).filter(modeller.StokHareket.kullanici_id == kullanici_id)
 
     if stok_id:
-        # KRİTİK DÜZELTME: Yanlış kolon 'stok_id' yerine doğru kolon 'urun_id' kullanıldı.
         query = query.filter(modeller.StokHareket.urun_id == stok_id)
     if islem_tipi:
         query = query.filter(modeller.StokHareket.islem_tipi == islem_tipi)
@@ -538,4 +572,7 @@ def list_stok_hareketleri_endpoint(
     total = query.count()
     hareketler = query.order_by(modeller.StokHareket.tarih.desc()).offset(skip).limit(limit).all()
 
-    return {"items": hareketler, "total": total}
+    return {"items": [
+        modeller.StokHareketRead.model_validate(hareket, from_attributes=True)
+        for hareket in hareketler
+    ], "total": total}

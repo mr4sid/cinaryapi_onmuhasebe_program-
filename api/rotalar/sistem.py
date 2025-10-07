@@ -1,12 +1,11 @@
 # api/rotalar/sistem.py dosyasının TAMAMI
-
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from .. import modeller, semalar
 from ..veritabani import get_db, reset_db_connection
-from .. import guvenlik # KRİTİK: guvenlik modülü eklendi
+from .. import guvenlik
 
 router = APIRouter(prefix="/sistem", tags=["Sistem"])
 
@@ -60,7 +59,7 @@ def get_varsayilan_kasa_banka_endpoint(
 
     varsayilan_kod = f"VARSAYILAN_{hesap_tipi.value}_{kullanici_id}"
     
-    # Model Tutarlılığı Kuralı (modeller.X) ihlali kontrol ediliyor:
+    # Model Tutarlılığı Kuralı: modeller.KasaBankaHesap kullanılıyor.
     hesap = db.query(modeller.KasaBankaHesap).filter(modeller.KasaBankaHesap.kod == varsayilan_kod, modeller.KasaBankaHesap.kullanici_id == kullanici_id).first()
     if not hesap:
         hesap = db.query(modeller.KasaBankaHesap).filter(modeller.KasaBankaHesap.tip == hesap_tipi, modeller.KasaBankaHesap.kullanici_id == kullanici_id).first()
@@ -77,7 +76,8 @@ def get_sirket_bilgileri_endpoint(
     db: Session = Depends(get_db)
 ):
     kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
-    sirket_bilgisi = db.query(semalar.Sirket).filter(semalar.Sirket.kullanici_id == kullanici_id).first()
+    # KRİTİK DÜZELTME: semalar.Sirket -> modeller.Sirket
+    sirket_bilgisi = db.query(modeller.Sirket).filter(modeller.Sirket.kullanici_id == kullanici_id).first()
     if not sirket_bilgisi:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -92,11 +92,16 @@ def update_sirket_bilgileri_endpoint(
     db: Session = Depends(get_db)
 ):
     kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
-    sirket_bilgisi = db.query(semalar.Sirket).filter(semalar.Sirket.kullanici_id == kullanici_id).first()
+    # KRİTİK DÜZELTME: semalar.Sirket -> modeller.Sirket
+    sirket_bilgisi = db.query(modeller.Sirket).filter(modeller.Sirket.kullanici_id == kullanici_id).first()
+    
     if not sirket_bilgisi:
-        sirket_update.kullanici_id = kullanici_id
-        db_sirket = semalar.Sirket(**sirket_update.model_dump())
+        # KRİTİK DÜZELTME: Oluşturmada semalar.Sirket -> modeller.Sirket
+        sirket_update_data = sirket_update.model_dump()
+        sirket_update_data['kullanici_id'] = kullanici_id # Eğer modelde yoksa. Ancak ORM'de var.
+        db_sirket = modeller.Sirket(**sirket_update_data)
         db.add(db_sirket)
+        sirket_bilgisi = db_sirket # Yeni oluşturulan objeyi referans al
     else:
         for key, value in sirket_update.model_dump(exclude_unset=True).items():
             setattr(sirket_bilgisi, key, value)
@@ -112,9 +117,9 @@ def get_next_fatura_number_endpoint(
     db: Session = Depends(get_db)
 ):
     kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
-    # GÜNCELLEME: Model Tutarlılığı Kuralı gereği semalar.Fatura yerine modeller.Fatura kullanıldı.
+    # KURAL UYGULANDI: modeller.Fatura kullanıldı.
     last_fatura = db.query(modeller.Fatura).filter(modeller.Fatura.fatura_turu == fatura_turu.upper(), modeller.Fatura.kullanici_id == kullanici_id) \
-                                       .order_by(modeller.Fatura.fatura_no.desc()).first()
+                                        .order_by(modeller.Fatura.fatura_no.desc()).first()
 
     prefix = ""
     if fatura_turu.upper() == "SATIŞ":
@@ -125,12 +130,12 @@ def get_next_fatura_number_endpoint(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz fatura türü. 'SATIŞ' veya 'ALIŞ' olmalıdır.")
 
     next_sequence = 1
-    if last_fatura and last_fatura.fatura_no.startswith(prefix):
+    if last_fatura and last_fatura.fatura_no and last_fatura.fatura_no.startswith(prefix):
         try:
             current_sequence_str = last_fatura.fatura_no[len(prefix):]
             current_sequence = int(current_sequence_str)
             next_sequence = current_sequence + 1
-        except ValueError:
+        except (ValueError, IndexError): # IndexError eklendi
             pass
 
     next_fatura_no = f"{prefix}{next_sequence:09d}"
@@ -142,7 +147,8 @@ def get_next_musteri_code_endpoint(
     db: Session = Depends(get_db)
 ):
     kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
-    last_musteri = db.query(semalar.Musteri).filter(semalar.Musteri.kullanici_id == kullanici_id).order_by(semalar.Musteri.kod.desc()).first()
+    # KRİTİK DÜZELTME: semalar.Musteri -> modeller.Musteri
+    last_musteri = db.query(modeller.Musteri).filter(modeller.Musteri.kullanici_id == kullanici_id).order_by(modeller.Musteri.kod.desc()).first()
 
     prefix = "M"
     next_sequence = 1
@@ -163,7 +169,8 @@ def get_next_tedarikci_code_endpoint(
     db: Session = Depends(get_db)
 ):
     kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
-    last_tedarikci = db.query(semalar.Tedarikci).filter(semalar.Tedarikci.kullanici_id == kullanici_id).order_by(semalar.Tedarikci.kod.desc()).first()
+    # KRİTİK DÜZELTME: semalar.Tedarikci -> modeller.Tedarikci
+    last_tedarikci = db.query(modeller.Tedarikci).filter(modeller.Tedarikci.kullanici_id == kullanici_id).order_by(modeller.Tedarikci.kod.desc()).first()
 
     prefix = "T"
     next_sequence = 1
@@ -184,7 +191,8 @@ def get_next_stok_code_endpoint(
     db: Session = Depends(get_db)
 ):
     kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
-    last_stok = db.query(semalar.Stok).filter(semalar.Stok.kullanici_id == kullanici_id).order_by(semalar.Stok.kod.desc()).first()
+    # KRİTİK DÜZELTME: semalar.Stok -> modeller.Stok
+    last_stok = db.query(modeller.Stok).filter(modeller.Stok.kullanici_id == kullanici_id).order_by(modeller.Stok.kod.desc()).first()
 
     prefix = "STK"
     next_sequence = 1
@@ -205,7 +213,8 @@ def get_next_siparis_kodu_endpoint(
     db: Session = Depends(get_db)
 ):
     kullanici_id = current_user.id # JWT'den gelen ID kullanılıyor
-    son_siparis = db.query(semalar.Siparis).filter(semalar.Siparis.kullanici_id == kullanici_id).order_by(semalar.Siparis.id.desc()).first()
+    # KRİTİK DÜZELTME: semalar.Siparis -> modeller.Siparis
+    son_siparis = db.query(modeller.Siparis).filter(modeller.Siparis.kullanici_id == kullanici_id).order_by(modeller.Siparis.id.desc()).first()
     
     prefix = "S-"
     next_number = 1

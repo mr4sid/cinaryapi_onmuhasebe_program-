@@ -1,9 +1,10 @@
 # api/rotalar/dogrulama.py
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import timedelta
 
-from .. import modeller, semalar
+# Model Tutarlılığı: semalar artık sorgularda kullanılmadığı için kaldırıldı.
+from .. import modeller
 from ..veritabani import get_db
 from ..guvenlik import create_access_token, verify_password, get_password_hash
 from ..config import ACCESS_TOKEN_EXPIRE_MINUTES
@@ -18,7 +19,8 @@ def authenticate_user(user_login: modeller.KullaniciLogin, db: Session = Depends
     print(f"Gelen kullanıcı adı: '{user_login.kullanici_adi}'")
     print(f"Gelen şifre: '{user_login.sifre}'")
     
-    user = db.query(semalar.Kullanici).filter(semalar.Kullanici.kullanici_adi == user_login.kullanici_adi).first()
+    # DÜZELTİLDİ: Model Tutarlılığı - Sorgularda semalar.Kullanici yerine modeller.Kullanici kullanıldı.
+    user = db.query(modeller.Kullanici).filter(modeller.Kullanici.kullanici_adi == user_login.kullanici_adi).first()
 
     if not user:
         print(">>> HATA: Veritabanında bu kullanıcı adı bulunamadı!")
@@ -57,15 +59,16 @@ def authenticate_user(user_login: modeller.KullaniciLogin, db: Session = Depends
 
 @router.post("/register", response_model=modeller.KullaniciRead)
 def register_user(user_create: modeller.KullaniciCreate, db: Session = Depends(get_db)):
-    db_user = db.query(semalar.Kullanici).filter(semalar.Kullanici.kullanici_adi == user_create.kullanici_adi).first()
+    # DÜZELTİLDİ: Model Tutarlılığı - Sorgularda semalar.Kullanici yerine modeller.Kullanici kullanıldı.
+    db_user = db.query(modeller.Kullanici).filter(modeller.Kullanici.kullanici_adi == user_create.kullanici_adi).first()
     if db_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kullanıcı adı zaten mevcut.")
     
     hashed_password = get_password_hash(user_create.sifre)
     
-    db_user = semalar.Kullanici(
+    # DÜZELTİLDİ: Model Tutarlılığı - Nesne oluşturmada semalar.Kullanici yerine modeller.Kullanici kullanıldı.
+    db_user = modeller.Kullanici(
         kullanici_adi=user_create.kullanici_adi,
-        # DÜZELTİLDİ: 'hashed_sifre' yerine doğru sütun adı olan 'sifre_hash' kullanıldı.
         sifre_hash=hashed_password,
         ad=user_create.ad,
         soyad=user_create.soyad,
@@ -77,6 +80,7 @@ def register_user(user_create: modeller.KullaniciCreate, db: Session = Depends(g
     db.commit()
     db.refresh(db_user)
     
+    # create_initial_data fonksiyonu, yeni kullanıcı için başlangıç verilerini oluşturuyor.
     create_initial_data(db=db, kullanici_id=db_user.id)
     
     return modeller.KullaniciRead.model_validate(db_user, from_attributes=True)
