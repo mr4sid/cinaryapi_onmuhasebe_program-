@@ -1,0 +1,397 @@
+INFO:     127.0.0.1:51034 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49813 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49813 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49992 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50171 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50171 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50171 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50393 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50394 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50396 - "GET /kasalar_bankalar/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50397 - "GET /stoklar/?limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50398 - "GET /faturalar/son_fatura_no?fatura_tipi=SATI%C5%9E HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:50517 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50518 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50519 - "GET /kasalar_bankalar/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50520 - "GET /stoklar/?limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50521 - "GET /faturalar/son_fatura_no?fatura_tipi=SATI%C5%9E HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:51742 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51743 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51744 - "GET /kasalar_bankalar/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51745 - "GET /faturalar/son_fatura_no?fatura_tipi=SATI%C5%9E HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:51747 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51748 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51749 - "GET /kasalar_bankalar/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51750 - "GET /faturalar/son_fatura_no?fatura_tipi=SATI%C5%9E HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:51780 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51781 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51782 - "GET /kasalar_bankalar/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51783 - "GET /faturalar/next_fatura_no?fatura_tipi=SATI%C5%9E HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:51818 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51819 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51820 - "GET /kasalar_bankalar/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51821 - "GET /faturalar/next_fatura_no?fatura_tipi=SATI%C5%9E HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:51855 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51856 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51857 - "GET /kasalar_bankalar/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51897 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51898 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51899 - "GET /kasalar_bankalar/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52157 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52158 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52159 - "GET /kasalar_bankalar/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52160 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52170 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52171 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52172 - "GET /kasalar_bankalar/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52173 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52219 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52220 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52221 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52222 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52249 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52250 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52251 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52252 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52256 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52257 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52258 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52259 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52302 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52302 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52302 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52554 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52555 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52556 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52557 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52796 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52797 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52798 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52799 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52802 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52803 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52804 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52805 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52978 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52979 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52980 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52982 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53026 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53027 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53028 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53029 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53030 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53031 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53032 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53033 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53034 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53059 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53060 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53061 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53062 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53063 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53064 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53065 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53082 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53083 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53084 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53085 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53086 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53087 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53088 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53090 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53091 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53096 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53097 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53098 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53099 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53100 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53101 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53102 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53140 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53141 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53142 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53143 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53144 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53145 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53146 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53170 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53171 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53172 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53173 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53174 - "GET /sistem/next_fatura_number?fatura_turu=SATI%C5%9E HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53175 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53176 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53177 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53233 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53234 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53235 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53236 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53237 - "GET /sistem/next_fatura_number?fatura_turu=SATI%C5%9E HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53238 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53239 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53240 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53244 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53245 - "GET /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53271 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53272 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53273 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53274 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53275 - "GET /sistem/next_fatura_number/SATI%C5%9E HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53276 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53277 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53278 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53293 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53293 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53297 - "POST /musteriler/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53299 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53306 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53307 - "GET /musteriler/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53308 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53309 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53310 - "GET /sistem/next_fatura_number/SATI%C5%9E HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53311 - "GET /stoklar/?skip=0&limit=10000&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53312 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53313 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53358 - "POST /kasalar_bankalar/ HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:53382 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53418 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53418 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53422 - "GET /kasalar_bankalar/?skip=0&limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53426 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53435 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53462 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53463 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53463 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53463 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53463 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53464 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53501 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53501 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53503 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53761 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:53764 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53764 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53764 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53764 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53764 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53764 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53786 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54402 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54402 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54406 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54433 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54481 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54481 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54532 - "POST /kasalar_bankalar/ HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:54598 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54598 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54598 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54598 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49853 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49853 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49853 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49853 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49907 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49907 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49907 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49907 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49907 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49907 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49907 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49907 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49921 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49921 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49921 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49921 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49804 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49804 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49804 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49804 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49804 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49804 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49804 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49804 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50036 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50036 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50442 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50442 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52493 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52493 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52536 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52536 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52537 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52537 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52537 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52537 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52537 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52537 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50721 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50721 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50055 - "GET /nitelikler/kategoriler?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50056 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50057 - "GET /nitelikler/markalar?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50058 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50059 - "GET /nitelikler/urun_gruplari?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50061 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50062 - "GET /musteriler/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50063 - "GET /tedarikciler/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50064 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50065 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50066 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50067 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50068 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50069 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50070 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50071 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50072 - "GET /siparisler/?skip=0&limit=20&bas_t=2025-06-28&bit_t=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50073 - "GET /siparisler/?skip=0&limit=20&bas_t=2025-06-28&bit_t=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50074 - "GET /kasalar_bankalar/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50075 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50076 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50077 - "GET /sistem/varsayilan_cariler/genel_tedarikci_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50078 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50079 - "GET /musteriler/1/net_bakiye HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50080 - "GET /cari_hareketler/?cari_id=1&cari_tip=MUSTERI&limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50081 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50082 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50083 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50084 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50085 - "GET /sistem/varsayilan_cariler/genel_tedarikci_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50086 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50087 - "GET /tedarikciler/1/net_bakiye HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50088 - "GET /cari_hareketler/?cari_id=1&cari_tip=TEDARIKCI&limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50089 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50090 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50091 - "GET /gelir_gider/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28&tip_filtre=GEL%C4%B0R HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50092 - "GET /gelir_gider/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28&tip_filtre=G%C4%B0DER HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50093 - "GET /raporlar/dashboard_ozet?baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50094 - "GET /raporlar/kar_zarar_verileri?baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50095 - "GET /raporlar/nakit_akisi_raporu?baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50096 - "GET /kasalar_bankalar/?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50097 - "GET /stoklar/?skip=0&limit=1000&kritik_stok_altinda=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50098 - "GET /raporlar/gelir_gider_aylik_ozet?yil=2025 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50099 - "GET /nitelikler/urun_gruplari?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50100 - "GET /nitelikler/urun_birimleri?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50101 - "GET /nitelikler/ulkeler?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49958 - "GET /nitelikler/kategoriler?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49959 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49960 - "GET /nitelikler/markalar?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49961 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49962 - "GET /nitelikler/urun_gruplari?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49963 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49964 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49965 - "GET /musteriler/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49966 - "GET /tedarikciler/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49967 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49968 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49969 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49970 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49971 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49972 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49973 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49974 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49975 - "GET /siparisler/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49976 - "GET /siparisler/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49977 - "GET /kasalar_bankalar/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49978 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49979 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49980 - "GET /sistem/varsayilan_cariler/genel_tedarikci_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49981 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49982 - "GET /musteriler/1/net_bakiye HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49983 - "GET /cari_hareketler/?cari_id=1&cari_tip=MUSTERI&limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49984 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49985 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49986 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49987 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49988 - "GET /sistem/varsayilan_cariler/genel_tedarikci_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49989 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49990 - "GET /tedarikciler/1/net_bakiye HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49991 - "GET /cari_hareketler/?cari_id=1&cari_tip=TEDARIKCI&limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49992 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49993 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49994 - "GET /gelir_gider/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28&tip_filtre=GEL%C4%B0R HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49995 - "GET /gelir_gider/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28&tip_filtre=G%C4%B0DER HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49996 - "GET /raporlar/dashboard_ozet?baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:50002 - "GET /nitelikler/urun_gruplari?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50024 - "GET /nitelikler/kategoriler?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50025 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50026 - "GET /nitelikler/markalar?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50027 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50028 - "GET /nitelikler/urun_gruplari?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50029 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50030 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50031 - "GET /musteriler/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50032 - "GET /tedarikciler/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50033 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50034 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50035 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50036 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50037 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50038 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50039 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50040 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50041 - "GET /siparisler/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50042 - "GET /siparisler/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50043 - "GET /kasalar_bankalar/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50044 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50045 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50046 - "GET /sistem/varsayilan_cariler/genel_tedarikci_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50047 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50048 - "GET /musteriler/1/net_bakiye HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50049 - "GET /cari_hareketler/?cari_id=1&cari_tip=MUSTERI&limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50050 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50051 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50052 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50053 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50054 - "GET /sistem/varsayilan_cariler/genel_tedarikci_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50055 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50056 - "GET /tedarikciler/1/net_bakiye HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50057 - "GET /cari_hareketler/?cari_id=1&cari_tip=TEDARIKCI&limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50058 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50059 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50060 - "GET /gelir_gider/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28&tip_filtre=GEL%C4%B0R HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50061 - "GET /gelir_gider/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28&tip_filtre=G%C4%B0DER HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50062 - "GET /raporlar/dashboard_ozet?baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:50066 - "GET /nitelikler/urun_gruplari?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50123 - "GET /nitelikler/kategoriler?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50124 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50125 - "GET /nitelikler/markalar?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50126 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50127 - "GET /nitelikler/urun_gruplari?skip=0&limit=1000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50128 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50129 - "GET /stoklar/?skip=0&limit=25&kritik_stok_altinda=True&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50130 - "GET /musteriler/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50131 - "GET /tedarikciler/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50132 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50133 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50134 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50135 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50136 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50137 - "GET /faturalar/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50138 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50139 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50140 - "GET /siparisler/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50141 - "GET /siparisler/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50142 - "GET /kasalar_bankalar/?skip=0&limit=25&aktif_durum=True HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50143 - "GET /musteriler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50144 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50145 - "GET /sistem/varsayilan_cariler/genel_tedarikci_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50146 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50147 - "GET /musteriler/1/net_bakiye HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50148 - "GET /cari_hareketler/?cari_id=1&cari_tip=MUSTERI&limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50149 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50150 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50151 - "GET /tedarikciler/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50152 - "GET /sistem/varsayilan_cariler/perakende_musteri_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50153 - "GET /sistem/varsayilan_cariler/genel_tedarikci_id HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50154 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50155 - "GET /tedarikciler/1/net_bakiye HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50156 - "GET /cari_hareketler/?cari_id=1&cari_tip=TEDARIKCI&limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50157 - "GET /sistem/varsayilan_kasa_banka/NAK%C4%B0T HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50158 - "GET /kasalar_bankalar/?skip=0&limit=10000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50159 - "GET /gelir_gider/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28&tip_filtre=GEL%C4%B0R HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50160 - "GET /gelir_gider/?skip=0&limit=20&baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28&tip_filtre=G%C4%B0DER HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50161 - "GET /raporlar/dashboard_ozet?baslangic_tarihi=2025-06-28&bitis_tarihi=2025-07-28 HTTP/1.1" 500 Internal Server Error
+INFO:     127.0.0.1:50165 - "GET /nitelikler/urun_gruplari?skip=0&limit=1000 HTTP/1.1" 200 OK

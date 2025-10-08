@@ -13,7 +13,6 @@ from api.modeller import (Base, Stok, Musteri, Tedarikci, Fatura, FaturaKalemi,
                            CariHesap, CariHareket, Siparis, SiparisKalemi, UrunKategori, UrunGrubu,
                            KasaBankaHesap, StokHareket, GelirGider, Nitelik, Ulke, UrunMarka, 
                            SenkronizasyonKuyrugu, GelirSiniflandirma, GiderSiniflandirma, UrunBirimi)
-import json # JSON işlemleri için eklendi
 
 logger = logging.getLogger(__name__)
 
@@ -376,34 +375,17 @@ class LokalVeritabaniServisi:
         finally:
             db.close()
 
-    # KRİTİK DÜZELTME: senkronize_veriler içindeki helper fonksiyonu dışarı taşındı.
-    def _convert_dates(self, data, date_keys, datetime_keys):
-        for key, value in data.items():
-            if isinstance(value, str):
-                if key in date_keys:
-                    try:
-                        data[key] = datetime.strptime(value, '%Y-%m-%d').date()
-                    except (ValueError, TypeError):
-                        pass
-                elif key in datetime_keys:
-                    try:
-                        data[key] = datetime.fromisoformat(value)
-                    except (ValueError, TypeError):
-                        pass
-        return data
-
     def senkronize_veriler(self, sunucu_adresi: str, access_token: Optional[str] = None, current_user_id: Optional[int] = None):
         """
-        Yerel verileri sunucudan senkronize eder (Sunucudan lokale çekme).
-        KRİTİK NOT: Bu işlem blocking (engelleyici) olduğu için, hız odaklılık prensibi gereği
-        ANA UYGULAMA THREAD'İNDE DEĞİL, ARKA PLAN GÖREVİ OLARAK ÇALIŞTIRILMALIDIR.
+        Yerel verileri sunucudan senkronize eder.
+        KRİTİK DÜZELTME: current_user_id parametresi eklendi ve veriye atandı.
         """
         if not sunucu_adresi:
             return False, "Sunucu adresi belirtilmedi. Senkronizasyon atlandı."
         if not access_token:
-            self.logger.warning("JWT Token mevcut değil. Senkronizasyon atlandı.")
+            print("JWT Token mevcut değil. Senkronizasyon atlandı.")
             return False, "JWT Token mevcut değil. Lütfen önce giriş yapın."
-        if current_user_id is None:
+        if current_user_id is None: # Kullanıcı ID'si yoksa senkronizasyon başarısız olur.
              return False, "Kullanıcı ID'si mevcut değil. Senkronizasyon atlandı."
 
         lokal_db = None
@@ -411,6 +393,21 @@ class LokalVeritabaniServisi:
         
         try:
             lokal_db = self.get_db()
+
+            def _convert_dates(data, date_keys, datetime_keys):
+                for key, value in data.items():
+                    if isinstance(value, str):
+                        if key in date_keys:
+                            try:
+                                data[key] = datetime.strptime(value, '%Y-%m-%d').date()
+                            except (ValueError, TypeError):
+                                pass
+                        elif key in datetime_keys:
+                            try:
+                                data[key] = datetime.fromisoformat(value)
+                            except (ValueError, TypeError):
+                                pass
+                return data
 
             endpoints = {
                 'stoklar': Stok,
@@ -425,16 +422,13 @@ class LokalVeritabaniServisi:
                 'nitelikler/urun_birimleri': UrunBirimi,
                 'nitelikler/ulkeler': Ulke,
                 'nitelikler/gelir_siniflandirmalari': GelirSiniflandirma,
-                'nitelikler/gider_siniflandirmalari': GiderSiniflandirma,
-                'kasalar_bankalar': KasaBankaHesap,
-                'gelir_gider': GelirGider 
+                'nitelikler/gider_siniflandirmalari': GiderSiniflandirma
             }
 
             date_fields = {
                 'faturalar': ['tarih', 'vade_tarihi'],
                 'siparisler': ['tarih', 'teslimat_tarihi'],
-                'cari_hareketler': ['tarih', 'vade_tarihi'],
-                'gelir_gider': ['tarih'],
+                'cari_hareketler': ['tarih', 'vade_tarihi']
             }
             datetime_fields = {
                 'stoklar': ['olusturma_tarihi'],
@@ -448,13 +442,13 @@ class LokalVeritabaniServisi:
             }
 
             for endpoint, model in endpoints.items():
+                # Fatura/Sipariş Kalemleri gibi alt öğeler listenmez.
                 if endpoint.endswith('kalemleri'):
                     continue 
 
                 response = requests.get(f"{sunucu_adresi}/{endpoint}", params={"limit": 999999}, headers=api_headers)
                 response.raise_for_status()
                 response_data = response.json()
-                
                 if isinstance(response_data, dict) and "items" in response_data:
                     server_data = response_data["items"]
                 elif isinstance(response_data, list):
@@ -463,7 +457,7 @@ class LokalVeritabaniServisi:
                     raise ValueError(f"API'den beklenmeyen veri formatı: {response_data}")
 
                 for item_data in server_data:
-                    item_data = self._convert_dates(item_data, date_fields.get(endpoint.split('/')[-1], []), datetime_fields.get(endpoint.split('/')[-1], []))
+                    item_data = _convert_dates(item_data, date_fields.get(endpoint.split('/')[-1], []), datetime_fields.get(endpoint.split('/')[-1], []))
                     
                     if "kullanici_id" in model.__table__.columns.keys():
                         item_data['kullanici_id'] = current_user_id
@@ -480,96 +474,19 @@ class LokalVeritabaniServisi:
                         lokal_db.add(yeni_item)
 
             lokal_db.commit()
-            self.logger.info("Veriler başarıyla lokal veritabanına senkronize edildi.")
+            print("Veriler başarıyla lokal veritabanına senkronize edildi.")
             return True, "Senkronizasyon başarılı."
         except requests.exceptions.RequestException as e:
             if lokal_db: lokal_db.rollback()
-            self.logger.error(f"Sunucuya bağlanırken hata oluştu: {e}")
+            print(f"Sunucuya bağlanırken hata oluştu: {e}")
             return False, f"Sunucu bağlantı hatası: {e}"
         except Exception as e:
             if lokal_db: lokal_db.rollback()
-            self.logger.error(f"Senkronizasyon hatası: {e}")
+            print(f"Senkronizasyon hatası: {e}")
             return False, f"Beklenmedik bir hata oluştu: {e}"
         finally:
             if lokal_db: lokal_db.close()
-            
-    @classmethod
-    def _get_http_method(cls, islem_tipi: str) -> str:
-        if islem_tipi.upper() == 'EKLE': return 'POST'
-        if islem_tipi.upper() == 'GUNCELLE': return 'PUT'
-        if islem_tipi.upper() == 'SIL': return 'DELETE'
-        raise ValueError(f"Geçersiz işlem tipi: {islem_tipi}")
 
-
-    def senkronizasyon_kuyrugunu_isle(self, sunucu_adresi: str, access_token: Optional[str] = None):
-        """
-        Senkronizasyon kuyruğundaki bekleyen yerel işlemleri sunucuya gönderir (Lokaldan sunucuya gönderme).
-        KRİTİK NOT: Bu işlem blocking (engelleyici) olduğu için arka planda çalıştırılmalıdır.
-        """
-        if not sunucu_adresi or not access_token:
-            self.logger.warning("Kuyruk işlemi için sunucu adresi veya JWT token mevcut değil.")
-            return False, "Kuyruk işlemi atlandı."
-
-        api_headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-        lokal_db = None
-        
-        try:
-            lokal_db = self.get_db()
-            # En eski senkronize edilmemiş kayıtları getir
-            bekleyen_islemler = lokal_db.query(SenkronizasyonKuyrugu) \
-                                     .filter(SenkronizasyonKuyrugu.senkronize_edildi == False) \
-                                     .order_by(SenkronizasyonKuyrugu.islem_tarihi.asc()) \
-                                     .all()
-            
-            if not bekleyen_islemler:
-                return True, "Senkronizasyon kuyruğunda bekleyen işlem yok."
-
-            for islem in bekleyen_islemler:
-                endpoint_base = f"{sunucu_adresi}/{islem.kaynak_tablo.lower()}"
-                
-                try:
-                    payload = json.loads(islem.veri) if islem.veri else {}
-                except (json.JSONDecodeError, TypeError):
-                    self.logger.error(f"Kuyruk ID {islem.id}: Geçersiz JSON verisi. Atlanıyor.")
-                    islem.senkronize_edildi = True
-                    lokal_db.commit() # Hatalı veriyi atla
-                    continue
-
-                http_method = self._get_http_method(islem.islem_tipi)
-                url = f"{endpoint_base}"
-                
-                # DELETE ve GUNCELLE işlemleri için URL'ye ID eklenir
-                if http_method in ['PUT', 'DELETE']:
-                    url = f"{endpoint_base}/{islem.kaynak_id}"
-
-                # API çağrısını yap
-                response = requests.request(http_method, url, json=payload, headers=api_headers)
-
-                # Başarı kontrolü (2xx kodları)
-                if response.status_code >= 200 and response.status_code < 300:
-                    islem.senkronize_edildi = True
-                    self.logger.info(f"Kuyruk ID {islem.id}: Başarılı senkronizasyon ({http_method} {response.status_code})")
-                else:
-                    self.logger.error(f"Kuyruk ID {islem.id}: Sunucu hatası ({response.status_code}): {response.text}")
-                    # Hata durumunda işlemi durdur ve tekrar denemeyi mümkün kıl.
-                    lokal_db.rollback() 
-                    return False, f"Kuyruk işlemi sırasında sunucu hatası: {response.status_code} - {response.text}"
-            
-            # Tüm işlemler başarılıysa commit et.
-            lokal_db.commit()
-            return True, "Senkronizasyon kuyruğu başarıyla işlendi."
-            
-        except requests.exceptions.RequestException as e:
-            if lokal_db: lokal_db.rollback()
-            self.logger.error(f"Kuyruk işlemi sırasında bağlantı hatası: {e}")
-            return False, f"Kuyruk işlemi sırasında bağlantı hatası: {e}"
-        except Exception as e:
-            if lokal_db: lokal_db.rollback()
-            self.logger.error(f"Kuyruk işlemi sırasında beklenmedik hata: {e}")
-            return False, f"Kuyruk işlemi sırasında beklenmedik hata: {e}"
-        finally:
-            if lokal_db: lokal_db.close()
-            
     def listele(self, model_adi: str, filtre: Optional[Dict[str, Any]] = None):
         """
         Yerel veritabanındaki belirtilen modelden verileri listeler.
@@ -660,13 +577,12 @@ class LokalVeritabaniServisi:
                     return {
                         "id": kullanici_orm.id,
                         "kullanici_adi": kullanici_orm.kullanici_adi,
-                        # Şifre hash'i yerine ORM modelindeki doğru kolon adı kullanılmalıdır.
-                        "sifre_hash": getattr(kullanici_orm, 'sifre_hash', None),
+                        "hashed_sifre": kullanici_orm.hashed_sifre,
                         "aktif": kullanici_orm.aktif,
-                        "rol": kullanici_orm.rol, # ORM modelindeki doğru kolon adı
-                        # Aşağıdaki kolonlar ORM modelinde yoksa None olarak bırakılabilir veya kaldırılabilir.
-                        # "token": kullanici_orm.token,
-                        # "token_tipi": kullanici_orm.token_tipi
+                        "yetki": kullanici_orm.yetki,
+                        "rol": kullanici_orm.yetki,
+                        "token": kullanici_orm.token,
+                        "token_tipi": kullanici_orm.token_tipi
                     }
                 return None
         except Exception as e:

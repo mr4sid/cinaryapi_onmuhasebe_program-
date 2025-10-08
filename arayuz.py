@@ -213,73 +213,48 @@ class AnaSayfa(QWidget):
         sirket_adi = "Şirket Adı (API'den Gelecek)"
         self.sirket_adi_label.setText(f"Hoş Geldiniz, {sirket_adi}")
 
-    def _reset_ozet_labels(self):
-        """Hata durumunda etiketleri sıfırlar."""
-        self.lbl_toplam_satis_degeri.setText("0,00 TL")
-        self.lbl_toplam_alis_degeri.setText("0,00 TL")
-        self.lbl_toplam_tahsilat_degeri.setText("0,00 TL")
-        self.lbl_toplam_odeme_degeri.setText("0,00 TL")
-        self.lbl_kritik_stok_sayisi.setText("0")
-        self.en_cok_satanlar_list.clear()
-
-    def _update_ozet_bilgiler_ui(self, ozet_data):
-        """Sadece ana thread'de çalışması gereken UI güncelleme metodu (Başarılı Durumda)."""
-        if ozet_data:
-            self.lbl_toplam_satis_degeri.setText(self.db._format_currency(ozet_data.get('toplam_satislar', 0.0)))
-            self.lbl_toplam_alis_degeri.setText(self.db._format_currency(ozet_data.get('toplam_alislar', 0.0)))
-            self.lbl_toplam_tahsilat_degeri.setText(self.db._format_currency(ozet_data.get('toplam_tahsilatlar', 0.0)))
-            self.lbl_toplam_odeme_degeri.setText(self.db._format_currency(ozet_data.get('toplam_odemeler', 0.0)))
-            self.lbl_kritik_stok_sayisi.setText(str(ozet_data.get('kritik_stok_sayisi', 0)))
-            
-            self.en_cok_satanlar_list.clear()
-            for urun in ozet_data.get('en_cok_satan_urunler', []):
-                self.en_cok_satanlar_list.addItem(f"{urun.get('ad', '-')}")
-            
-            # Grafik çizimi (bu da ayrıca I/O yapıyorsa, o metodun da güncellenmesi gerekir)
-            self.ciz_aylik_satis_alıs_grafik()
-        else:
-            self._reset_ozet_labels()
-
     def guncelle_ozet_bilgiler(self):
-        """API çağrılarını ayrı bir thread'de çalıştırır ve UI güncellemelerini ana thread'e geri postalar."""
-        # UI'ı yükleniyor durumuna getir
-        self.lbl_toplam_satis_degeri.setText("Yükleniyor...")
-        self.lbl_toplam_alis_degeri.setText("Yükleniyor...")
-        self.app.set_status_message("Dashboard özeti yükleniyor...", "blue")
-
-        # API çağrısını yapacak thread fonksiyonu
-        def _load_ozet_bilgiler_thread():
-            try:
-                baslangic_tarihi = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-                bitis_tarihi = datetime.now().strftime('%Y-%m-%d')
+        try:
+            baslangic_tarihi = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+            bitis_tarihi = datetime.now().strftime('%Y-%m-%d')
+            
+            ozet_data = self.db.get_dashboard_summary(
+                baslangic_tarihi=baslangic_tarihi,
+                bitis_tarihi=bitis_tarihi
+            )
+            
+            if ozet_data:
+                self.lbl_toplam_satis_degeri.setText(self.db._format_currency(ozet_data.get('toplam_satislar', 0.0)))
+                self.lbl_toplam_alis_degeri.setText(self.db._format_currency(ozet_data.get('toplam_alislar', 0.0)))
+                self.lbl_toplam_tahsilat_degeri.setText(self.db._format_currency(ozet_data.get('toplam_tahsilatlar', 0.0)))
+                self.lbl_toplam_odeme_degeri.setText(self.db._format_currency(ozet_data.get('toplam_odemeler', 0.0)))
+                self.lbl_kritik_stok_sayisi.setText(str(ozet_data.get('kritik_stok_sayisi', 0)))
                 
-                # Bu, BLOCKING API çağrısıdır.
-                ozet_data = self.db.get_dashboard_summary(
-                    baslangic_tarihi=baslangic_tarihi,
-                    bitis_tarihi=bitis_tarihi
-                )
+                self.en_cok_satanlar_list.clear()
+                for urun in ozet_data.get('en_cok_satan_urunler', []):
+                    self.en_cok_satanlar_list.addItem(f"{urun.get('ad', '-')}")
                 
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_ozet_bilgiler_ui(ozet_data))
+                self.ciz_aylik_satis_alıs_grafik()
 
-            except Exception as e:
-                error_message = f"Dashboard özeti yüklenirken hata: {e}"
-                logger.error(error_message, exc_info=True)
-                # Hata durumunda ana thread'e geri posta yap (UI hata mesajı ve sıfırlama)
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-                QTimer.singleShot(0, lambda: QMessageBox.critical(self.app, "API Hatası", error_message))
-                QTimer.singleShot(0, lambda: self._reset_ozet_labels())
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Hatası", f"Dashboard özeti yüklenirken hata: {e}")
+            logger.error(f"Dashboard özeti yüklenirken hata: {e}")
 
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_ozet_bilgiler_thread, daemon=True).start()
-
-    def _draw_aylik_satis_alıs_grafik_ui(self, aylik_satis_ozeti):
-        """Ana thread'de Matplotlib grafiğini çizen yardımcı metot."""
+    def ciz_aylik_satis_alıs_grafik(self):
+        """Aylık satış ve alış grafiklerini çizer."""
         try:
             fig = self.aylik_grafik_canvas.figure
             fig.clear()
             ax = fig.add_subplot(111)
 
+            simdi = datetime.now()
+            gecmis_bir_yil = simdi - timedelta(days=365)
+            
+            aylik_satis_ozeti = self.db.get_monthly_sales_summary(
+                baslangic_tarihi=gecmis_bir_yil.strftime('%Y-%m-%d'),
+                bitis_tarihi=simdi.strftime('%Y-%m-%d')
+            )
+            
             if not isinstance(aylik_satis_ozeti, list):
                 aylik_satis_ozeti = []
             
@@ -321,36 +296,6 @@ class AnaSayfa(QWidget):
         except Exception as e:
             logger.error(f"Aylık satış/alış grafiği çizilirken hata: {e}", exc_info=True)
             self.app.set_status_message(f"Aylık grafik çizilirken hata: {e}", "red")
-
-    def ciz_aylik_satis_alıs_grafik(self):
-        """Aylık satış ve alış grafiklerini asenkron olarak çizer."""
-        self.aylik_grafik_figure.clear()
-        
-        # Grafik alanını temizle ve "Yükleniyor..." mesajını göster (opsiyonel)
-        self.app.set_status_message("Aylık satış/alış grafiği verileri yükleniyor...", "blue")
-        
-        simdi = datetime.now()
-        gecmis_bir_yil = simdi - timedelta(days=365)
-
-        def _load_graph_data_thread():
-            try:
-                # BLOCKING API Çağrısı
-                aylik_satis_ozeti = self.db.get_monthly_sales_summary(
-                    baslangic_tarihi=gecmis_bir_yil.strftime('%Y-%m-%d'),
-                    bitis_tarihi=simdi.strftime('%Y-%m-%d')
-                )
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (Çizim ve UI güncelleme)
-                QTimer.singleShot(0, lambda: self._draw_aylik_satis_alıs_grafik_ui(aylik_satis_ozeti))
-
-            except Exception as e:
-                error_message = f"Aylık satış/alış özeti çekilirken hata: {e}"
-                logger.error(error_message, exc_info=True)
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-                QTimer.singleShot(0, lambda: self._draw_aylik_satis_alıs_grafik_ui([])) # Boş veri ile çizimi dene
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_graph_data_thread, daemon=True).start()
 
 class FinansalIslemlerSayfasi(QWidget): 
     def __init__(self, parent, db_manager, app_ref):
@@ -577,63 +522,69 @@ class StokYonetimiSayfasi(QWidget):
         self._yukle_filtre_comboboxlari()
         self.stok_listesini_yenile()
         
-    def _update_filtre_comboboxlari_ui(self, kategoriler, markalar, urun_gruplari):
-        """Worker thread'den gelen verilerle filtre combobox'larını ana thread'de günceller."""
-        try:
-            # Not: "Tümü" öğeleri _yukle_filtre_comboboxlari metodunda zaten eklenmiştir ve silinmemiştir.
-
-            # Kategoriler
-            for k in sorted(kategoriler, key=lambda x: x.get('ad', '')):
-                self.kategori_filter_cb.addItem(k.get('ad'), k.get('id'))
-            
-            # Markalar
-            for m in sorted(markalar, key=lambda x: x.get('ad', '')):
-                self.marka_filter_cb.addItem(m.get('ad'), m.get('id'))
-            
-            # Ürün Grupları
-            for g in sorted(urun_gruplari, key=lambda x: x.get('ad', '')):
-                self.urun_grubu_filter_cb.addItem(g.get('ad'), g.get('id'))
-
-            self.app.set_status_message(f"Stok filtreleri başarıyla yüklendi. ({len(kategoriler)} Kategori, {len(markalar)} Marka)", "green")
-            
-        except Exception as e:
-            logger.error(f"Filtre combobox UI güncellemesi sırasında hata: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Filtre comboboxları güncellenemedi. {e}", "red")
-
     def _yukle_filtre_comboboxlari(self):
-        """Kategori, Marka ve diğer filtre combobox'larını doldurur (Asenkron Başlatıcı)."""
-        self.app.set_status_message("Stok filtreleri yükleniyor...", "blue")
-        
-        # UI temizliğini ana thread'de hemen yap
-        self.kategori_filter_cb.clear()
-        self.marka_filter_cb.clear()
-        self.urun_grubu_filter_cb.clear()
+        """Kategori, Marka ve diğer filtre combobox'larını doldurur."""
+        try:
+            self.kategori_filter_cb.clear()
+            self.marka_filter_cb.clear()
+            self.urun_grubu_filter_cb.clear()
 
-        # Varsayılan "Tümü" öğelerini ekle
-        self.kategori_filter_cb.addItem("Tümü", None)
-        self.marka_filter_cb.addItem("Tümü", None)
-        self.urun_grubu_filter_cb.addItem("Tümü", None)
-
-        def _load_data_thread():
+            self.kategori_filter_cb.addItem("Tümü", None)
+            self.marka_filter_cb.addItem("Tümü", None)
+            self.urun_grubu_filter_cb.addItem("Tümü", None)
+            
+            # API'den kategorileri çek
             try:
-                # API çağrıları (Blocking)
-                kategoriler = self.db.kategori_listele(limit=1000).get("items", [])
-                markalar = self.db.marka_listele(limit=1000).get("items", [])
-                urun_gruplari = self.db.urun_grubu_listele(limit=1000).get("items", [])
+                kategoriler_response = self.db.kategori_listele(limit=1000)
+                if isinstance(kategoriler_response, dict):
+                    kategoriler = kategoriler_response.get("items", [])
+                elif isinstance(kategoriler_response, list):
+                    kategoriler = kategoriler_response
+                else:
+                    kategoriler = []
                 
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_filtre_comboboxlari_ui(kategoriler, markalar, urun_gruplari))
-
+                for k in sorted(kategoriler, key=lambda x: x.get('ad', '')):
+                    self.kategori_filter_cb.addItem(k.get('ad'), k.get('id'))
             except Exception as e:
-                error_message = f"Stok filtre verileri yüklenirken ağ hatası: {e}"
-                logger.error(error_message, exc_info=True)
-                # Hata durumunda ana thread'e geri posta yap (UI hata mesajı)
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-                QTimer.singleShot(0, lambda: QMessageBox.critical(self.app, "API Hatası", error_message))
+                logger.error(f"Kategori filtre combobox yüklenirken hata: {e}", exc_info=True)
+                self.app.set_status_message(f"Hata: Kategori filtreleri yüklenemedi. {e}", "red")
 
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
+            # API'den markaları çek
+            try:
+                markalar_response = self.db.marka_listele(limit=1000)
+                if isinstance(markalar_response, dict):
+                    markalar = markalar_response.get("items", [])
+                elif isinstance(markalar_response, list):
+                    markalar = markalar_response
+                else:
+                    markalar = []
+                
+                for m in sorted(markalar, key=lambda x: x.get('ad', '')):
+                    self.marka_filter_cb.addItem(m.get('ad'), m.get('id'))
+            except Exception as e:
+                logger.error(f"Marka filtre combobox yüklenirken hata: {e}", exc_info=True)
+                self.app.set_status_message(f"Hata: Marka filtreleri yüklenemedi. {e}", "red")
 
+            # API'den ürün gruplarını çek
+            try:
+                urun_gruplari_response = self.db.urun_grubu_listele(limit=1000)
+                if isinstance(urun_gruplari_response, dict):
+                    urun_gruplari = urun_gruplari_response.get("items", [])
+                elif isinstance(urun_gruplari_response, list):
+                    urun_gruplari = urun_gruplari_response
+                else:
+                    urun_gruplari = []
+                
+                for g in sorted(urun_gruplari, key=lambda x: x.get('ad', '')):
+                    self.urun_grubu_filter_cb.addItem(g.get('ad'), g.get('id'))
+            except Exception as e:
+                logger.error(f"Ürün grubu filtre combobox yüklenirken hata: {e}", exc_info=True)
+                self.app.set_status_message(f"Hata: Ürün grubu filtreleri yüklenemedi. {e}", "red")
+
+        except Exception as e:
+            logger.error(f"Stok filtre comboboxları yüklenirken genel hata: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Stok filtreleri yüklenemedi. {e}", "red")
+            
     def _filtreleri_temizle(self):
         self.arama_entry.clear()
         self.kategori_filter_cb.setCurrentText("TÜMÜ")
@@ -647,81 +598,21 @@ class StokYonetimiSayfasi(QWidget):
 
     def stok_listesini_yenile(self):
         self.tree_stok.clear()
-        self.app.set_status_message("Stok listesi yükleniyor...", "blue")
-        
-        arama_terimi = self.arama_entry.text()
-        aktif_durum_val = self.aktif_urun_checkBox.isChecked()
-        kritik_stok_altinda_val = self.kritik_stok_altinda_checkBox.isChecked()
-        kategori_id_val = self.kategori_filter_cb.currentData()
-        marka_id_val = self.marka_filter_cb.currentData()
-        urun_grubu_id_val = self.urun_grubu_filter_cb.currentData()
-        
-        stok_durumu_text = self.stok_durumu_comboBox.currentText()
-        stokta_var_val = None
-        if stok_durumu_text == "Stokta Var":
-            stokta_var_val = True
-        elif stok_durumu_text == "Stokta Yok":
-            stokta_var_val = False
-
-        skip_val = (self.mevcut_sayfa - 1) * self.kayit_sayisi_per_sayfa
-        limit_val = self.kayit_sayisi_per_sayfa
-        
-        def _load_stok_listesi_thread():
-            list_response = {}
-            ozet_response = {}
-            try:
-                # 1. Liste verisini çek (Blocking)
-                list_response = self.db.stok_listesi_al(
-                    skip=skip_val,
-                    limit=limit_val,
-                    arama=arama_terimi,
-                    aktif_durum=aktif_durum_val,
-                    kritik_stok_altinda=kritik_stok_altinda_val,
-                    kategori_id=kategori_id_val,
-                    marka_id=marka_id_val,
-                    urun_grubu_id=urun_grubu_id_val,
-                    stokta_var=stokta_var_val
-                )
-                
-                # 2. Özet verisini çek (Blocking - Toplam maliyet/miktar için)
-                ozet_response = self.db.get_stok_ozet() # get_stok_ozet metodunun var olduğu varsayılmıştır.
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_stok_listesi_ui(list_response, ozet_response))
-
-            except Exception as e:
-                error_message = f"Stok verileri çekilirken API/Ağ hatası: {e}"
-                logger.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_stok_listesi_ui({"items":[], "total":0}, {"toplam_miktar":0, "toplam_maliyet":0, "toplam_satis_tutari":0}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_stok_listesi_thread, daemon=True).start()
-
-    def _update_stok_listesi_ui(self, list_response, ozet_response):
-        """Worker thread'den gelen list ve özet verileriyle QTreeWidget'ı ana thread'de günceller."""
-        
-        self.tree_stok.clear()
-
         try:
-            stok_listesi = list_response.get("items", [])
-            self.toplam_kayit_sayisi = list_response.get("total", len(stok_listesi))
-            self.total_pages = (self.toplam_kayit_sayisi + self.kayit_sayisi_per_sayfa - 1) // self.kayit_sayisi_per_sayfa
-            if self.total_pages == 0: self.total_pages = 1
+            stok_listesi_response = self.db.stok_listesi_al(
+                arama=self.arama_entry.text(),
+                aktif_durum=self.aktif_urun_checkBox.isChecked(),
+                kritik_stok_altinda=self.kritik_stok_altinda_checkBox.isChecked(),
+                kategori_id=self.kategori_filter_cb.currentData(),
+                marka_id=self.marka_filter_cb.currentData(),
+                urun_grubu_id=self.urun_grubu_filter_cb.currentData()
+            )
             
-            # Sayfalama bilgilerini güncelle
-            self.sayfa_bilgisi_label.setText(f"Sayfa {self.mevcut_sayfa} / {self.total_pages}")
-            self._sayfalama_butonlarini_guncelle()
-
-            # Özet Bilgileri Güncelle
-            self.lbl_toplam_listelenen_urun.setText(f"Toplam Listelenen Ürün: {self.toplam_kayit_sayisi} adet")
-            if ozet_response:
-                 self.lbl_stoktaki_toplam_urun.setText(f"Stoktaki Toplam Ürün Miktarı: {self.db._format_numeric(ozet_response.get('toplam_miktar', 0), 2)}")
-                 self.lbl_toplam_maliyet.setText(f"Listelenen Ürünlerin Toplam Maliyeti: {self.db._format_currency(ozet_response.get('toplam_maliyet', 0.0))}")
-                 self.lbl_toplam_satis_tutari.setText(f"Listelenen Ürünlerin Toplam Satış Tutarı: {self.db._format_currency(ozet_response.get('toplam_satis_tutari', 0.0))}")
+            if not isinstance(stok_listesi_response, dict) or "items" not in stok_listesi_response:
+                raise ValueError("API'den geçersiz stok listesi yanıtı alındı.")
             
-            # Liste Verilerini Doldur
+            stok_listesi = stok_listesi_response["items"]
+            
             for stok_item in stok_listesi:
                 item = QTreeWidgetItem(self.tree_stok)
                 item.setData(0, Qt.UserRole, stok_item.get('id', -1))
@@ -733,21 +624,21 @@ class StokYonetimiSayfasi(QWidget):
                 item.setText(5, f"%{stok_item.get('kdv_orani', 0):.0f}")
                 item.setText(6, self.db._format_numeric(stok_item.get('min_stok_seviyesi', 0), 2))
                 
-                # Renklendirme mantığı
                 if stok_item.get('miktar', 0) <= stok_item.get('min_stok_seviyesi', 0):
-                    for i in range(7): item.setBackground(i, QBrush(QColor("#FFCDD2")))
+                    for i in range(7):
+                        item.setBackground(i, QBrush(QColor("#FFCDD2")))
                 
                 if not stok_item.get('aktif', True):
-                    for i in range(7): item.setForeground(i, QBrush(QColor("gray")))
+                    for i in range(7):
+                        item.setForeground(i, QBrush(QColor("gray")))
                 
                 self.tree_stok.addTopLevelItem(item)
 
-            self.app.set_status_message(f"{len(stok_listesi)} stok kartı listelendi. Toplam {self.toplam_kayit_sayisi} kayıt.", "blue")
+            self.app.set_status_message(f"{len(stok_listesi)} stok kartı listelendi.", "blue")
 
         except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Stok listesi UI'ı güncellenirken kritik hata: {e}")
-            logging.error(f"Stok listesi UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Stok listesi yüklenemedi. {e}", "red")
+            QMessageBox.critical(self.app, "API Hatası", f"Stok listesi çekilirken hata: {e}")
+            logging.error(f"Stok listesi yükleme hatası: {e}", exc_info=True)
 
     def _doldur_stok_tree(self, stok_listesi):
         """Mevcut stok listesini QTreeWidget'a doldurur ve biçimlendirir."""
@@ -791,26 +682,14 @@ class StokYonetimiSayfasi(QWidget):
 
     def yeni_urun_ekle_penceresi(self):
         logger.info("Yeni ürün ekle butonu tıklandı. StokKartiPenceresi açılmaya çalışılıyor.")
-        
-        # Yenileme callback'ini oluştur: İşlem bitince ana thread'de listeyi yenile
-        def ui_refresh_callback():
-            # PySide6'da QTimer.singleShot(0, ...) ile ana thread'de çalıştırılmasını garanti et
-            QTimer.singleShot(0, self.stok_listesini_yenile)
-            self.app.set_status_message("Yerel liste güncellendi.", "green")
-
         try:
-            # KRİTİK DÜZELTME: Pencereye asenkron yenileme callback'ini gönder.
             dialog = StokKartiPenceresi(
-                self, self.db, ui_refresh_callback, # Callback'i doğrudan gönder
+                self, self.db, self.stok_listesini_yenile,
                 urun_duzenle=None, app_ref=self.app
             )
-            
-            # Pencere kapatıldığında (başarılı kayıtta) listeyi yenileme, içerideki callback tarafından halledilecektir.
             if dialog.exec() == QDialog.Accepted:
-                self.app.set_status_message("Ürün kaydedildi. Arka plan senkronizasyonu bekleniyor...", "blue")
-            
+                self.stok_listesini_yenile()
             logger.info("StokKartiPenceresi kapatıldı.")
-            
         except Exception as e:
             logger.error(f"Yeni ürün ekleme penceresi açılırken beklenmeyen bir hata oluştu: {e}", exc_info=True)
             QMessageBox.critical(self, "Hata", f"Yeni ürün ekleme penceresi açılırken bir hata oluştu:\n{e}")
@@ -997,89 +876,47 @@ class KasaBankaYonetimiSayfasi(QWidget):
 
         self.hesap_listesini_yenile() # İlk yüklemeyi yap
 
-    def _update_hesap_listesi_ui(self, hesaplar_response):
-        """Worker thread'den gelen verilerle QTreeWidget'ı ana thread'de günceller."""
-        
+    def hesap_listesini_yenile(self):
+        """API'den güncel kasa/banka listesini çeker ve TreeView'i günceller."""
         self.tree_kb.clear()
-        
         try:
-            hesaplar = hesaplar_response.get("items", [])
-            self.toplam_kayit_sayisi = hesaplar_response.get("total", len(hesaplar))
+            hesaplar_response = self.db.kasa_banka_listesi_al(
+                arama=self.arama_entry_kb.text(),
+                hesap_turu=self.tip_filtre_kb.currentText() if self.tip_filtre_kb.currentText() != "TÜMÜ" else None,
+                aktif_durum=self.aktif_hesap_checkBox.isChecked()
+            )
             
-            # Sayfalama bilgileri güncellendi (mevcut sayfalama değişkenleri kullanılarak)
-            self.total_pages = (self.toplam_kayit_sayisi + self.kayit_sayisi_per_sayfa - 1) // self.kayit_sayisi_per_sayfa
-            if self.total_pages == 0: self.total_pages = 1
-            self.sayfa_bilgisi_label_kb.setText(f"Sayfa {self.mevcut_sayfa} / {self.total_pages}")
-            
-            # Not: Sayfalama butonları güncellenmeli. _sayfalama_butonlarini_guncelle_kb() çağrılmalı (bu metodun var olduğu varsayılır).
+            if not isinstance(hesaplar_response, dict) or "items" not in hesaplar_response:
+                raise ValueError("API'den geçersiz kasa/banka listesi yanıtı alındı.")
 
+            hesaplar = hesaplar_response["items"]
+            
             for hesap in hesaplar:
                 item = QTreeWidgetItem(self.tree_kb)
-                bakiye = hesap.get('bakiye', 0.0)
-                aktif = hesap.get('aktif', True)
-
                 item.setData(0, Qt.UserRole, hesap.get('id', -1))
                 item.setText(0, str(hesap.get('id', '')))
                 item.setText(1, hesap.get('hesap_adi', '-'))
                 item.setText(2, hesap.get('tip', '-'))
                 item.setText(3, hesap.get('banka_adi', '-') if hesap.get('tip') == 'BANKA' else '-')
                 item.setText(4, hesap.get('hesap_no', '-') if hesap.get('tip') == 'BANKA' else '-')
-                item.setText(5, self.db._format_currency(bakiye))
+                item.setText(5, self.db._format_currency(hesap.get('bakiye', 0.0)))
                 item.setText(6, hesap.get('para_birimi', '-'))
-                item.setText(7, "Evet" if aktif else "Hayır")
+                item.setText(7, "Evet" if hesap.get('aktif', True) else "Hayır")
                 
-                # Renklendirme mantığı
-                if bakiye < 0:
+                if hesap.get('bakiye', 0.0) < 0:
                     item.setForeground(5, QBrush(QColor("red")))
                 
-                if not aktif:
+                if not hesap.get('aktif', True):
                     for i in range(8):
                         item.setForeground(i, QBrush(QColor("gray")))
                 
                 self.tree_kb.addTopLevelItem(item)
 
-            self.app.set_status_message(f"{len(hesaplar)} kasa/banka hesabı listelendi. Toplam {self.toplam_kayit_sayisi} kayıt.", "blue")
+            self.app.set_status_message(f"{len(hesaplar)} kasa/banka hesabı listelendi.", "blue")
 
         except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Kasa/Banka listesi UI'ı güncellenirken kritik hata: {e}")
-            logging.error(f"Kasa/Banka listesi UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Kasa/Banka listesi yüklenemedi. {e}", "red")
-
-    def hesap_listesini_yenile(self):
-        """API'den güncel kasa/banka listesini çeker ve TreeView'i günceller (Asenkron Başlatıcı)."""
-        self.tree_kb.clear()
-        self.app.set_status_message("Kasa/Banka listesi yükleniyor...", "blue")
-        
-        arama_terimi = self.arama_entry_kb.text()
-        tip_filtre_val = self.tip_filtre_kb.currentText() if self.tip_filtre_kb.currentText() != "TÜMÜ" else None
-        aktif_durum_val = self.aktif_hesap_checkBox.isChecked()
-
-        skip_val = (self.mevcut_sayfa - 1) * self.kayit_sayisi_per_sayfa
-        limit_val = self.kayit_sayisi_per_sayfa
-
-        def _load_hesap_listesi_thread():
-            try:
-                # BLOCKING API Çağrısı
-                hesaplar_response = self.db.kasa_banka_listesi_al(
-                    skip=skip_val,
-                    limit=limit_val,
-                    arama=arama_terimi,
-                    tip=tip_filtre_val,
-                    aktif_durum=aktif_durum_val
-                )
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_hesap_listesi_ui(hesaplar_response))
-
-            except Exception as e:
-                error_message = f"Kasa/Banka listesi çekilirken API/Ağ hatası: {e}"
-                logging.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_hesap_listesi_ui({"items":[], "total":0}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_hesap_listesi_thread, daemon=True).start()
+            QMessageBox.critical(self.app, "API Hatası", f"Kasa/Banka listesi çekilirken hata: {e}")
+            logging.error(f"Kasa/Banka listesi yükleme hatası: {e}", exc_info=True)
 
     def _delayed_hesap_yenile(self): # event=None kaldırıldı
         if self.after_timer.isActive():
@@ -1347,81 +1184,41 @@ class MusteriYonetimiSayfasi(QWidget):
 
     def musteri_listesini_yenile(self):
         self.tree.clear()
-        self.app.set_status_message("Müşteri listesi yükleniyor...", "blue")
-
-        arama_terimi = self.arama_entry.text()
-        aktif_durum_val = True 
-        
-        skip_val = (self.mevcut_sayfa - 1) * self.kayit_sayisi_per_sayfa
-        limit_val = self.kayit_sayisi_per_sayfa
-        
-        def _load_musteri_listesi_thread():
-            try:
-                # API çağrıları (Blocking)
-                musteriler_response = self.cari_service.musteri_listesi_al(
-                    skip=skip_val,
-                    limit=limit_val,
-                    arama=arama_terimi,
-                    aktif_durum=aktif_durum_val
-                )
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_musteri_listesi_ui(musteriler_response))
-
-            except Exception as e:
-                error_message = f"Müşteri listesi çekilirken API/Ağ hatası: {e}"
-                logging.error(error_message, exc_info=True)
-                # Hata durumunda ana thread'e geri posta yap
-                QTimer.singleShot(0, lambda: self._update_musteri_listesi_ui({"items":[], "total":0}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_musteri_listesi_thread, daemon=True).start()
-
-    def _update_musteri_listesi_ui(self, list_response):
-        """Worker thread'den gelen verilerle QTreeWidget'ı ana thread'de günceller."""
-        
-        self.tree.clear()
-        
         try:
-            musteriler = list_response.get("items", [])
-            self.toplam_kayit_sayisi = list_response.get("total", len(musteriler))
-            
-            self.total_pages = (self.toplam_kayit_sayisi + self.kayit_sayisi_per_sayfa - 1) // self.kayit_sayisi_per_sayfa
-            if self.total_pages == 0: self.total_pages = 1
-            
-            self.sayfa_bilgisi_label.setText(f"Sayfa {self.mevcut_sayfa} / {self.total_pages}")
-            self._sayfalama_butonlarini_guncelle()
+            musteriler_response = self.db.musteri_listesi_al(
+                arama=self.arama_entry.text(),
+                aktif_durum=True
+            )
+
+            if not isinstance(musteriler_response, dict) or "items" not in musteriler_response:
+                 raise ValueError("API'den geçersiz müşteri listesi yanıtı alındı.")
+
+            musteriler = musteriler_response["items"]
             
             for musteri_item in musteriler:
                 item = QTreeWidgetItem(self.tree)
                 item.setData(0, Qt.UserRole, musteri_item.get('id'))
                 item.setText(0, str(musteri_item.get('id')))
                 item.setText(1, musteri_item.get('ad', '-'))
-                # Not: API artık sadece net_bakiye döndürdüğü için, diğer özet alanlar (Alışveriş Sayısı, Açık Hesap, Ödeme) sıfır veya None olarak varsayılmıştır.
-                item.setText(2, str(musteri_item.get('alisveris_sayisi', 0))) 
+                item.setText(2, str(musteri_item.get('alisveris_sayisi', 0)))
                 item.setText(3, self.db._format_currency(musteri_item.get('acik_hesap', 0.0)))
                 item.setText(4, self.db._format_currency(musteri_item.get('odeme', 0.0)))
-
-                net_bakiye = musteri_item.get('net_bakiye', 0.0)
-                item.setText(5, self.db._format_currency(abs(net_bakiye)))
+                item.setText(5, self.db._format_currency(musteri_item.get('kalan_borcu', 0.0)))
                 item.setText(6, musteri_item.get('son_odeme_tarihi', '-'))
                 
-                # Renklendirme mantığı net_bakiye'ye göre uyarlandı
-                if net_bakiye > 0: # Müşteri bize borçlu (Bizim alacağımız)
+                if musteri_item.get('kalan_borcu', 0.0) > 0:
                     item.setForeground(5, QBrush(QColor("red")))
-                elif net_bakiye < 0: # Biz müşteriye borçluyuz (Müşterinin alacağı)
+                elif musteri_item.get('kalan_borcu', 0.0) < 0:
                     item.setForeground(5, QBrush(QColor("green")))
                 
                 self.tree.addTopLevelItem(item)
 
-            self.app.set_status_message(f"{len(musteriler)} müşteri listelendi. Toplam {self.toplam_kayit_sayisi} kayıt.", "blue")
+            self.app.set_status_message(f"{len(musteriler)} müşteri listelendi.", "blue")
 
         except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Müşteri listesi UI'ı güncellenirken kritik hata: {e}")
-            logging.error(f"Müşteri listesi UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Müşteri listesi yüklenemedi. {e}", "red")        
-
+            QMessageBox.critical(self.app, "API Hatası", f"Müşteri listesi çekilirken hata: {e}")
+            logging.error(f"Müşteri listesi yükleme hatası: {e}", exc_info=True)
+                
     def _sayfalama_butonlarini_guncelle(self):
         # Sadece sayfalama butonlarının durumunu yönetir.
         self.btn_ilk_sayfa.setEnabled(self.mevcut_sayfa > 1)
@@ -1726,81 +1523,40 @@ class TedarikciYonetimiSayfasi(QWidget):
 
     def tedarikci_listesini_yenile(self):
         self.tree.clear()
-        self.app.set_status_message("Tedarikçi listesi yükleniyor...", "blue")
-
-        arama_terimi = self.arama_entry.text()
-        aktif_durum_val = True 
-        
-        skip_val = (self.mevcut_sayfa - 1) * self.kayit_sayisi_per_sayfa
-        limit_val = self.kayit_sayisi_per_sayfa
-        
-        def _load_tedarikci_listesi_thread():
-            try:
-                # API çağrıları (Blocking)
-                tedarikciler_response = self.cari_service.tedarikci_listesi_al(
-                    skip=skip_val,
-                    limit=limit_val,
-                    arama=arama_terimi,
-                    aktif_durum=aktif_durum_val
-                )
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_tedarikci_listesi_ui(tedarikciler_response))
-
-            except Exception as e:
-                error_message = f"Tedarikçi listesi çekilirken API/Ağ hatası: {e}"
-                logging.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_tedarikci_listesi_ui({"items":[], "total":0}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_tedarikci_listesi_thread, daemon=True).start()
-
-    def _update_tedarikci_listesi_ui(self, list_response):
-        """Worker thread'den gelen verilerle QTreeWidget'ı ana thread'de günceller."""
-        
-        self.tree.clear()
-        
         try:
-            tedarikciler = list_response.get("items", [])
-            self.toplam_kayit_sayisi = list_response.get("total", len(tedarikciler))
-            
-            self.total_pages = (self.toplam_kayit_sayisi + self.kayit_sayisi_per_sayfa - 1) // self.kayit_sayisi_per_sayfa
-            if self.total_pages == 0: self.total_pages = 1
-            
-            self.sayfa_bilgisi_label.setText(f"Sayfa {self.mevcut_sayfa} / {self.total_pages}")
-            self._sayfalama_butonlarini_guncelle()
+            tedarikciler_response = self.db.tedarikci_listesi_al(
+                arama=self.arama_entry.text(),
+                aktif_durum=True
+            )
+
+            if not isinstance(tedarikciler_response, dict) or "items" not in tedarikciler_response:
+                 raise ValueError("API'den geçersiz tedarikçi listesi yanıtı alındı.")
+
+            tedarikciler = tedarikciler_response["items"]
             
             for tedarikci_item in tedarikciler:
                 item = QTreeWidgetItem(self.tree)
                 item.setData(0, Qt.UserRole, tedarikci_item.get('id'))
                 item.setText(0, str(tedarikci_item.get('id')))
                 item.setText(1, tedarikci_item.get('ad', '-'))
-                # Not: API artık sadece net_bakiye döndürdüğü için, diğer özet alanlar (Alışveriş Sayısı, Açık Hesap, Ödeme) sıfır veya None olarak ayarlandı.
-                item.setText(2, str(tedarikci_item.get('alisveris_sayisi', 0))) 
+                item.setText(2, str(tedarikci_item.get('alisveris_sayisi', 0)))
                 item.setText(3, self.db._format_currency(tedarikci_item.get('acik_hesap', 0.0)))
                 item.setText(4, self.db._format_currency(tedarikci_item.get('odeme', 0.0)))
-
-                net_bakiye = tedarikci_item.get('net_bakiye', 0.0)
-                # Tedarikçinin borcu (yani bizim borcumuz) pozitif bakiye ile gösterilir.
-                item.setText(5, self.db._format_currency(abs(net_bakiye)))
+                item.setText(5, self.db._format_currency(tedarikci_item.get('kalan_borcu', 0.0)))
                 item.setText(6, tedarikci_item.get('son_odeme_tarihi', '-'))
                 
-                # Renklendirme mantığı net_bakiye'ye göre uyarlandı
-                if net_bakiye > 0: # Tedarikçi bize borçlu (Bizim alacağımız)
+                if tedarikci_item.get('kalan_borcu', 0.0) > 0:
                     item.setForeground(5, QBrush(QColor("red")))
-                elif net_bakiye < 0: # Biz tedarikçiye borçluyuz (Bizim borcumuz)
+                elif tedarikci_item.get('kalan_borcu', 0.0) < 0:
                     item.setForeground(5, QBrush(QColor("green")))
                 
                 self.tree.addTopLevelItem(item)
 
-            self.app.set_status_message(f"{len(tedarikciler)} tedarikçi listelendi. Toplam {self.toplam_kayit_sayisi} kayıt.", "blue")
+            self.app.set_status_message(f"{len(tedarikciler)} tedarikçi listelendi.", "blue")
 
         except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Tedarikçi listesi UI'ı güncellenirken kritik hata: {e}")
-            logging.error(f"Tedarikçi listesi UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Tedarikçi listesi yüklenemedi. {e}", "red")
+            QMessageBox.critical(self.app, "API Hatası", f"Tedarikçi listesi çekilirken hata: {e}")
+            logging.error(f"Tedarikçi listesi yükleme hatası: {e}", exc_info=True)
 
     def _sayfalama_butonlarini_guncelle(self):
         # Sadece sayfalama butonlarının durumunu yönetir.
@@ -2217,69 +1973,75 @@ class SiparisListesiSayfasi(QWidget):
             self.after_timer.stop()
         self.after_timer.singleShot(300, self.siparis_listesini_yukle)
 
-    def _update_cari_filter_ui(self, cari_filter_map, cari_display_values):
-        """Worker thread'den gelen cari verileriyle Combobox'ı ana thread'de günceller."""
+    def _yukle_filtre_comboboxlari(self):
+        cari_display_values = ["TÜMÜ"]
+        self.cari_filter_map = {"TÜMÜ": None}
+        kullanici_id = self.app.current_user_id # Düzeltme: kullanıcı ID'si alındı
+
         try:
-            self.cari_filter_cb.blockSignals(True)
-            self.cari_filter_cb.clear()
-            self.cari_filter_map = cari_filter_map # Önbelleği güncelle
+            # Düzeltme: musteri_listesi_al metoduna kullanici_id parametresi eklendi
+            musteriler = self.cari_service.musteri_listesi_al(kullanici_id=kullanici_id, limit=10000)
+            
+            # Gelen verinin türüne göre döngüyü ayarlıyoruz
+            if isinstance(musteriler, dict) and 'items' in musteriler:
+                musteriler_list = musteriler.get("items", [])
+            elif isinstance(musteriler, list):
+                musteriler_list = musteriler
+            else:
+                musteriler_list = []
+                self.app.set_status_message(f"Hata: Müşteri listesi API yanıt formatı hatalı.", "red")
+                logger.warning(f"Müşteri listesi yüklenirken hata: API'den beklenmeyen yanıt formatı. Yanıt: {musteriler}")
 
-            # 'TÜMÜ' en başta olmalı
-            self.cari_filter_cb.addItem("TÜMÜ", userData=None) 
-
-            # Diğer carileri alfabetik olarak ekle, UserData olarak ID'yi kullan
-            for display_text in sorted([v for v in cari_display_values if v != "TÜMÜ"]):
-                self.cari_filter_cb.addItem(display_text, userData=self.cari_filter_map.get(display_text))
-
-            self.cari_filter_cb.setCurrentText("TÜMÜ")
-            self.cari_filter_cb.blockSignals(False)
-
-            self.app.set_status_message(f"Cari filtreleri başarıyla yüklendi. ({len(cari_display_values) - 1} Cari)", "blue")
+            for m in musteriler_list:
+                if isinstance(m, dict):
+                    display_text = f"{m.get('ad', '')} (M: {m.get('kod', '')})"
+                    self.cari_filter_map[display_text] = m.get('id')
+                    cari_display_values.append(display_text)
+                else: # SQLAlchemy nesnesi
+                    display_text = f"{m.ad} (M: {m.kod})"
+                    self.cari_filter_map[display_text] = m.id
+                    cari_display_values.append(display_text)
 
         except Exception as e:
-            logger.error(f"Cari filtre UI güncellemesi sırasında hata: {e}", exc_info=True)
-            self.cari_filter_cb.blockSignals(False)
-            self.app.set_status_message(f"Hata: Cari filtreleri güncellenemedi. {e}", "red")
+            logger.warning(f"Müşteri listesi yüklenirken hata: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Müşteri listesi alınamadı - {e}")
 
-    def _yukle_filtre_comboboxlari(self):
-        """Cari filtre combobox'larını doldurur (Asenkron Başlatıcı)."""
-        self.app.set_status_message("Cari filtre verileri yükleniyor...", "blue")
-        
-        # Sadece statik olan Durum ve Sipariş Tipi combobox'larını sıfırla/ayarla
-        if hasattr(self, 'durum_combo'): self.durum_combo.setCurrentText("TÜMÜ")
-        if hasattr(self, 'siparis_tipi_filter_cb'): self.siparis_tipi_filter_cb.setCurrentText("TÜMÜ")
+        try:
+            # Düzeltme: tedarikci_listesi_al metoduna kullanici_id parametresi eklendi
+            tedarikciler = self.cari_service.tedarikci_listesi_al(kullanici_id=kullanici_id, limit=10000)
+            
+            # Gelen verinin türüne göre döngüyü ayarlıyoruz
+            if isinstance(tedarikciler, dict) and 'items' in tedarikciler:
+                tedarikciler_list = tedarikciler.get("items", [])
+            elif isinstance(tedarikciler, list):
+                tedarikciler_list = tedarikciler
+            else:
+                tedarikciler_list = []
+                self.app.set_status_message(f"Hata: Tedarikçi listesi API yanıt formatı hatalı.", "red")
+                logger.warning(f"Tedarikçi listesi yüklenirken hata: API'den beklenmeyen yanıt formatı. Yanıt: {tedarikciler}")
 
-        def _load_data_thread():
-            cari_display_values = ["TÜMÜ"]
-            cari_filter_map = {"TÜMÜ": None}
-            kullanici_id = self.app.current_user_id
-
-            try:
-                # 1. Musteri Listesini Çek (Blocking)
-                musteriler = self.cari_service.musteri_listesi_al(kullanici_id=kullanici_id, limit=10000).get("items", [])
-                for m in musteriler:
-                    display_text = f"{m.get('ad', '')} (M: {m.get('kod', '')})"
-                    cari_filter_map[display_text] = m.get('id')
-                    cari_display_values.append(display_text)
-
-                # 2. Tedarikçi Listesini Çek (Blocking)
-                tedarikciler = self.cari_service.tedarikci_listesi_al(kullanici_id=kullanici_id, limit=10000).get("items", [])
-                for t in tedarikciler:
+            for t in tedarikciler_list:
+                if isinstance(t, dict):
                     display_text = f"{t.get('ad', '')} (T: {t.get('kod', '')})"
-                    cari_filter_map[display_text] = t.get('id')
+                    self.cari_filter_map[display_text] = t.get('id')
                     cari_display_values.append(display_text)
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_cari_filter_ui(cari_filter_map, cari_display_values))
+                else: # SQLAlchemy nesnesi
+                    display_text = f"{t.ad} (T: {t.kod})"
+                    self.cari_filter_map[display_text] = t.id
+                    cari_display_values.append(display_text)
 
-            except Exception as e:
-                error_message = f"Cari filtre verileri çekilirken ağ hatası: {e}"
-                logger.error(error_message, exc_info=True)
-                QTimer.singleShot(0, lambda: self._update_cari_filter_ui(cari_filter_map, cari_display_values))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
+        except Exception as e:
+            logger.warning(f"Tedarikçi listesi yüklenirken hata: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Tedarikçi listesi alınamadı - {e}")
 
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
+        self.cari_filter_cb.clear()
+        self.cari_filter_cb.addItem("TÜMÜ", userData=None)
+        sorted_cari_display_values = sorted([v for v in cari_display_values if v != "TÜMÜ"])
+        self.cari_filter_cb.addItems(sorted(list(set(sorted_cari_display_values)))) # Düzeltme: Benzersiz öğeler eklendi
+        self.cari_filter_cb.setCurrentText("TÜMÜ")
+
+        self.durum_combo.setCurrentText("TÜMÜ")
+        self.siparis_tipi_filter_cb.setCurrentText("TÜMÜ")
 
     def _on_siparis_select(self): # event=None kaldırıldı
         selected_items = self.siparis_tree.selectedItems()
@@ -2309,17 +2071,41 @@ class SiparisListesiSayfasi(QWidget):
         self.siparis_tipi_filter_cb.setCurrentText("TÜMÜ")
         self.siparis_listesini_yukle()
 
-    def _update_siparis_listesi_ui(self, siparisler_response):
-        """Worker thread'den gelen verilerle QTreeWidget'ı ana thread'de günceller."""
-        
+    def siparis_listesini_yukle(self):
+        self.app.set_status_message("Sipariş listesi güncelleniyor...")
         self.siparis_tree.clear()
+
+        bas_t = self.bas_tarih_entry.text()
+        bit_t = self.bit_tarih_entry.text()
+        arama_terimi = self.arama_siparis_entry.text().strip()
+
+        cari_id_filter_val = self.cari_filter_cb.currentData()
+        durum_filter_val = self.durum_combo.currentText() if self.durum_combo.currentText() != "TÜMÜ" else None
+        siparis_tipi_filter_val = self.siparis_tipi_filter_cb.currentText() if self.siparis_tipi_filter_cb.currentText() != "TÜMÜ" else None
         
         try:
+            siparisler_response = self.db.siparis_listesi_al(
+                skip=(self.mevcut_sayfa - 1) * self.kayit_sayisi_per_sayfa,
+                limit=self.kayit_sayisi_per_sayfa,
+                arama=arama_terimi,
+                siparis_turu=siparis_tipi_filter_val,
+                durum=durum_filter_val,
+                baslangic_tarihi=bas_t,
+                bitis_tarihi=bit_t,
+                cari_id=cari_id_filter_val
+            )
+
+            if not isinstance(siparisler_response, dict) or "items" not in siparisler_response:
+                raise ValueError("API'den geçersiz sipariş listesi yanıtı alındı.")
+
             siparis_verileri = siparisler_response.get("items", [])
             self.toplam_kayit_sayisi = siparisler_response.get("total", len(siparis_verileri))
 
             self.total_pages = (self.toplam_kayit_sayisi + self.kayit_sayisi_per_sayfa - 1) // self.kayit_sayisi_per_sayfa
             if self.total_pages == 0: self.total_pages = 1
+
+            if self.mevcut_sayfa > self.total_pages:
+                self.mevcut_sayfa = self.total_pages
             
             self.sayfa_bilgisi_label.setText(f"Sayfa {self.mevcut_sayfa} / {self.total_pages}")
             
@@ -2329,7 +2115,7 @@ class SiparisListesiSayfasi(QWidget):
                 tarih_obj = item.get('tarih')
                 cari_adi_display = item.get('cari_adi', 'Bilinmiyor')
                 siparis_tipi_gosterim = item.get('siparis_turu', '-')
-                toplam_tutar = item.get('genel_toplam') # DÜZELTME: API'den gelen doğru alan adı kullanılmalı
+                toplam_tutar = item.get('toplam_tutar')
                 durum = item.get('durum')
                 teslimat_tarihi_obj = item.get('teslimat_tarihi')
                 
@@ -2346,7 +2132,6 @@ class SiparisListesiSayfasi(QWidget):
                 item_qt.setText(6, durum)
                 item_qt.setText(7, formatted_teslimat_tarihi)
 
-                # Renklendirme ve stil
                 if durum == 'TAMAMLANDI':
                     for col_idx in range(self.siparis_tree.columnCount()):
                         item_qt.setBackground(col_idx, QBrush(QColor("#D5F5E3")))
@@ -2367,58 +2152,11 @@ class SiparisListesiSayfasi(QWidget):
                 item_qt.setData(5, Qt.UserRole, toplam_tutar)
 
             self.app.set_status_message(f"{len(siparis_verileri)} sipariş listelendi. Toplam {self.toplam_kayit_sayisi} kayıt.")
-            self._on_siparis_select() # Buton durumlarını güncelle
-
+            self._on_siparis_select()
         except Exception as e:
-            logger.error(f"Sipariş listesi UI yüklenirken hata oluştu: {e}", exc_info=True)
+            logger.error(f"Sipariş listesi yüklenirken hata oluştu: {e}", exc_info=True)
             QMessageBox.critical(self.app, "API Hatası", f"Sipariş listesi çekilirken hata: {e}")
             self.app.set_status_message(f"Hata: Sipariş listesi yüklenemedi. {e}", "red")
-
-    def siparis_listesini_yukle(self):
-        self.app.set_status_message("Sipariş listesi güncelleniyor...")
-        self.siparis_tree.clear()
-
-        # Filtre parametrelerini al
-        bas_t = self.bas_tarih_entry.text()
-        bit_t = self.bit_tarih_entry.text()
-        arama_terimi = self.arama_siparis_entry.text().strip()
-
-        cari_id_filter_val = self.cari_filter_cb.currentData()
-        durum_filter_val = self.durum_combo.currentText() if self.durum_combo.currentText() != "TÜMÜ" else None
-        siparis_tipi_filter_val = self.siparis_tipi_filter_cb.currentText() if self.siparis_tipi_filter_cb.currentText() != "TÜMÜ" else None
-        
-        skip_val = (self.mevcut_sayfa - 1) * self.kayit_sayisi_per_sayfa
-        limit_val = self.kayit_sayisi_per_sayfa
-
-        def _load_siparis_listesi_thread():
-            try:
-                # BLOCKING API Çağrısı
-                siparisler_response = self.db.siparis_listesi_al(
-                    skip=skip_val,
-                    limit=limit_val,
-                    arama=arama_terimi,
-                    siparis_turu=siparis_tipi_filter_val,
-                    durum=durum_filter_val,
-                    baslangic_tarihi=bas_t,
-                    bitis_tarihi=bit_t,
-                    cari_id=cari_id_filter_val
-                )
-
-                if not isinstance(siparisler_response, dict):
-                    raise ValueError("API'den geçersiz sipariş listesi yanıtı alındı.")
-
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_siparis_listesi_ui(siparisler_response))
-
-            except Exception as e:
-                error_message = f"Sipariş listesi çekilirken API/Ağ hatası: {e}"
-                logging.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_siparis_listesi_ui({"items":[], "total":0}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_siparis_listesi_thread, daemon=True).start()
 
     def on_item_double_click(self, item, column): # item ve column sinyalden gelir
         QMessageBox.information(self.app, "Bilgi", "Bu işlem bir fatura değildir, detayı görüntülenemez (Placeholder).")
@@ -2854,18 +2592,24 @@ class BaseFaturaListesi(QWidget):
             self.after_timer.stop()
         self.after_timer.singleShot(300, self.fatura_listesini_yukle)
 
-    def _update_fatura_filtreleri_ui(self, filter_data):
-        """Worker thread'den gelen tüm filtre verileriyle Combobox'ları ana thread'de günceller."""
-        
-        cariler = filter_data.get('cariler', [])
-        kasalar_bankalar = filter_data.get('kasalar_bankalar', [])
+    def _yukle_filtre_comboboxlari(self):
+        self.cari_filter_cb.clear()
+        self.cari_filter_map = {"TÜMÜ": None}
+        self.odeme_turu_map = {"TÜMÜ": None}
+        self.kasa_banka_map = {"TÜMÜ": None}
+
+        self.cari_filter_cb.addItem("TÜMÜ", userData=None)
+        self.odeme_turu_filter_cb.addItem("TÜMÜ", userData=None)
+        self.kasa_banka_filter_cb.addItem("TÜMÜ", userData=None)
         
         try:
-            # Cari Filtreleri Güncelleme
-            self.cari_filter_cb.clear()
-            self.cari_filter_map.clear()
-            self.cari_filter_cb.addItem("TÜMÜ", userData=None)
-            self.cari_filter_map["TÜMÜ"] = None
+            cariler = []
+            if self.fatura_tipi == self.db.FATURA_TIP_SATIS:
+                cariler_response = self.db.musteri_listesi_al() 
+                cariler = cariler_response.get('items', []) if isinstance(cariler_response, dict) else cariler_response
+            elif self.fatura_tipi == self.db.FATURA_TIP_ALIS:
+                cariler_response = self.db.tedarikci_listesi_al()
+                cariler = cariler_response.get('items', []) if isinstance(cariler_response, dict) else cariler_response
 
             for cari in cariler:
                 cari_id = cari.get('id')
@@ -2875,73 +2619,28 @@ class BaseFaturaListesi(QWidget):
                 display_text = f"{cari_ad} (Kod: {cari_kod})"
                 self.cari_filter_map[display_text] = cari_id
                 self.cari_filter_cb.addItem(display_text, cari_id)
-            
-            # Kasa/Banka Filtreleri Güncelleme
-            self.kasa_banka_filter_cb.clear()
-            self.kasa_banka_map.clear()
-            self.kasa_banka_filter_cb.addItem("TÜMÜ", userData=None)
-            self.kasa_banka_map["TÜMÜ"] = None
 
+            # Ödeme türleri
+            for odeme_turu in [self.db.ODEME_TURU_NAKIT, self.db.ODEME_TURU_KART, self.db.ODEME_TURU_EFT_HAVALE, self.db.ODEME_TURU_CEK, self.db.ODEME_TURU_SENET, self.db.ODEME_TURU_ACIK_HESAP, self.db.ODEME_TURU_ETKISIZ_FATURA]:
+                self.odeme_turu_map[odeme_turu] = odeme_turu
+                self.odeme_turu_filter_cb.addItem(odeme_turu, userData=odeme_turu)
+
+            # Kasa/Banka hesaplarını çekme
+            kasalar_bankalar_response = self.db.kasa_banka_listesi_al()
+            kasalar_bankalar = kasalar_bankalar_response.get('items', []) if isinstance(kasalar_bankalar_response, dict) else kasalar_bankalar_response
+            
             for kb in kasalar_bankalar:
                 kb_id = kb.get('id')
                 kb_adi = kb.get('hesap_adi', 'Bilinmiyor')
                 kb_tip = kb.get('tip', 'Bilinmiyor')
-                
+                    
                 display_text = f"{kb_adi} ({kb_tip})"
                 self.kasa_banka_map[display_text] = kb_id
-                self.kasa_banka_filter_cb.addItem(display_text, kb_id)
-                
-            self.app.set_status_message(f"Filtreler yüklendi: {len(cariler)} Cari, {len(kasalar_bankalar)} Hesap.", "blue")
+                self.kasa_banka_filter_cb.addItem(display_text, userData=kb_id)
 
         except Exception as e:
-            logger.error(f"Fatura filtreleri UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Fatura filtreleri yüklenemedi. {e}", "red")
-
-    def _yukle_filtre_comboboxlari(self):
-        """Tüm filtre ComboBox'larını asenkron olarak API'den gelen verilerle doldurur."""
-        
-        # UI temizliğini ana thread'de hemen yap
-        self.cari_filter_cb.clear()
-        self.kasa_banka_filter_cb.clear()
-        self.cari_filter_cb.addItem("TÜMÜ", userData=None)
-        self.kasa_banka_filter_cb.addItem("TÜMÜ", userData=None)
-        self.app.set_status_message("Filtre verileri yükleniyor...", "blue")
-
-
-        def _load_filter_data_thread():
-            cariler = []
-            kasalar_bankalar = []
-            
-            try:
-                # 1. Cari Listesini Çek (Blocking)
-                if self.fatura_tipi == self.db.FATURA_TIP_SATIS:
-                    cariler_response = self.db.musteri_listesi_al(limit=10000)
-                    cariler = cariler_response.get('items', []) if isinstance(cariler_response, dict) else cariler_response
-                elif self.fatura_tipi == self.db.FATURA_TIP_ALIS:
-                    cariler_response = self.db.tedarikci_listesi_al(limit=10000)
-                    cariler = cariler_response.get('items', []) if isinstance(cariler_response, dict) else cariler_response
-                
-                # 2. Kasa/Banka Listesini Çek (Blocking)
-                kasalar_bankalar_response = self.db.kasa_banka_listesi_al(limit=10000)
-                kasalar_bankalar = kasalar_bankalar_response.get('items', []) if isinstance(kasalar_bankalar_response, dict) else kasalar_bankalar_response
-
-                filter_data = {
-                    'cariler': cariler,
-                    'kasalar_bankalar': kasalar_bankalar
-                }
-                
-                # Başarılı olduğunda ana thread'e geri posta yap
-                QTimer.singleShot(0, lambda: self._update_fatura_filtreleri_ui(filter_data))
-
-            except Exception as e:
-                error_message = f"Fatura filtre verileri çekilirken API/Ağ hatası: {e}"
-                logger.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_fatura_filtreleri_ui({'cariler': [], 'kasalar_bankalar': []}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-                
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_filter_data_thread, daemon=True).start()
+            self.app.set_status_message(f"Hata: Filtre verileri yüklenemedi: {e}")
+            logging.error(f"Filtre verileri yüklenirken hata oluştu: {e}", exc_info=True)
 
     def _arama_temizle(self):
         self.arama_fatura_entry.clear()
@@ -2951,18 +2650,27 @@ class BaseFaturaListesi(QWidget):
         self.fatura_tipi_filter_cb.setCurrentIndex(0)
         self.fatura_listesini_yukle()
 
-    def _update_fatura_listesi_ui(self, fatura_listesi_response):
-        """Worker thread'den gelen verilerle QTreeWidget'ı ana thread'de günceller."""
+    def fatura_listesini_yukle(self):
+        self.app.set_status_message("Fatura listesi güncelleniyor...")
         self.fatura_tree.clear()
-        
+        self.sayfa_bilgisi_label.setText("Sayfa 0 / 0")
+
         try:
+            fatura_listesi_response = self.db.fatura_listesi_al(
+                arama=self.arama_fatura_entry.text(),
+                fatura_turu=self.fatura_tipi_filter_cb.currentText() if self.fatura_tipi_filter_cb.currentText() != "TÜMÜ" else None,
+                odeme_turu=self.odeme_turu_filter_cb.currentData(),
+                baslangic_tarihi=self.bas_tarih_entry.text(),
+                bitis_tarihi=self.bit_tarih_entry.text(),
+                kasa_banka_id=self.kasa_banka_filter_cb.currentData()
+            )
+
             if not isinstance(fatura_listesi_response, dict) or "items" not in fatura_listesi_response:
                 raise ValueError("API'den geçersiz fatura listesi yanıtı alındı.")
             
             faturalar = fatura_listesi_response.get("items", [])
             self.toplam_kayit_sayisi = fatura_listesi_response.get("total", len(faturalar))
             
-            self.kayit_sayisi_per_sayfa = 20 # Sınıf değişkeni olarak varsayılmıştır
             toplam_sayfa = (self.toplam_kayit_sayisi + self.kayit_sayisi_per_sayfa - 1) // self.kayit_sayisi_per_sayfa
             if toplam_sayfa == 0: toplam_sayfa = 1
 
@@ -2994,56 +2702,12 @@ class BaseFaturaListesi(QWidget):
                     item_qt.setTextAlignment(col_idx, Qt.AlignCenter)
 
             self.app.set_status_message(f"{len(faturalar)} fatura listelendi. Toplam {self.toplam_kayit_sayisi} kayıt.", "blue")
-            self._on_fatura_select() # Buton durumlarını güncelle
+            self._on_fatura_select()
 
         except Exception as e:
-            logger.error(f"Fatura listesi UI yüklenirken hata oluştu: {e}", exc_info=True)
+            logger.error(f"Fatura listesi yüklenirken hata: {e}", exc_info=True)
             QMessageBox.critical(self.app, "Veri Yükleme Hatası", f"Fatura listesi yüklenirken bir hata oluştu:\n{e}")
             self.app.set_status_message(f"Hata: Fatura listesi yüklenemedi. {e}", "red")
-
-    def fatura_listesini_yukle(self):
-        self.app.set_status_message("Fatura listesi güncelleniyor...")
-        self.fatura_tree.clear()
-
-        # Filtre parametrelerini al
-        arama_terimi = self.arama_fatura_entry.text()
-        fatura_turu_val = self.fatura_tipi_filter_cb.currentText() if self.fatura_tipi_filter_cb.currentText() != "TÜMÜ" else None
-        odeme_turu_val = self.odeme_turu_filter_cb.currentData()
-        baslangic_tarihi_str = self.bas_tarih_entry.text()
-        bitis_tarihi_str = self.bit_tarih_entry.text()
-        kasa_banka_id_val = self.kasa_banka_filter_cb.currentData()
-        cari_id_val = self.cari_filter_cb.currentData()
-
-        skip_val = (self.mevcut_sayfa - 1) * self.kayit_sayisi_per_sayfa
-        limit_val = self.kayit_sayisi_per_sayfa
-
-        def _load_fatura_listesi_thread():
-            try:
-                # BLOCKING API Çağrısı
-                fatura_listesi_response = self.db.fatura_listesi_al(
-                    skip=skip_val,
-                    limit=limit_val,
-                    arama=arama_terimi,
-                    fatura_turu=fatura_turu_val,
-                    odeme_turu=odeme_turu_val,
-                    baslangic_tarihi=baslangic_tarihi_str,
-                    bitis_tarihi=bitis_tarihi_str,
-                    kasa_banka_id=kasa_banka_id_val,
-                    cari_id=cari_id_val
-                )
-
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_fatura_listesi_ui(fatura_listesi_response))
-
-            except Exception as e:
-                error_message = f"Fatura listesi çekilirken API/Ağ hatası: {e}"
-                logger.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_fatura_listesi_ui({"items":[], "total":0}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_fatura_listesi_thread, daemon=True).start()
             
     def _on_fatura_select(self):
         selected_items = self.fatura_tree.selectedItems()
@@ -3429,14 +3093,29 @@ class BaseIslemSayfasi(QWidget):
         
         self._setup_alt_bar()
 
-    def _update_kasa_banka_hesaplarini_ui(self, hesaplar):
-        """Worker thread'den gelen verilerle Kasa/Banka ComboBox'ını ana thread'de günceller."""
-        self.islem_hesap_cb.blockSignals(True)
-        self.islem_hesap_cb.clear()
-        self.kasa_banka_map.clear()
-        display_values = []
-
+    def _yukle_kasa_banka_hesaplarini(self):
+        """Kasa/Banka hesaplarını API'den çeker ve ilgili combobox'ı doldurur."""
         try:
+            hesaplar_response = self.db.kasa_banka_listesi_al(limit=10000)
+
+            hesaplar = []
+            if isinstance(hesaplar_response, dict) and "items" in hesaplar_response:
+                hesaplar = hesaplar_response["items"]
+            elif isinstance(hesaplar_response, list):
+                hesaplar = hesaplar_response
+                self.app.set_status_message("Uyarı: Kasa/Banka listesi API yanıtı beklenen formatta değil. Doğrudan liste olarak işleniyor.", "orange")
+            else:
+                self.app.set_status_message("Hata: Kasa/Banka listesi API'den alınamadı veya formatı geçersiz.", "red")
+                logging.error(f"Kasa/Banka listesi API'den beklenen formatta gelmedi: {type(hesaplar_response)} - {hesaplar_response}")
+                self.islem_hesap_cb.clear()
+                self.islem_hesap_cb.setPlaceholderText("Hesap Yok")
+                self.islem_hesap_cb.setEnabled(False)
+                return
+
+            self.islem_hesap_cb.clear()
+            self.kasa_banka_map.clear()
+
+            display_values = []
             if hesaplar:
                 for h in hesaplar:
                     display_text = f"{h.get('hesap_adi')} ({h.get('tip')})"
@@ -3451,45 +3130,16 @@ class BaseIslemSayfasi(QWidget):
                 self.islem_hesap_cb.addItems(display_values)
                 self.islem_hesap_cb.setCurrentIndex(0)
                 self.islem_hesap_cb.setEnabled(True)
-                self.app.set_status_message(f"{len(hesaplar)} kasa/banka hesabı yüklendi.", "blue")
             else:
-                self.islem_hesap_cb.addItem("Hesap Yok", userData=None)
+                self.islem_hesap_cb.clear()
                 self.islem_hesap_cb.setPlaceholderText("Hesap Yok")
                 self.islem_hesap_cb.setEnabled(False)
-        finally:
-            self.islem_hesap_cb.blockSignals(False)
-            if hasattr(self, '_odeme_turu_degisince_event_handler'):
-                # Fatura formlarında ComboBox'ın sinyali kesildiği için tekrar bağlanması gerekebilir.
-                # Ya da en azından bu metodu manuel çağırarak son durumu güncelleyebiliriz.
-                QTimer.singleShot(0, self._odeme_turu_degisince_event_handler)
 
-    def _yukle_kasa_banka_hesaplarini(self):
-        """Kasa/Banka hesaplarını API'den çeker ve ilgili combobox'ı doldurur (Asenkron Başlatıcı)."""
-        self.app.set_status_message("Kasa/Banka hesapları yükleniyor...", "blue")
-        
-        self.islem_hesap_cb.blockSignals(True)
-        self.islem_hesap_cb.clear()
-        self.kasa_banka_map.clear()
-        self.islem_hesap_cb.setPlaceholderText("Yükleniyor...")
-        self.islem_hesap_cb.setEnabled(False)
+            self.app.set_status_message(f"{len(hesaplar)} kasa/banka hesabı API'den yüklendi.")
 
-        def _load_data_thread():
-            try:
-                # BLOCKING API Çağrısı
-                hesaplar_response = self.db.kasa_banka_listesi_al(limit=10000)
-                
-                hesaplar = hesaplar_response.get("items", []) if isinstance(hesaplar_response, dict) else hesaplar_response
-                
-                QTimer.singleShot(0, lambda: self._update_kasa_banka_hesaplarini_ui(hesaplar))
-
-            except Exception as e:
-                error_message = f"Kasa/Banka hesapları API'den alınamadı: {e}"
-                logging.error(error_message, exc_info=True)
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-                QTimer.singleShot(0, lambda: self._update_kasa_banka_hesaplarini_ui([]))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Bağlantı Hatası", f"Kasa/Banka hesapları API'den alınamadı:\n{e}")
+            self.app.set_status_message(f"Hata: Kasa/Banka hesapları yüklenemedi - {e}")
 
     def _setup_sol_panel(self, parent_frame):
         raise NotImplementedError("Bu metot alt sınıf tarafından ezilmelidir.")
@@ -3774,15 +3424,30 @@ class BaseIslemSayfasi(QWidget):
             self.genel_iskonto_degeri_e.setEnabled(True)
         self.toplamlari_hesapla_ui()
 
-    def _update_carileri_ui(self, cariler_data):
-        """Worker thread'den gelen verilerle cari cache'i ve UI'ı ana thread'de günceller."""
-        
+    def _carileri_yukle_ve_cachele(self): # Yaklaşık 3450. satır
+        logging.debug(f"BaseIslemSayfasi: _carileri_yukle_ve_cachele çağrıldı. self.islem_tipi: {self.islem_tipi}")
+        kullanici_id = self.app.current_user_id 
+
         self.tum_cariler_cache_data = []
         self.cari_map_display_to_id = {}
         self.cari_id_to_display_map = {}
         
         try:
-            for c in cariler_data:
+            cariler_list = []
+            if self.islem_tipi in ["SATIŞ", "SATIŞ_SIPARIS", "SATIŞ İADE"]:
+                # KRİTİK DÜZELTME 1: musteri_listesi_al() metodundan kullanici_id parametresi KALDIRILDI
+                cariler_response = self.db.musteri_listesi_al()
+                cariler_list = cariler_response.get("items", []) if isinstance(cariler_response, dict) else cariler_response
+            elif self.islem_tipi in ["ALIŞ", "ALIŞ_SIPARIS", "ALIŞ İADE"]:
+                # KRİTİK DÜZELTME 1: tedarikci_listesi_al() metodundan kullanici_id parametresi KALDIRILDI
+                cariler_response = self.db.tedarikci_listesi_al()
+                cariler_list = cariler_response.get("items", []) if isinstance(cariler_response, dict) else cariler_response
+            else:
+                self.app.set_status_message("Uyarı: Geçersiz işlem tipi için cari listesi yüklenemedi.", "orange")
+                logging.warning(f"BaseIslemSayfasi._carileri_yukle_ve_cachele: Geçersiz self.islem_tipi: {self.islem_tipi}")
+                return
+
+            for c in cariler_list:
                 cari_id = c.get('id')
                 cari_ad = c.get('ad')
                 cari_kodu_gosterim = c.get('kod')
@@ -3795,52 +3460,12 @@ class BaseIslemSayfasi(QWidget):
                 self.cari_id_to_display_map[str(cari_id)] = display_text
                 self.tum_cariler_cache_data.append(c)
 
-            # Başlangıç cari seçimini yap (eğer varsa)
-            if self.initial_cari_id:
-                initial_cari_display = self.cari_id_to_display_map.get(str(self.initial_cari_id))
-                if initial_cari_display:
-                    self._on_cari_secildi_callback(self.initial_cari_id, initial_cari_display)
-            
-            # Formun ilk açılışındaki varsayılan cari seçimini yap
-            elif hasattr(self, '_select_default_cari_on_load'):
-                self._select_default_cari_on_load() 
-                
+            logging.debug(f"BaseIslemSayfasi: _carileri_yukle_ve_cachele bitiş. Yüklenen cari sayısı: {len(self.tum_cariler_cache_data)}")
             self.app.set_status_message(f"{len(self.tum_cariler_cache_data)} cari API'den önbelleğe alındı.", "black") 
-        
+
         except Exception as e:
-            logger.error(f"Cari UI güncelleme hatası: {e}", exc_info=True)
+            logger.error(f"Cari listesi yüklenirken hata oluştu: {e}", exc_info=True)
             self.app.set_status_message(f"Hata: Cari listesi yüklenemedi. Detay: {e}", "red")
-
-    def _carileri_yukle_ve_cachele(self): 
-        """API'den cari listesini asenkron çeker (Müşteri veya Tedarikçi)."""
-        logging.debug(f"BaseIslemSayfasi: _carileri_yukle_ve_cachele çağrıldı. self.islem_tipi: {self.islem_tipi}")
-        
-        # Sadece yükleme işlemini başlatan metot, UI'ı bloke etmez.
-        def _load_data_thread():
-            cariler_list = []
-            try:
-                # Bloklama yapan API çağrıları
-                if self.islem_tipi in ["SATIŞ", "SATIŞ_SIPARIS", "SATIŞ İADE"]:
-                    # Not: API çağrısında kullanici_id parametresi serviste JWT ile sağlandığı için burada kaldırılmıştır.
-                    cariler_response = self.db.musteri_listesi_al()
-                    cariler_list = cariler_response.get("items", []) if isinstance(cariler_response, dict) else cariler_response
-                elif self.islem_tipi in ["ALIŞ", "ALIŞ_SIPARIS", "ALIŞ İADE"]:
-                    # Not: API çağrısında kullanici_id parametresi serviste JWT ile sağlandığı için burada kaldırılmıştır.
-                    cariler_response = self.db.tedarikci_listesi_al()
-                    cariler_list = cariler_response.get("items", []) if isinstance(cariler_response, dict) else cariler_response
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_carileri_ui(cariler_list))
-
-            except Exception as e:
-                error_message = f"Cari listesi çekilirken API/Ağ hatası: {e}"
-                logger.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_carileri_ui([]))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-                
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
                     
     def _cari_secim_penceresi_ac(self):
         """
@@ -3993,9 +3618,12 @@ class BaseIslemSayfasi(QWidget):
             self.lbl_cari_bakiye.setText("")
             self.lbl_cari_bakiye.setStyleSheet("color: black;")
 
-    def _update_urunler_ui(self, urunler_listesi_local):
-        """Worker thread'den gelen verilerle ürün cache'ini ana thread'de günceller."""
+    def _urunleri_yukle_ve_cachele_ve_goster(self):
         try:
+            # DÜZELTİLDİ: Veriler artık yerel veritabanından çekiliyor.
+            with lokal_db_servisi.get_db() as db:
+                urunler_listesi_local = db.query(Stok).filter(Stok.aktif == True).all()
+
             self.tum_urunler_cache.clear()
             for urun_data in urunler_listesi_local:
                 # SQLAlchemy nesnesini sözlüğe dönüştürerek önbelleğe alıyoruz.
@@ -4007,41 +3635,15 @@ class BaseIslemSayfasi(QWidget):
                     'alis_fiyati': urun_data.alis_fiyati,
                     'satis_fiyati': urun_data.satis_fiyati,
                     'kdv_orani': urun_data.kdv_orani,
-                    # 'birim' bilgisi yerel şemada yoksa sabit değer atandı
-                    'birim': {'ad': 'Adet'}
+                    'birim': {'ad': 'Adet'} # Yerel şemanızda birim bilgisi yok, sabit değer atandı
                 })
             
-            # Yükleme tamamlandıktan sonra filtrelemeyi tetikle
             self._urun_listesini_filtrele_anlik()
-            self.app.set_status_message(f"{len(self.tum_urunler_cache)} ürün yerel veritabanından önbelleğe alındı.", "blue")
+            self.app.set_status_message(f"{len(self.tum_urunler_cache)} ürün yerel veritabanından önbelleğe alındı.")
 
         except Exception as e:
-            logger.error(f"Ürün UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Ürün cache'i güncellenemedi. Detay: {e}", "red")
-
-    def _urunleri_yukle_ve_cachele_ve_goster(self):
-        """Yerel veritabanından ürün listesini asenkron çeker."""
-        self.app.set_status_message("Ürün listesi yerel DB'den yükleniyor...", "blue")
-        
-        def _load_data_thread():
-            urunler_listesi_local = []
-            try:
-                # Bloklama yapan lokal DB sorgusu
-                with lokal_db_servisi.get_db() as db:
-                    # Sadece aktif ürünleri al (Stok modelinde aktif kolonu var)
-                    urunler_listesi_local = db.query(Stok).filter(Stok.aktif == True, Stok.kullanici_id == self.app.current_user_id).all()
-                
-                # Başarılı olduğunda ana thread'e geri posta yap
-                QTimer.singleShot(0, lambda: self._update_urunler_ui(urunler_listesi_local))
-
-            except Exception as e:
-                error_message = f"Ürün listesi yerel DB'den çekilirken hata: {e}"
-                logging.error(error_message, exc_info=True)
-                QTimer.singleShot(0, lambda: self._update_urunler_ui([])) # Boş liste ile UI'ı güncelle
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-                
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
+            logger.error(f"Ürün listesi yüklenirken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Ürünler yüklenemedi. Detay: {e}")
 
     def _urun_listesini_filtrele_anlik(self):
         arama_terimi = self.urun_arama_entry.text().strip()
@@ -6548,86 +6150,87 @@ class BaseFinansalIslemSayfasi(QWidget):
         self._on_cari_selected()
         self._odeme_sekli_degisince()
         
-    def _update_cariler_finansal_ui(self, cariler_data):
-        """Worker thread'den gelen verilerle Cari ComboBox'ını ana thread'de günceller."""
-        
+    def _yukle_ve_cachele_carileri(self): # Yaklaşık 6138. satır
         self.tum_cariler_cache = []
-        self.cari_map.clear()
-        
+        self.cari_map = {}
+        kullanici_id = self.app.current_user_id # Düzeltme: kullanıcı ID'si alındı
+
         try:
-            display_values = []
+            cariler_data = []
+            if self.islem_tipi == 'TAHSILAT':
+                musteriler_response = self.db.musteri_listesi_al(limit=10000)
+                cariler_data = musteriler_response.get("items", []) if isinstance(musteriler_response, dict) else musteriler_response
+            elif self.islem_tipi == 'ODEME':
+                tedarikciler_response = self.db.tedarikci_listesi_al(limit=10000)
+                cariler_data = tedarikciler_response.get("items", []) if isinstance(tedarikciler_response, dict) else tedarikciler_response
             
+            if not cariler_data and self.cari_tip is None:
+                QMessageBox.critical(self.app, "Hata", "Geçersiz işlem tipi için cari listesi çekilemiyor.")
+                return
+
+            display_values = []
             for c in cariler_data:
                 display_text = f"{c.get('ad', 'Bilinmiyor')} (Kod: {c.get('kod', '')})"
                 self.cari_map[display_text] = c.get('id')
                 display_values.append(display_text)
-                self.tum_cariler_cache.append(c) # Cache'i doldur
+                self.tum_cariler_cache.append(c)
 
             self.cari_combo.blockSignals(True)
             self.cari_combo.clear()
             self.cari_combo.addItems(display_values)
-            
-            # Varsayılan cari seçimini yap (Perakende/Genel Tedarikçi)
+
+            # Perakende müşteri veya genel tedarikçi varsa, varsayılan olarak seçme mantığı
             perakende_musteri_id_val = self.db.get_perakende_musteri_id()
             genel_tedarikci_id_val = self.db.get_genel_tedarikci_id()
             
-            if self.islem_tipi == 'TAHSILAT' and perakende_musteri_id_val:
-                default_text = next((text for text, _id in self.cari_map.items() if _id == perakende_musteri_id_val), None)
-                if default_text: self.cari_combo.setCurrentText(default_text)
-            elif self.islem_tipi == 'ODEME' and genel_tedarikci_id_val:
-                default_text = next((text for text, _id in self.cari_map.items() if _id == genel_tedarikci_id_val), None)
-                if default_text: self.cari_combo.setCurrentText(default_text)
+            if self.cari_combo.count() > 0:
+                if self.islem_tipi == 'TAHSILAT' and perakende_musteri_id_val is not None:
+                    perakende_musteri_display_text = next((text for text, _id in self.cari_map.items() if _id == perakende_musteri_id_val), None)
+                    if perakende_musteri_display_text and perakende_musteri_display_text in display_values:
+                        self.cari_combo.setCurrentText(perakende_musteri_display_text)
+                    else:
+                        self.cari_combo.setCurrentIndex(0)
+                elif self.islem_tipi == 'ODEME' and genel_tedarikci_id_val is not None:
+                    genel_tedarikci_display_text = next((text for text, _id in self.cari_map.items() if _id == genel_tedarikci_id_val), None)
+                    if genel_tedarikci_display_text and genel_tedarikci_display_text in display_values:
+                        self.cari_combo.setCurrentText(genel_tedarikci_display_text)
+                    else:
+                        self.cari_combo.setCurrentIndex(0)
+                else:
+                    self.cari_combo.setCurrentIndex(0)
             else:
-                 self.cari_combo.setCurrentIndex(0)
+                self.cari_combo.clear()
 
             self.cari_combo.blockSignals(False)
-            
-            self._on_cari_selected() # Yeni seçimi tetikle (Bakiye yükleme)
-            self.app.set_status_message(f"{len(self.tum_cariler_cache)} cari önbelleğe alındı.", "black")
-            
+            self.app.set_status_message(f"{len(cariler_data)} cari API'den önbelleğe alındı.", "black")
+            self._on_cari_selected()
+
         except Exception as e:
-            logger.error(f"Finansal Cari UI güncelleme hatası: {e}", exc_info=True)
-            self.cari_combo.clear()
-            self.cari_combo.addItems(["Cari Yok"])
-            self.app.set_status_message(f"Hata: Cari listesi yüklenemedi. {e}", "red")
+            logger.error(f"Cari listesi yüklenirken hata oluştu: {e}", exc_info=True)
+            self.app.set_status_message(f"Hata: Cari listesi yüklenemedi - {e}")
 
-    def _yukle_ve_cachele_carileri(self): 
-        """API'den cari listesini asenkron çeker (Müşteri veya Tedarikçi)."""
-        self.app.set_status_message("Cari listesi yükleniyor...", "blue")
-        
-        def _load_data_thread():
-            cariler_data = []
-            try:
-                # Bloklama yapan API çağrıları
-                if self.islem_tipi == 'TAHSILAT':
-                    musteriler_response = self.db.musteri_listesi_al(limit=10000)
-                    cariler_data = musteriler_response.get("items", []) if isinstance(musteriler_response, dict) else musteriler_response
-                elif self.islem_tipi == 'ODEME':
-                    tedarikciler_response = self.db.tedarikci_listesi_al(limit=10000)
-                    cariler_data = tedarikciler_response.get("items", []) if isinstance(tedarikciler_response, dict) else tedarikciler_response
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_cariler_finansal_ui(cariler_data))
-
-            except Exception as e:
-                error_message = f"Finansal Cari listesi çekilirken API/Ağ hatası: {e}"
-                logging.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_cariler_finansal_ui([]))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-                
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
-
-    def _update_recent_transactions_ui(self, recent_data):
-        """Worker thread'den gelen son işlemler verileriyle QTreeWidget'ı ana thread'de günceller."""
+    def _load_recent_transactions(self):
         self.tree_recent_transactions.clear()
-        
+
+        selected_cari_text = self.cari_combo.currentText()
+        cari_id = self.cari_map.get(selected_cari_text)
+
+        if cari_id is None:
+            item_qt = QTreeWidgetItem(self.tree_recent_transactions)
+            item_qt.setText(3, "Cari seçilmedi.")
+            return
+
         try:
+            hareketler_response = self.db.cari_hareketleri_listele(
+                cari_id=cari_id,
+                limit=10
+            )
+
+            recent_data = hareketler_response.get("items", []) if isinstance(hareketler_response, dict) else hareketler_response
+
             if not recent_data:
                 item_qt = QTreeWidgetItem(self.tree_recent_transactions)
                 item_qt.setText(3, "Son işlem bulunamadı.")
-                self.tree_recent_transactions.addTopLevelItem(item_qt)
                 return
 
             for item in recent_data:
@@ -6639,7 +6242,10 @@ class BaseFinansalIslemSayfasi(QWidget):
 
                 tutar_formatted = self.db._format_currency(item.get('tutar', 0.0))
                 
-                kasa_banka_adi = item.get('kasa_banka_adi', '-') if item.get('kasa_banka_adi') else '-'
+                kasa_banka_adi = "-"
+                if item.get('kasa_banka_id'):
+                    kasa_banka_response = self.db.kasa_banka_getir_by_id(hesap_id=item.get('kasa_banka_id'), kullanici_id=self.app.current_user_id)
+                    kasa_banka_adi = kasa_banka_response.get('hesap_adi', '-') if kasa_banka_response else '-'
 
                 item_qt = QTreeWidgetItem(self.tree_recent_transactions)
                 item_qt.setText(0, tarih_formatted)
@@ -6649,52 +6255,13 @@ class BaseFinansalIslemSayfasi(QWidget):
                 item_qt.setText(4, kasa_banka_adi)
                 
                 item_qt.setData(2, Qt.UserRole, item.get('tutar'))
-                self.tree_recent_transactions.addTopLevelItem(item_qt)
-                
-            self.app.set_status_message(f"Son {len(recent_data)} cari hareketi yüklendi.", "blue")
+        
+            self.app.set_status_message(f"Son {len(recent_data)} cari hareketi yüklendi.")
 
         except Exception as e:
-            logger.error(f"Son işlemler UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Son işlemler yüklenemedi. {e}", "red")
-
-    def _load_recent_transactions(self):
-        """Seçili cariye ait son hareketleri asenkron olarak çeker."""
-        self.tree_recent_transactions.clear()
-        
-        selected_cari_text = self.cari_combo.currentText()
-        cari_id = self.cari_map.get(selected_cari_text)
-
-        if cari_id is None:
-            self.tree_recent_transactions.clear()
-            item_qt = QTreeWidgetItem(self.tree_recent_transactions)
-            item_qt.setText(3, "Cari seçilmedi.")
-            self.tree_recent_transactions.addTopLevelItem(item_qt)
-            return
-
-        self.app.set_status_message("Son işlemler yükleniyor...", "blue")
-        
-        def _load_data_thread():
-            recent_data = []
-            try:
-                # BLOCKING API Çağrısı
-                hareketler_response = self.db.cari_hareketleri_listele(
-                    cari_id=cari_id,
-                    limit=10 # Sadece son 10 işlemi çek
-                )
-
-                recent_data = hareketler_response.get("items", []) if isinstance(hareketler_response, dict) else hareketler_response
-
-                # Başarılı olduğunda ana thread'e geri posta yap
-                QTimer.singleShot(0, lambda: self._update_recent_transactions_ui(recent_data))
-
-            except Exception as e:
-                error_message = f"Son cari hareketler çekilirken hata: {e}"
-                logging.error(error_message, exc_info=True)
-                QTimer.singleShot(0, lambda: self._update_recent_transactions_ui([]))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-                
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
+            logger.error(f"Son cari hareketler yüklenirken hata oluştu: {e}", exc_info=True)
+            QMessageBox.critical(self.app, "Veri Yükleme Hatası", f"Son cari hareketler yüklenirken bir hata oluştu:\n{e}")
+            self.app.set_status_message(f"Hata: Son cari hareketler yüklenemedi - {e}")
 
     def _filtre_carileri_anlik(self, text):
         arama_terimi = text.lower().strip()
@@ -6825,70 +6392,40 @@ class BaseFinansalIslemSayfasi(QWidget):
 
         self._load_recent_transactions()
 
-    def _update_kb_finansal_ui(self, hesaplar_response):
-        """Worker thread'den gelen verilerle Kasa/Banka ComboBox'ını ana thread'de günceller."""
-        self.kasa_banka_combo.blockSignals(True)
+    def _yukle_kasa_banka_hesaplarini(self):
         self.kasa_banka_combo.clear()
         self.kasa_banka_map.clear()
-        display_values = []
-
+        
         try:
-            hesaplar = hesaplar_response.get("items", []) if isinstance(hesaplar_response, dict) else hesaplar_response
-
+            # DÜZELTİLDİ: Veriler artık yerel veritabanından çekiliyor.
+            with lokal_db_servisi.get_db() as db:
+                hesaplar = db.query(KasaBankaHesap).all()
+            
+            display_values = []
             if hesaplar:
                 for h in hesaplar:
-                    display_text = f"{h.get('hesap_adi')} ({h.get('tip')})"
-                    if h.get('tip') == "BANKA" and h.get('banka_adi'):
-                        display_text += f" - {h.get('banka_adi')}"
-                    if h.get('tip') == "BANKA" and h.get('hesap_no'):
-                        display_text += f" ({h.get('hesap_no')})"
-
-                    self.kasa_banka_map[display_text] = h.get('id')
+                    display_text = f"{h.hesap_adi} ({h.tip})"
+                    if h.tip == "BANKA" and h.banka_adi:
+                        display_text += f" - {h.banka_adi}"
+                    if h.tip == "BANKA" and h.hesap_no:
+                        display_text += f" ({h.hesap_no})"
+                    
+                    self.kasa_banka_map[display_text] = h.id
                     display_values.append(display_text)
-
+                
                 self.kasa_banka_combo.addItems(display_values)
                 self.kasa_banka_combo.setCurrentIndex(0)
                 self.kasa_banka_combo.setEnabled(True)
-                self.app.set_status_message(f"{len(hesaplar)} kasa/banka hesabı yüklendi.", "blue")
             else:
-                self.kasa_banka_combo.addItem("Hesap Yok", userData=None)
+                self.kasa_banka_combo.clear()
                 self.kasa_banka_combo.setPlaceholderText("Hesap Yok")
                 self.kasa_banka_combo.setEnabled(False)
-        finally:
-            self.kasa_banka_combo.blockSignals(False)
-            if hasattr(self, '_odeme_sekli_degisince'):
-                # Varsayılana ayarlama mantığını tetikle (BaseFinansalIslemSayfasi'nın kendisinde tanımlı)
-                QTimer.singleShot(0, self._odeme_sekli_degisince)
 
-    def _yukle_kasa_banka_hesaplarini(self):
-        """Kasa/Banka hesaplarını API'den çeker ve ilgili combobox'ı doldurur (Asenkron Başlatıcı)."""
-        self.app.set_status_message("Kasa/Banka hesapları yükleniyor...", "blue")
-        
-        # UI'ı yükleniyor durumuna getir
-        self.kasa_banka_combo.blockSignals(True)
-        self.kasa_banka_combo.clear()
-        self.kasa_banka_map.clear()
-        self.kasa_banka_combo.addItem("Yükleniyor...", userData=None)
-        self.kasa_banka_combo.setEnabled(False)
-        self.kasa_banka_combo.blockSignals(False)
+            self.app.set_status_message(f"{len(hesaplar)} kasa/banka hesabı yerel veritabanından yüklendi.")
 
-        def _load_data_thread():
-            hesaplar_response = {}
-            try:
-                # BLOCKING API Çağrısı (API'den çekiliyor)
-                hesaplar_response = self.db.kasa_banka_listesi_al(limit=10000)
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_kb_finansal_ui(hesaplar_response))
-
-            except Exception as e:
-                error_message = f"Kasa/Banka hesapları API'den alınamadı: {e}"
-                logging.error(error_message, exc_info=True)
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-                QTimer.singleShot(0, lambda: self._update_kb_finansal_ui({"items":[]}))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
+        except Exception as e:
+            QMessageBox.critical(self.app, "Hata", f"Kasa/Banka hesapları yerel veritabanından alınamadı:\n{e}")
+            self.app.set_status_message(f"Hata: Kasa/Banka hesapları yüklenemedi - {e}")
 
 # Kaydet işlemi artık BaseFinansalIslemSayfasi'nın bir metodu
     def kaydet_islem(self):
@@ -7681,65 +7218,6 @@ class RaporlamaMerkeziSayfasi(QWidget):
 
         self.app.set_status_message(f"Rapor güncellendi: {selected_tab_text} ({bas_t_str} - {bit_t_str}).")
 
-    def _load_all_report_data_thread(self, bas_t_str, bit_t_str, selected_tab_text):
-        """Tüm rapor verilerini çekmek için BLOCKING çağrıları yapan arka plan thread'i."""
-        # KRİTİK DÜZELTME: kullanici_id parametresi API çağrılarından KALDIRILDI.
-        
-        try:
-            # 1. Genel Bakış ve Kâr/Zarar Verileri
-            dashboard_summary = self.db.get_dashboard_summary(baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
-            kar_zarar_data = self.db.get_kar_zarar_verileri(baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
-            
-            # 2. Nakit Akışı Verileri
-            # NOT: veritabani.py'deki metot imzasında bitis_tarih (sonu h ile) kullanıldığı için ona uyuldu.
-            nakit_akis_data = self.db.get_nakit_akisi_verileri(baslangic_tarihi=bas_t_str, bitis_tarih=bit_t_str) or {}
-            
-            # 3. Kasa/Banka ve Stok Verileri
-            kasa_banka_bakiyeleri = self.db.get_tum_kasa_banka_bakiyeleri() or []
-            critical_stock_items = self.db.get_critical_stock_items() or []
-            
-            # 4. Cari Yaşlandırma ve Stok Grafiği Verileri (Ağır olabilir)
-            cari_yaslandirma_data = self.db.get_cari_yaslandirma_verileri(tarih=bit_t_str) or {}
-            stock_value_by_category = self.db.get_stock_value_by_category() or {}
-            
-            # 5. Aylık Gelir/Gider ve Nakit Akışı Verileri (Grafikler için)
-            aylik_gelir_gider_ozet_data = self.db.get_gelir_gider_aylik_ozet(baslangic_tarihi=bas_t_str, bitis_tarihi=bit_t_str) or {}
-            
-            # KRİTİK ÇAĞRI DÜZELTMESİ: kullanici_id parametresi kaldırıldı.
-            monthly_gross_profit_data = self.db.get_monthly_gross_profit_summary(
-                baslangic_tarihi=bas_t_str, 
-                bitis_tarihi=bit_t_str
-            )
-            
-            # KRİTİK ÇAĞRI DÜZELTMESİ: kullanici_id parametresi kaldırıldı.
-            monthly_cash_flow_data = self.db.get_monthly_cash_flow_summary(
-                baslangic_tarihi=bas_t_str, 
-                bitis_tarih=bit_t_str
-            )
-            
-            # Tüm verileri tek bir sözlükte topla
-            full_report_data = {
-                'dashboard_summary': dashboard_summary,
-                'kar_zarar_data': kar_zarar_data,
-                'nakit_akis_data': nakit_akis_data,
-                'kasa_banka_bakiyeleri': kasa_banka_bakiyeleri,
-                'critical_stock_items': critical_stock_items,
-                'cari_yaslandirma_data': cari_yaslandirma_data,
-                'stock_value_by_category': stock_value_by_category,
-                'aylik_gelir_gider_ozet_data': aylik_gelir_gider_ozet_data,
-                'monthly_gross_profit_data': monthly_gross_profit_data,
-                'monthly_cash_flow_data': monthly_cash_flow_data,
-            }
-            
-            # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-            QTimer.singleShot(0, lambda: self._process_and_update_ui(full_report_data, selected_tab_text))
-
-        except Exception as e:
-            error_message = f"Rapor verileri çekilirken API/Ağ hatası: {e}"
-            logger.error(error_message, exc_info=True)
-            QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-            QTimer.singleShot(0, lambda: QMessageBox.critical(self.app, "API Hatası", error_message))
-
     def raporu_olustur_ve_yenile(self):
         bas_t_str = self.bas_tarih_entry.text()
         bit_t_str = self.bit_tarih_entry.text()
@@ -7755,33 +7233,20 @@ class RaporlamaMerkeziSayfasi(QWidget):
             return
 
         selected_tab_text = self.report_notebook.tabText(self.report_notebook.currentIndex())
-        self.app.set_status_message(f"'{selected_tab_text}' rapor verileri yükleniyor...", "blue")
-        
-        # Arka plan thread'ini başlat
-        threading.Thread(target=lambda: self._load_all_report_data_thread(bas_t_str, bit_t_str, selected_tab_text), daemon=True).start()
+        if selected_tab_text == "📊 Genel Bakış":
+            self._update_genel_bakis_tab(bas_t_str, bit_t_str)
+        elif selected_tab_text == "📈 Satış Raporları":
+            self._update_satis_raporlari_tab(bas_t_str, bit_t_str)
+        elif selected_tab_text == "💰 Kâr ve Zarar":
+            self._update_kar_zarar_tab(bas_t_str, bit_t_str)
+        elif selected_tab_text == "🏦 Nakit Akışı":
+            self._update_nakit_akisi_tab(bas_t_str, bit_t_str)
+        elif selected_tab_text == "👥 Cari Hesaplar":
+            self._update_cari_hesaplar_tab(bas_t_str, bit_t_str)
+        elif selected_tab_text == "📦 Stok Raporları":
+            self._update_stok_raporlari_tab(bas_t_str, bit_t_str)
 
-    def _process_and_update_ui(self, full_report_data, selected_tab_text):
-        """Veriler thread'den döndüğünde UI'ı güncelleyen ana metot."""
-        try:
-            if selected_tab_text == "📊 Genel Bakış":
-                self._update_genel_bakis_tab_with_data(full_report_data)
-            elif selected_tab_text == "📈 Satış Raporları":
-                self._update_satis_raporlari_tab_with_data(full_report_data)
-            elif selected_tab_text == "💰 Kâr ve Zarar":
-                self._update_kar_zarar_tab_with_data(full_report_data)
-            elif selected_tab_text == "🏦 Nakit Akışı":
-                self._update_nakit_akisi_tab_with_data(full_report_data)
-            elif selected_tab_text == "👥 Cari Hesaplar":
-                self._update_cari_hesaplar_tab_with_data(full_report_data)
-            elif selected_tab_text == "📦 Stok Raporları":
-                self._update_stok_raporlari_tab_with_data(full_report_data)
-
-            self.app.set_status_message(f"Rapor güncellendi: {selected_tab_text} başarıyla yüklendi.", "green")
-
-        except Exception as e:
-            error_message = f"UI güncelleme sırasında kritik hata: {e}"
-            logger.error(error_message, exc_info=True)
-            self.app.set_status_message(error_message, "red")
+        self.app.set_status_message(f"Finansal Raporlar güncellendi.")
 
     def _update_genel_bakis_tab(self, bas_t_str, bit_t_str):
         try:
@@ -8734,12 +8199,17 @@ class KategoriMarkaYonetimiSekmesi(QWidget):
         self._kategori_listesini_yukle()
         self._marka_listesini_yukle()
 
-    def _update_kategori_listesi_ui(self, kategoriler_response):
-        """Worker thread'den gelen kategori verileriyle QTreeWidget'ı ana thread'de günceller."""
+    # Kategori Yönetimi Metotları
+    def _kategori_listesini_yukle(self):
         self.kategori_tree.clear()
-        
         try:
-            kategoriler = kategoriler_response.get("items", []) if isinstance(kategoriler_response, dict) else kategoriler_response
+            kategoriler_response = self.db.kategori_listele(kullanici_id=self.app.current_user_id)
+            if isinstance(kategoriler_response, dict) and "items" in kategoriler_response:
+                kategoriler = kategoriler_response.get("items", [])
+            elif isinstance(kategoriler_response, list):
+                kategoriler = kategoriler_response
+            else:
+                raise ValueError("API'den geçersiz kategori listesi yanıtı alındı.")
             
             for kat in kategoriler:
                 kat_id = kat.get('id')
@@ -8748,38 +8218,11 @@ class KategoriMarkaYonetimiSekmesi(QWidget):
                 item_qt.setText(0, str(kat_id))
                 item_qt.setText(1, kat_ad)
                 item_qt.setData(0, Qt.UserRole, kat_id)
-                
             self.kategori_tree.sortByColumn(1, Qt.AscendingOrder)
             self.app.set_status_message(f"{len(kategoriler)} kategori listelendi.", "blue")
-            
         except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Kategori listesi UI'ı güncellenirken kritik hata: {e}")
-            logging.error(f"Kategori listesi UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Kategori listesi yüklenemedi. {e}", "red")
-
-    # Kategori Yönetimi Metotları
-    def _kategori_listesini_yukle(self):
-        """Kategori listesini asenkron çeker."""
-        self.kategori_tree.clear()
-        self.app.set_status_message("Kategori listesi yükleniyor...", "blue")
-        
-        def _load_data_thread():
-            try:
-                # BLOCKING API Çağrısı
-                kategoriler_response = self.db.kategori_listele(limit=10000)
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_kategori_listesi_ui(kategoriler_response))
-
-            except Exception as e:
-                error_message = f"Kategori listesi çekilirken API/Ağ hatası: {e}"
-                logging.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_kategori_listesi_ui({"items":[]}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
+            QMessageBox.critical(self.app, "API Hatası", f"Kategori listesi çekilirken hata: {e}")
+            logging.error(f"Kategori listesi yükleme hatası: {e}", exc_info=True)
         
     def _on_kategori_select(self):
         selected_items = self.kategori_tree.selectedItems()
@@ -8878,98 +8321,22 @@ class KategoriMarkaYonetimiSekmesi(QWidget):
                 self.app.set_status_message(f"Kategori silme hatası: {e}", "red")
                 logging.error(f"Kategori silme hatası: {e}", exc_info=True)
 
-    def _update_urun_grubu_listesi_ui(self, urun_gruplari_response):
-        """Worker thread'den gelen ürün grubu verileriyle QTreeWidget'ı ana thread'de günceller."""
-        self.urun_grubu_tree.clear()
-        
-        try:
-            urun_gruplari_list = urun_gruplari_response.get("items", []) if isinstance(urun_gruplari_response, dict) else urun_gruplari_response
-            
-            for grup_item in urun_gruplari_list:
-                grup_id = grup_item.get('id')
-                grup_ad = grup_item.get('ad')
-                item_qt = QTreeWidgetItem(self.urun_grubu_tree)
-                item_qt.setText(0, str(grup_id))
-                item_qt.setText(1, grup_ad)
-                item_qt.setData(0, Qt.UserRole, grup_id)
-                
-            self.urun_grubu_tree.sortByColumn(1, Qt.AscendingOrder)
-            self.app.set_status_message(f"{len(urun_gruplari_list)} ürün grubu listelendi.", "blue")
-            
-        except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Ürün grubu listesi UI'ı güncellenirken kritik hata: {e}")
-            logging.error(f"Ürün grubu listesi UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Ürün grubu listesi yüklenemedi. {e}", "red")
-
     # Marka Yönetimi Metotları
     def _urun_grubu_listesini_yukle(self):
-        """Ürün grubu listesini asenkron çeker."""
         self.urun_grubu_tree.clear()
-        self.app.set_status_message("Ürün grubu listesi yükleniyor...", "blue")
-        
-        def _load_data_thread():
-            try:
-                # BLOCKING API Çağrısı
-                urun_gruplari_response = self.db.urun_grubu_listele(limit=10000)
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_urun_grubu_listesi_ui(urun_gruplari_response))
-
-            except Exception as e:
-                error_message = f"Ürün grubu listesi çekilirken API/Ağ hatası: {e}"
-                logging.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_urun_grubu_listesi_ui({"items":[]}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
-
-    def _update_marka_listesi_ui(self, markalar_response):
-        """Worker thread'den gelen marka verileriyle QTreeWidget'ı ana thread'de günceller."""
-        self.marka_tree.clear()
-        
         try:
-            markalar = markalar_response.get("items", []) if isinstance(markalar_response, dict) else markalar_response
-            
-            for marka in markalar:
-                marka_id = marka.get('id')
-                marka_ad = marka.get('ad')
-                item_qt = QTreeWidgetItem(self.marka_tree)
-                item_qt.setText(0, str(marka_id))
-                item_qt.setText(1, marka_ad)
-                item_qt.setData(0, Qt.UserRole, marka_id)
-                
-            self.marka_tree.sortByColumn(1, Qt.AscendingOrder)
-            self.app.set_status_message(f"{len(markalar)} marka listelendi.", "blue")
-            
+            urun_gruplari_response = self.db.urun_grubu_listele() # API'den gelen tam yanıt
+            urun_gruplari_list = urun_gruplari_response
+
+            for grup_item in urun_gruplari_list: # urun_gruplari_list üzerinde döngü
+                item_qt = QTreeWidgetItem(self.urun_grubu_tree)
+                item_qt.setText(0, str(grup_item.get('id'))) # .get() ile güvenli erişim
+                item_qt.setText(1, grup_item.get('ad')) # .get() ile güvenli erişim
+                item_qt.setData(0, Qt.UserRole, grup_item.get('id'))
+            self.urun_grubu_tree.sortByColumn(1, Qt.AscendingOrder)
         except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Marka listesi UI'ı güncellenirken kritik hata: {e}")
-            logging.error(f"Marka listesi UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Marka listesi yüklenemedi. {e}", "red")
-
-    def _marka_listesini_yukle(self):
-        """Marka listesini asenkron çeker."""
-        self.marka_tree.clear()
-        self.app.set_status_message("Marka listesi yükleniyor...", "blue")
-        
-        def _load_data_thread():
-            try:
-                # BLOCKING API Çağrısı
-                markalar_response = self.db.marka_listele(limit=10000)
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_marka_listesi_ui(markalar_response))
-
-            except Exception as e:
-                error_message = f"Marka listesi çekilirken API/Ağ hatası: {e}"
-                logging.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_marka_listesi_ui({"items":[]}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
+            QMessageBox.critical(self.app, "API Hatası", f"Ürün grubu listesi çekilirken hata: {e}")
+            logging.error(f"Ürün grubu listesi yükleme hatası: {e}", exc_info=True)
 
     def _on_marka_select(self):
         selected_items = self.marka_tree.selectedItems()
@@ -9328,52 +8695,30 @@ class UrunNitelikYonetimiSekmesi(QWidget):
                 self.app.set_status_message(f"Ürün grubu silme hatası: {e}", "red")
                 logging.error(f"Ürün grubu silme hatası: {e}", exc_info=True)
 
-    def _update_urun_birimi_listesi_ui(self, urun_birimleri_response):
-        """Worker thread'den gelen ürün birimi verileriyle QTreeWidget'ı ana thread'de günceller."""
-        self.urun_birimi_tree.clear()
-        
-        try:
-            urun_birimleri = urun_birimleri_response.get("items", []) if isinstance(urun_birimleri_response, dict) else urun_birimleri_response
-            
-            for birim_item in urun_birimleri:
-                birim_id = birim_item.get('id')
-                birim_ad = birim_item.get('ad')
-                item_qt = QTreeWidgetItem(self.urun_birimi_tree)
-                item_qt.setText(0, str(birim_id))
-                item_qt.setText(1, birim_ad)
-                item_qt.setData(0, Qt.UserRole, birim_id)
-                
-            self.urun_birimi_tree.sortByColumn(1, Qt.AscendingOrder)
-            self.app.set_status_message(f"{len(urun_birimleri)} ürün birimi listelendi.", "blue")
-            
-        except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Ürün birimi listesi UI'ı güncellenirken kritik hata: {e}")
-            logging.error(f"Ürün birimi listesi UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Ürün birimi listesi yüklenemedi. {e}", "red")
-
     # Ürün Birimi Yönetimi Metotları
     def _urun_birimi_listesini_yukle(self):
-        """Ürün birimi listesini asenkron çeker."""
         self.urun_birimi_tree.clear()
-        self.app.set_status_message("Ürün birimi listesi yükleniyor...", "blue")
-        
-        def _load_data_thread():
-            try:
-                # BLOCKING API Çağrısı
-                urun_birimleri_response = self.db.urun_birimi_listele(limit=10000)
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_urun_birimi_listesi_ui(urun_birimleri_response))
+        try:
+            urun_birimleri_response = self.db.urun_birimi_listele(kullanici_id=self.app.current_user_id)
+            if isinstance(urun_birimleri_response, dict) and "items" in urun_birimleri_response:
+                urun_birimleri = urun_birimleri_response.get("items", [])
+            elif isinstance(urun_birimleri_response, list):
+                urun_birimleri = urun_birimleri_response
+            else:
+                # KRİTİK DÜZELTME: Hata fırlatma yerine listeyi boşalt ve uyar
+                logging.warning(f"Ürün birimi listesi API'den beklenmeyen formatta geldi: {urun_birimleri_response}")
+                urun_birimleri = []
 
-            except Exception as e:
-                error_message = f"Ürün birimi listesi çekilirken API/Ağ hatası: {e}"
-                logging.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_urun_birimi_listesi_ui({"items":[]}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
+            for birim_item in urun_birimleri:
+                item_qt = QTreeWidgetItem(self.urun_birimi_tree)
+                item_qt.setText(0, str(birim_item.get('id')))
+                item_qt.setText(1, birim_item.get('ad'))
+                item_qt.setData(0, Qt.UserRole, birim_item.get('id'))
+            self.urun_birimi_tree.sortByColumn(1, Qt.AscendingOrder)
+            self.app.set_status_message(f"{len(urun_birimleri)} ürün birimi listelendi.", "blue")
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Hatası", f"Ürün birimi listesi çekilirken hata: {e}")
+            logging.error(f"Ürün birimi listesi yükleme hatası: {e}", exc_info=True)
 
     def _on_urun_birimi_select(self):
         selected_items = self.urun_birimi_tree.selectedItems()
@@ -9471,52 +8816,29 @@ class UrunNitelikYonetimiSekmesi(QWidget):
                 self.app.set_status_message(f"Ürün birimi silme hatası: {e}", "red")
                 logging.error(f"Ürün birimi silme hatası: {e}", exc_info=True)
 
-    def _update_ulke_listesi_ui(self, ulkeler_response):
-        """Worker thread'den gelen ülke verileriyle QTreeWidget'ı ana thread'de günceller."""
-        self.ulke_tree.clear()
-        
-        try:
-            ulkeler = ulkeler_response.get("items", []) if isinstance(ulkeler_response, dict) else ulkeler_response
-            
-            for ulke_item in ulkeler:
-                ulke_id = ulke_item.get('id')
-                ulke_ad = ulke_item.get('ad')
-                item_qt = QTreeWidgetItem(self.ulke_tree)
-                item_qt.setText(0, str(ulke_id))
-                item_qt.setText(1, ulke_ad)
-                item_qt.setData(0, Qt.UserRole, ulke_id)
-                
-            self.ulke_tree.sortByColumn(1, Qt.AscendingOrder)
-            self.app.set_status_message(f"{len(ulkeler)} ülke listelendi.", "blue")
-            
-        except Exception as e:
-            QMessageBox.critical(self.app, "Hata", f"Ülke listesi UI'ı güncellenirken kritik hata: {e}")
-            logging.error(f"Ülke listesi UI güncelleme hatası: {e}", exc_info=True)
-            self.app.set_status_message(f"Hata: Ülke listesi yüklenemedi. {e}", "red")
-
     # Ülke Yönetimi Metotları
     def _ulke_listesini_yukle(self):
-        """Ülke listesini asenkron çeker."""
         self.ulke_tree.clear()
-        self.app.set_status_message("Ülke listesi yükleniyor...", "blue")
-        
-        def _load_data_thread():
-            try:
-                # BLOCKING API Çağrısı
-                ulkeler_response = self.db.ulke_listele(limit=10000)
-                
-                # Başarılı olduğunda ana thread'e geri posta yap (UI güncelleme)
-                QTimer.singleShot(0, lambda: self._update_ulke_listesi_ui(ulkeler_response))
+        try:
+            ulkeler_response = self.db.ulke_listele(kullanici_id=self.app.current_user_id)
+            if isinstance(ulkeler_response, dict) and "items" in ulkeler_response:
+                ulkeler = ulkeler_response.get("items", [])
+            elif isinstance(ulkeler_response, list):
+                ulkeler = ulkeler_response
+            else:
+                logging.warning(f"Ülke listesi API'den beklenmeyen formatta geldi: {ulkeler_response}")
+                ulkeler = []
 
-            except Exception as e:
-                error_message = f"Ülke listesi çekilirken API/Ağ hatası: {e}"
-                logging.error(error_message, exc_info=True)
-                # Hata durumunda boş yanıtlarla UI güncellemesini tetikle
-                QTimer.singleShot(0, lambda: self._update_ulke_listesi_ui({"items":[]}))
-                QTimer.singleShot(0, lambda: self.app.set_status_message(error_message, "red"))
-
-        # Yükleyici thread'i başlat
-        threading.Thread(target=_load_data_thread, daemon=True).start()
+            for ulke_item in ulkeler:
+                item_qt = QTreeWidgetItem(self.ulke_tree)
+                item_qt.setText(0, str(ulke_item.get('id')))
+                item_qt.setText(1, ulke_item.get('ad'))
+                item_qt.setData(0, Qt.UserRole, ulke_item.get('id'))
+            self.ulke_tree.sortByColumn(1, Qt.AscendingOrder)
+            self.app.set_status_message(f"{len(ulkeler)} ülke listelendi.", "blue")
+        except Exception as e:
+            QMessageBox.critical(self.app, "API Hatası", f"Ülke listesi çekilirken hata: {e}")
+            logging.error(f"Ülke listesi yükleme hatası: {e}", exc_info=True)
 
     def _on_ulke_select(self):
         selected_items = self.ulke_tree.selectedItems()

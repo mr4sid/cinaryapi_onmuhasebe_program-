@@ -1,4 +1,4 @@
-# veritabani.py dosyasının tam içeriği
+# veritabani.py dosyasının TAMAMI (Güncellenmiş Hal)
 from hizmetler import lokal_db_servisi 
 import requests
 import json
@@ -594,19 +594,21 @@ class OnMuhasebe:
             logger.error(f"Kasa/Banka eklenirken hata: {e}")
             return False, f"Kasa/Banka eklenirken hata: {e}"
 
-    def kasa_banka_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, tip: str = None, aktif_durum: bool = None):
-        """Kasa/Banka listesini çeker. (tip parametresi imzaya eklendi)"""
+    def kasa_banka_listesi_al(self, skip: int = 0, limit: int = 100, arama: str = None, hesap_turu: str = None, aktif_durum: bool = None):
+        """Kasa/Banka listesini çeker. (kullanici_id kaldırıldı)"""
+        # DÜZELTME: kullanici_id imzadan kaldırıldı.
         params = {
             "skip": skip,
             "limit": limit,
             "arama": arama,
-            "tip": tip, 
+            "tip": hesap_turu,
             "aktif_durum": aktif_durum
         }
         cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
         
         if self.is_online:
             try:
+                # API çağrısından kullanici_id kaldırıldı, _make_api_request otomatik ekler.
                 response = self._make_api_request("GET", "/kasalar_bankalar/", params=cleaned_params)
                 if response is not None:
                     return response
@@ -614,10 +616,10 @@ class OnMuhasebe:
                 logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
                 self.is_online = False
                 
-        # OFFLINE KISIM
+        # OFFLINE KISIM: Yerel DB için filtreyi self.current_user_id ile oluştur
         filtre = {
             "aktif_durum": aktif_durum,
-            "tip": tip, 
+            "tip": hesap_turu,
             "kullanici_id": self.current_user_id 
         }
         cleaned_filtre = {k: v for k, v in filtre.items() if v is not None}
@@ -648,16 +650,11 @@ class OnMuhasebe:
             return False, f"Kasa/Banka silinirken hata: {e}"
 
     # --- STOKLAR ---
-    def stok_ekle(self, stok_data: dict, ui_callback=None): # Yeni ui_callback parametresi eklendi
+    def stok_ekle(self, stok_data: dict):
         endpoint = "/stoklar/"
         try:
             response_data = self._make_api_request("POST", endpoint, data=stok_data)
             if response_data and response_data.get("id"):
-                
-                # --- KRİTİK ÇÖZÜM: UI GÜNCELLEME CALLBACK'İNİ GÖNDER ---
-                # Senkronizasyonu başlat ve UI'ı güncelleme callback'ini ilet.
-                self.senkronizasyonu_arka_planda_tetikle(ui_callback=ui_callback)
-                
                 return True, f"'{stok_data['ad']}' adlı ürün başarıyla eklendi. ID: {response_data['id']}"
             else:
                 return False, f"Ürün eklenirken beklenmeyen bir yanıt alındı: {response_data}"
@@ -666,36 +663,6 @@ class OnMuhasebe:
         except Exception as e:
             logger.error(f"Stok eklenirken beklenmeyen hata: {e}", exc_info=True)
             return False, f"Ürün eklenirken beklenmeyen bir hata oluştu: {e}"
-
-    def senkronizasyonu_arka_planda_tetikle(self, ui_callback=None):
-        """Lokal DB'yi API verileriyle asenkron olarak günceller."""
-        import threading
-        
-        # Gerekli verileri local variable'lara kopyala
-        kullanici_id = self.current_user_id
-        access_token = self.access_token
-        api_base_url = self.api_base_url
-        
-        if not kullanici_id or not self.is_online or not access_token:
-            logger.warning("Senkronizasyon tetiklenemedi: Kullanıcı/Bağlantı/Token yok.")
-            return
-
-        def _sync_worker():
-            logger.info("Arka plan senkronizasyon işçisi başlatıldı (Server -> Local).")
-            # Senkronizasyonu başlat (blocking çağrı)
-            success, message = lokal_db_servisi.senkronize_veriler(
-                api_base_url,
-                access_token=access_token,
-                current_user_id=kullanici_id
-            )
-            if success and ui_callback:
-                # KRİTİK: Başarılı senkronizasyon sonrası callback'i çağır
-                ui_callback() 
-            else:
-                logger.error(f"Arka plan senkronizasyonu başarısız: {message}")
-
-        # Yeni bir thread başlat
-        threading.Thread(target=_sync_worker, daemon=True).start()
 
     def stok_ozet_al(self, baslangic_tarihi: str = None, bitis_tarihi: str = None):
         """
@@ -717,26 +684,6 @@ class OnMuhasebe:
             "toplam_tahsilatlar": 0.0,
             "toplam_odemeler": 0.0,
             "en_cok_satan_urunler": [],
-        }
-
-    def get_stok_ozet(self):
-        """Stok Yönetimi sayfası için miktar, maliyet ve satış tutarı özetini çeker."""
-        if self.is_online:
-            try:
-                # /stoklar/ozet API rota endpoint'i çağrılır
-                response = self._make_api_request("GET", "/stoklar/ozet")
-                if response is not None:
-                    return response
-            except Exception as e:
-                logger.error(f"Stok özeti API'den çekilirken hata: {e}", exc_info=True)
-                self.is_online = False
-                
-        # Çevrimdışı/Hata durumunda varsayılan değerler
-        return {
-            "toplam_urun_sayisi": 0,
-            "toplam_miktar": 0.0,
-            "toplam_maliyet": 0.0,
-            "toplam_satis_tutari": 0.0
         }
 
     def bulk_stok_upsert(self, stok_listesi: List[Dict[str, Any]], kullanici_id: int):
@@ -1160,16 +1107,14 @@ class OnMuhasebe:
             return False, f"Gelir/Gider eklenirken hata: {e}"
 
     def gelir_gider_listesi_al(self, skip: int = 0, limit: int = 20, tip_filtre: str = None,
-                               baslangic_tarihi: str = None, bitis_tarihi: str = None,
-                               aciklama_filtre: str = None):
-        """Gelir/Gider listesini çeker. (Hata: 422 Client Error Çözüldü)"""
+                            baslangic_tarihi: str = None, bitis_tarihi: str = None,
+                            aciklama_filtre: str = None):
+        """Gelir/Gider listesini çeker."""
         params = {"skip": skip, "limit": limit, "tip_filtre": tip_filtre, "baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi, "aciklama_filtre": aciklama_filtre}
         cleaned_params = {k: v for k, v in params.items() if v is not None and str(v).strip() != ""}
 
         if self.is_online:
-            try:
-                # KRİTİK ÇÖZÜM: API'nin beklediği Türkçe karakterli stringi (GELİR/GİDER) göndermek için
-                # string dönüşüm/mapping mantığı kaldırıldı.
+            try:                
                 response = self._make_api_request("GET", "/gelir_gider/", params=cleaned_params)
                 if response is not None:
                     return response
@@ -1342,10 +1287,9 @@ class OnMuhasebe:
                 logger.error(f"Ürün grubu listesi API'den alınamadı: {e}", exc_info=True)
                 return {"items": [], "total": 0}
 
-    def urun_birimi_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
+    def urun_birimi_listele(self, kullanici_id: int, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
         try:
-            # KRİTİK DÜZELTME: kullanici_id parametresi imzadan ve params'tan kaldırıldı.
-            params = {"skip": skip, "limit": limit}
+            params = {"skip": skip, "limit": limit, "kullanici_id": kullanici_id}
             response = self._make_api_request("GET", "/nitelikler/urun_birimleri", params=params)
             if isinstance(response, dict) and "items" in response:
                 return response
@@ -1358,10 +1302,9 @@ class OnMuhasebe:
             logger.error(f"Ürün birimi listesi API'den alınamadı: {e}")
             return {"items": [], "total": 0}
             
-    def ulke_listele(self, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
+    def ulke_listele(self, kullanici_id: int, skip: int = 0, limit: int = 1000) -> Dict[str, Any]:
         try:
-            # KRİTİK DÜZELTME: kullanici_id parametresi imzadan ve params'tan kaldırıldı.
-            params = {"skip": skip, "limit": limit}
+            params = {"skip": skip, "limit": limit, "kullanici_id": kullanici_id}
             response = self._make_api_request("GET", "/nitelikler/ulkeler", params=params)
             if isinstance(response, dict) and "items" in response:
                 return response
@@ -1565,14 +1508,13 @@ class OnMuhasebe:
             logger.error(f"Brüt kar ve maliyet verileri çekilirken hata: {e}")
             return 0.0, 0.0, 0.0
 
-    def get_nakit_akisi_verileri(self, baslangic_tarihi: str, bitis_tarih: str):
+    def get_nakit_akisi_verileri(self, baslangic_tarihi: str, bitis_tarihi: str):
         if self.is_online:
             try:
-                # KRİTİK DÜZELTME: API'nin beklediği 'bitis_tarihi' olarak parametre gönderildi.
                 response = self._make_api_request(
                     "GET",
                     "/raporlar/nakit_akisi_raporu",
-                    params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarih}
+                    params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarihi}
                 )
                 if response is not None:
                     return response
@@ -1591,25 +1533,15 @@ class OnMuhasebe:
             logger.error(f"Tüm kasa/banka bakiyeleri çekilirken hata: {e}")
             return []
 
-    def get_monthly_cash_flow_summary(self, baslangic_tarihi: str, bitis_tarih: str):
-        """Aylık nakit akışı raporu için aylık nakit akışı özetini çeker."""
-        # KRİTİK DÜZELTME: İmza, arayuz.py'deki çağırma stiline uyacak şekilde sadeleştirildi.
-        
-        if self.is_online:
-            try:
-                response = self._make_api_request(
-                    "GET",
-                    "/raporlar/nakit_akisi_raporu",
-                    # API'ye 'bitis_tarihi' olarak gönderilir
-                    params={"baslangic_tarihi": baslangic_tarihi, "bitis_tarihi": bitis_tarih}
-                )
-                if response is not None:
-                    return response
-            except Exception as e:
-                logger.error(f"API hatası. Yerel veritabanı kullanılıyor: {e}", exc_info=True)
-                self.is_online = False
-
-        return {"nakit_girisleri": 0.0, "nakit_cikislar": 0.0, "net_nakit_akisi": 0.0}
+    def get_monthly_cash_flow_summary(self, kullanici_id: int, baslangic_tarihi: str, bitis_tarihi: str):
+        """Nakit akışı raporu için aylık nakit akışı özetini çeker."""
+        try:
+            yil = int(baslangic_tarihi.split('-')[0])
+            response = self._make_api_request("GET", "/raporlar/gelir_gider_aylik_ozet", params={"yil": yil, "kullanici_id": kullanici_id})
+            return response.get("aylik_ozet", [])
+        except Exception as e:
+            logger.error(f"Aylık nakit akışı özeti çekilirken hata: {e}")
+            return []
 
     def get_cari_yaslandirma_verileri(self, tarih: str = None):
         params = {"tarih": tarih} if tarih else {}
@@ -1620,8 +1552,7 @@ class OnMuhasebe:
             logger.error(f"Cari yaşlandırma verileri çekilirken hata: {e}")
             return {"musteri_alacaklar": [], "tedarikci_borclar": []}
 
-    def get_stock_value_by_category(self):
-        """Kategoriye göre stok değeri özetini çeker. (Arayüz çağrısına uyum sağlamak için boş parametreli imza kullanıldı)"""
+    def get_stock_value_by_category(self, kullanici_id: int):
         logger.warning(f"get_stock_value_by_category metodu API'de doğrudan karşılığı yok. Simüle ediliyor.")
         return {"items": [], "total": 0}
 
@@ -1903,8 +1834,6 @@ class OnMuhasebe:
         """
         Belirtilen tarih aralığına göre aylık gelir ve giderlerin özetini döndürür.
         """
-        ay_adlari_sozlugu = { 1: "Ocak", 2: "Şubat", 3: "Mart", 4: "Nisan", 5: "Mayıs", 6: "Haziran", 7: "Temmuz", 8: "Ağustos", 9: "Eylül", 10: "Ekim", 11: "Kasım", 12: "Aralık" }
-        
         try:
             with lokal_db_servisi.get_db() as db:
                 from api.modeller import GelirGider
@@ -1925,9 +1854,7 @@ class OnMuhasebe:
                 
                 result = []
                 for row in aylik_ozet:
-                    # KRİTİK DÜZELTME: Locale hatası çözüldü, sabit sözlük kullanıldı.
-                    ay_adi = ay_adlari_sozlugu.get(int(row.ay_numarasi), "Bilinmeyen Ay")
-                    
+                    ay_adi = locale.nl_langinfo(locale.MON_1 + int(row.ay_numarasi) - 1)
                     result.append({
                         "ay_yil": row.ay_yil,
                         "ay_adi": ay_adi,
@@ -1942,14 +1869,10 @@ class OnMuhasebe:
             logger.error(f"Aylık gelir/gider özeti alınırken hata: {e}", exc_info=True)
             return {"aylik_ozet": []}
 
-    def get_monthly_gross_profit_summary(self, baslangic_tarihi: str, bitis_tarihi: str) -> List[Dict[str, Any]]:
+    def get_monthly_gross_profit_summary(self, kullanici_id: int, baslangic_tarihi: str, bitis_tarihi: str) -> List[Dict[str, Any]]:
         """
         Belirtilen tarih aralığı için aylık brüt kâr özetini hesaplar.
-        KRİTİK DÜZELTME: İmza, UI çağrısına uyacak şekilde sadeleştirildi.
         """
-        ay_adlari_sozlugu = { 1: "Ocak", 2: "Şubat", 3: "Mart", 4: "Nisan", 5: "Mayıs", 6: "Haziran", 7: "Temmuz", 8: "Ağustos", 9: "Eylül", 10: "Ekim", 11: "Kasım", 12: "Aralık" }
-        kullanici_id = self.current_user_id
-        
         try:
             with lokal_db_servisi.get_db() as db:
                 from api.modeller import Fatura, StokHareket, Stok
@@ -1971,14 +1894,14 @@ class OnMuhasebe:
                 
                 result = []
                 for row in aylik_ozet:
-                    ay_adi = ay_adlari_sozlugu.get(int(row.ay_numarasi), "Bilinmeyen Ay")
+                    ay_adi = locale.nl_langinfo(locale.MON_1 + int(row.ay_numarasi) - 1)
                     
                     # Satılan Malın Maliyetini (COGS) hesapla
                     cogs_subquery = db.query(func.sum(StokHareket.miktar * Stok.alis_fiyati)) \
                                     .join(Stok, Stok.id == StokHareket.urun_id) \
                                     .filter(
                                         StokHareket.kaynak == 'FATURA',
-                                        StokHareket.islem_tipi.in_(['SATIŞ']), 
+                                        StokHareket.islem_tipi == self.STOK_ISLEM_TIP_CIKIS_FATURA_SATIS,
                                         StokHareket.kullanici_id == kullanici_id,
                                         StokHareket.tarih >= f"{row.ay_yil}-01",
                                         StokHareket.tarih <= f"{row.ay_yil}-31"
